@@ -37,18 +37,9 @@ export function prepareCelebrityContractCall(params: GetCelebritiesParams = {}) 
   const { page = 0, pageSize = 10, activeOnly = true } = params;
   const contractAddress = getCelebrityRegistryAddress();
   
-  console.log('=== 准备智能合约调用 ===');
-  console.log('参数:', { page, pageSize, activeOnly });
-  console.log('合约地址:', contractAddress);
-  console.log('使用函数:', activeOnly ? 'getByPage' : 'getAllByPage');
   
   const offset = BigInt(page * pageSize);
   const limit = BigInt(pageSize);
-  
-  console.log('调用参数:', {
-    offset: offset.toString(),
-    limit: limit.toString()
-  });
   
   return {
     address: contractAddress as `0x${string}`,
@@ -67,9 +58,7 @@ export function prepareCelebrityContractCall(params: GetCelebritiesParams = {}) 
 export function prepareTotalCountCall(activeOnly: boolean = true) {
   const contractAddress = getCelebrityRegistryAddress();
   
-  console.log('=== 准备获取总数调用 ===');
-  console.log('合约地址:', contractAddress);
-  console.log('使用函数:', activeOnly ? 'totalActive' : 'total');
+
   
   return {
     address: contractAddress as `0x${string}`,
@@ -111,19 +100,19 @@ export function createCelebrityContractHooks() {
     processContractData: (contractData: CelebrityFromContract[] | undefined) => {
       if (!contractData) return [];
       
-      console.log('=== 处理真实合约数据 ===');
-      console.log('原始合约数据:', contractData);
+      // console.log('=== 处理真实合约数据 ===');
+      // console.log('原始合约数据:', contractData);
       
       const processedData = contractData.map((item, index) => {
         const contact = convertContractDataToContact(item, index + 1);
-        console.log(`处理第 ${index + 1} 个名人:`, {
-          原始数据: item,
-          转换后: contact
-        });
+        // console.log(`处理第 ${index + 1} 个名人:`, {
+        //   原始数据: item,
+        //   转换后: contact
+        // });
         return contact;
       });
       
-      console.log('=== 数据处理完成 ===');
+      // console.log('=== 数据处理完成 ===');
       return processedData;
     },
     
@@ -137,52 +126,6 @@ export function createCelebrityContractHooks() {
     }
   };
 }
-
-// 测试智能合约接口和名人列表获取
-console.log('=== 智能合约接口测试 ===');
-console.log('合约地址:', getCelebrityRegistryAddress());
-console.log('Celebrity Registry ABI 已加载:', !!CELEBRITY_REGISTRY_V1_ABI);
-console.log('Merkle Distribute ABI 已加载:', !!MERKLE_DISTRIBUTE_ABI);
-console.log('Celebrity Registry ABI 函数数量:', CELEBRITY_REGISTRY_V1_ABI?.length || 0);
-console.log('Merkle Distribute ABI 函数数量:', MERKLE_DISTRIBUTE_ABI?.length || 0);
-
-// 检查关键函数是否存在
-const celebrityFunctions = CELEBRITY_REGISTRY_V1_ABI?.filter(item => item.type === 'function').map(item => item.name) || [];
-console.log('Celebrity Registry 可用函数:', celebrityFunctions.slice(0, 10)); // 显示前10个函数
-
-// 检查 getByPage 和 getAllByPage 函数
-const hasGetByPage = celebrityFunctions.includes('getByPage');
-const hasGetAllByPage = celebrityFunctions.includes('getAllByPage');
-console.log('getByPage 函数存在:', hasGetByPage);
-console.log('getAllByPage 函数存在:', hasGetAllByPage);
-
-console.log('=== 接口测试完成 ===');
-
-// 测试智能合约调用参数准备
-console.log('\n=== 测试合约调用参数准备 ===');
-const contractCallParams = prepareCelebrityContractCall({ page: 0, pageSize: 15, activeOnly: true });
-console.log('getByPage 调用参数:', contractCallParams);
-
-const totalCallParams = prepareTotalCountCall(true);
-console.log('totalActive 调用参数:', totalCallParams);
-console.log('=== 参数准备完成 ===');
-
-console.log('✅ 智能合约调用接口已准备就绪！');
-console.log('📋 在页面组件中这样使用:');
-console.log(`
-// 导入
-import { useReadContract } from 'wagmi';
-import { prepareCelebrityContractCall, prepareTotalCountCall, createCelebrityContractHooks } from '@/lib/contacts';
-
-// 在组件中使用
-const { data: celebrities, isLoading, error } = useReadContract(prepareCelebrityContractCall({ page: 0, pageSize: 15 }));
-const { data: totalCount } = useReadContract(prepareTotalCountCall(true));
-const { processContractData, handleContractError } = createCelebrityContractHooks();
-
-// 处理数据
-const celebList = processContractData(celebrities);
-`);
-console.log('🚀 现在就会调用你的真实智能合约，获取真实数据！');
 
 
 export interface Contact {

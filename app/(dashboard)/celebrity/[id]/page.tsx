@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,39 +62,7 @@ interface DexScreenerSearchResponse {
   pairs: DexScreenerPair[];
 }
 
-// 模拟搜索数据
-const mockSearchTokens: TokenData[] = [
-  {
-    symbol: 'ETH',
-    amount: '1,234.56',
-    value: '4,567,890',
-    change: '+2.34%',
-    usdValue: '$4,567,890',
-    isPositive: true,
-    tokenAddress: '0x0000000000000000000000000000000000000000',
-    thumbnail: null
-  },
-  {
-    symbol: 'ARB',
-    amount: '987,654.32',
-    value: '1,234,567',
-    change: '-1.23%',
-    usdValue: '$1,234,567',
-    isPositive: false,
-    tokenAddress: '0x912ce591b3a030e8b9aa649e6548e8a8e8e8e8e8',
-    thumbnail: null
-  },
-  {
-    symbol: 'USDT',
-    amount: '500,000.00',
-    value: '500,000',
-    change: '+0.01%',
-    usdValue: '$500,000',
-    isPositive: true,
-    tokenAddress: '0xa0b86a33e6180e98e9965e2d2b3e8e8e8e8e8e8e8',
-    thumbnail: null
-  }
-];
+
 
 function formatNumber(value: number | string | null, fractionDigits = 2) {
   if (value === null || value === undefined) return '0';
@@ -133,6 +101,48 @@ function isValidEthereumAddress(input: string): boolean {
   
   const hexRegex = /^[0-9a-fA-F]+$/;  // 任意长度的十六进制字符
   return hexRegex.test(hexPart);
+}
+
+// 头像加载组件（带骨架屏）
+function AvatarWithSkeleton({ 
+  src, 
+  alt, 
+  className 
+}: { 
+  src: string; 
+  alt: string; 
+  className?: string; 
+}) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  return (
+    <div className={`relative ${className}`}>
+      {/* 骨架屏 - 在图片加载时显示 */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full"></div>
+      )}
+      
+      {/* 实际图片 */}
+      <img
+        src={src}
+        alt={alt}
+        className={`w-full h-full object-cover rounded-full transition-opacity duration-300 ${
+          isLoading ? 'opacity-0' : 'opacity-100'
+        }`}
+        onLoad={() => setIsLoading(false)}
+        onError={(e) => {
+          setIsLoading(false);
+          setHasError(true);
+          // 如果IPFS图片加载失败，回退到默认头像
+          const target = e.target as HTMLImageElement;
+          if (!hasError) {
+            target.src = '/me/me1.png';
+          }
+        }}
+      />
+    </div>
+  );
 }
 
 // 防抖Hook
@@ -399,24 +409,42 @@ function SmoothSearchModal({ isOpen, onClose, onTokenClick }: {
 export default function CelebrityDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [tokensData, setTokensData] = useState<TokenData[]>([]);
+  const [netWorthData, setNetWorthData] = useState<{
+    total: number;
+    change24h: number | null;
+    loading: boolean;
+  }>({ total: 0, change24h: null, loading: true });
   const [loading, setLoading] = useState<boolean>(true);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  // 从URL参数获取名字、头像和钱包地址
+  const celebrityName = searchParams.get('name') || 'Vitalik';
+  const celebrityAvatar = searchParams.get('avatar') || '/me/me2.png';
+  const passedWalletAddress = searchParams.get('address');
+
   const walletAddress = useMemo(() => {
+    // 优先使用传递过来的钱包地址
+    if (passedWalletAddress && passedWalletAddress.startsWith('0x')) {
+      return passedWalletAddress;
+    }
+    
+    // 回退到从ID解析
     const id = params?.id as string | undefined;
     if (id && id.startsWith('0x') && id.length >= 10) return id;
     return undefined;
-  }, [params]);
+  }, [params, passedWalletAddress]);
 
   useEffect(() => {
     let aborted = false;
-    async function load() {
+    
+    async function loadTokens() {
       try {
         setLoading(true);
-        const address = walletAddress || '0xcB1C1FdE09f811B294172696404e88E658659905';
-        const res = await fetch(`/api/moralis?address=${encodeURIComponent(address)}&chain=eth`, {
+        const address = walletAddress 
+        const res = await fetch(`/api/moralis?address=${encodeURIComponent(address || '')}&chain=eth`, {
           cache: 'no-store'
         });
         if (!res.ok) {
@@ -447,7 +475,70 @@ export default function CelebrityDetailPage() {
         setLoading(false);
       }
     }
-    load();
+
+    async function loadNetWorth() {
+      try {
+        setNetWorthData(prev => ({ ...prev, loading: true }));
+        const address = walletAddress;
+        
+        if (!address) {
+          console.error('❌ 钱包地址为空，无法获取净资产');
+          setNetWorthData({ total: 0, change24h: null, loading: false });
+          return;
+        }
+        
+        // console.log('🔍 开始获取净资产数据，地址:', address);
+        
+        const res = await fetch(`/api/moralis/net-worth?address=${encodeURIComponent(address)}`, {
+          cache: 'no-store'
+        });
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          const errorMessage = errorData.error || `HTTP ${res.status}: ${res.statusText}`;
+          console.error('❌ 净资产API调用失败:', {
+            status: res.status,
+            statusText: res.statusText,
+            error: errorMessage
+          });
+          setNetWorthData({ total: 0, change24h: null, loading: false });
+          return;
+        }
+        
+        const data = await res.json();
+        // console.log('✅ 净资产数据获取成功:', data);
+        
+        if (aborted) return;
+        
+        // 检查数据完整性
+        if (!data || typeof data.total_networth_usd === 'undefined') {
+          console.error('❌ 净资产数据格式错误:', data);
+          setNetWorthData({ total: 0, change24h: null, loading: false });
+          return;
+        }
+        
+        const totalNetWorth = parseFloat(data.total_networth_usd || '0');
+        const change24h = data.total_networth_usd_24hr_percent_change;
+        
+        setNetWorthData({
+          total: isNaN(totalNetWorth) ? 0 : totalNetWorth,
+          change24h: change24h,
+          loading: false
+        });
+        
+      } catch (e: any) {
+        const errorMessage = e?.message || '未知错误';
+        console.error('💥 净资产数据获取错误:', {
+          error: errorMessage,
+          stack: e?.stack
+        });
+        setNetWorthData({ total: 0, change24h: null, loading: false });
+      }
+    }
+
+    // 并行加载代币和净资产数据
+    Promise.all([loadTokens(), loadNetWorth()]);
+    
     return () => {
       aborted = true;
     };
@@ -472,13 +563,11 @@ export default function CelebrityDetailPage() {
       <div className="flex flex-col items-center py-6 px-4 bg-white border-gray-100">
         {/* 头像 */}
         <div className="relative mb-2">
-          <div className="w-16 h-16 rounded-full overflow-hidden">
-            <img
-              src="/me/me2.png"
-              alt="Vitalik"
-              className="w-full h-full object-cover"
-            />
-          </div>
+          <AvatarWithSkeleton
+            src={celebrityAvatar}
+            alt={celebrityName}
+            className="w-16 h-16 rounded-full overflow-hidden"
+          />
           {/* 认证徽章 */}
           <div className="absolute -bottom-1 right-1">
             <img
@@ -490,19 +579,37 @@ export default function CelebrityDetailPage() {
         </div>
 
         {/* 名字 */}
-        <h2 className="text-base font-medium text-gray-900 mb-3">Vitalik</h2>
+        <h2 className="text-base font-medium text-gray-900 mb-3">{celebrityName}</h2>
 
         {/* 总资产 */}
         <div className="text-3xl font-bold text-gray-900 mb-2">
-          $353,379,521
+          {netWorthData.loading ? (
+            <div className="bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] h-9 w-48 rounded"></div>
+          ) : (
+            <div className="flex items-center">
+              <span>${formatNumber(netWorthData.total)}</span>
+              {/* {netWorthData.change24h !== null && (
+                <span className={`ml-2 text-lg ${netWorthData.change24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  ({netWorthData.change24h >= 0 ? '+' : ''}{formatNumber(netWorthData.change24h, 2)}%)
+                </span>
+                这是增长百分比
+              )} */}
+            </div>
+          )}
         </div>
       </div>
 
       {/* 代币信息 */}
       <div className="flex justify-between items-center text-sm text-gray-500 space-x-4 px-3 py-3 bg-[#f6f6f6]">
-        <div>
+        <div className="flex items-baseline">
           <span>代币</span>
-          <span className="text-black pl-2">¥353,379,521</span>
+          <span className="text-black pl-2">
+            {netWorthData.loading ? (
+              <span className="inline-block bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] h-4 w-24 rounded align-baseline translate-y-0.5"></span>
+            ) : (
+              `$${formatNumber(netWorthData.total)}`
+            )}
+          </span>
         </div>
         <div className="flex items-center space-x-4">
           <button 

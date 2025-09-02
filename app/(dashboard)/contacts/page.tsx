@@ -484,8 +484,11 @@ function CelebrityListItem({
   const avatarUrl = originalData?.cid 
     ? `https://aqua-biological-spider-837.mypinata.cloud/ipfs/${originalData.cid}`
     : contact.avatar; // 如果没有CID，使用默认头像
+  // 构建带参数的跳转URL - 添加钱包地址参数
+  const detailUrl = `/celebrity/${contact.id}?name=${encodeURIComponent(contact.name)}&avatar=${encodeURIComponent(avatarUrl)}&address=${encodeURIComponent(contact.walletAddress)}`;
+  
   return (
-    <Link href={`/celebrity/${contact.id}`}>
+    <Link href={detailUrl}>
       <div
         className={`flex items-center px-4 py-3 cursor-pointer hover:bg-gray-50 ${!isLast ? 'border-b border-gray-100' : ''}`}
       >
