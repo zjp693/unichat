@@ -108,14 +108,57 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const data: MoralisNetWorthResponse = await moralisResponse.json();
+    const data: any = await moralisResponse.json();
     
-    console.log('✅ Moralis净资产API响应成功');
-    console.log('📊 总净资产:', data.total_networth_usd);
-    console.log('📈 24小时变化:', data.total_networth_usd_24hr_percent_change);
+    // console.log('✅ Moralis净资产API响应成功');
+    // console.log('📊 原始响应数据:', JSON.stringify(data, null, 2));
 
-    // 返回净资产数据
-    return NextResponse.json(data, { status: 200 });
+    // 处理数据结构，计算真实的总净资产
+    let totalNetWorthUsd = 0;
+    let totalChange24h = null;
+
+    // 如果API直接返回了总净资产
+    if (data.total_networth_usd) {
+      totalNetWorthUsd = parseFloat(data.total_networth_usd);
+      totalChange24h = data.total_networth_usd_24hr_percent_change;
+    } else if (data.chains && Array.isArray(data.chains)) {
+      // 如果需要从chains数据中计算
+      for (const chain of data.chains) {
+        // 添加原生代币价值
+        if (chain.native_balance_usd) {
+          totalNetWorthUsd += parseFloat(chain.native_balance_usd || '0');
+        }
+        
+        // 添加其他代币价值
+        if (chain.token_balances && Array.isArray(chain.token_balances)) {
+          for (const token of chain.token_balances) {
+            if (token.usd_value) {
+              totalNetWorthUsd += parseFloat(token.usd_value || '0');
+            }
+          }
+        }
+      }
+    } else {
+      // 如果是简单的结构，直接相加native_balance_usd和token_balance_usd
+      const nativeBalanceUsd = parseFloat(data.native_balance_usd || '0');
+      const tokenBalanceUsd = parseFloat(data.token_balance_usd || '0');
+      totalNetWorthUsd = nativeBalanceUsd + tokenBalanceUsd;
+      
+    //   console.log('💰 原生代币价值:', nativeBalanceUsd);
+    //   console.log('🪙 其他代币价值:', tokenBalanceUsd);
+    }
+
+    // console.log('📊 计算后的总净资产:', totalNetWorthUsd);
+    // console.log('📈 24小时变化:', totalChange24h);
+
+    // 返回标准化的净资产数据
+    const responseData = {
+      total_networth_usd: totalNetWorthUsd.toString(),
+      total_networth_usd_24hr_percent_change: totalChange24h,
+      original_data: data // 保留原始数据用于调试
+    };
+
+    return NextResponse.json(responseData, { status: 200 });
     
   } catch (error: any) {
     console.error('💥 Moralis净资产API代理错误:', {

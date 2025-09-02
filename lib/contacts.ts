@@ -70,6 +70,37 @@ export function prepareTotalCountCall(activeOnly: boolean = true) {
   };
 }
 
+// 根据钱包地址搜索名人的合约调用参数
+export function prepareGetByAddressCall(searchAddress: string) {
+  const contractAddress = getCelebrityRegistryAddress();
+  
+  // console.log('=== 准备根据地址搜索名人 ===');
+  // console.log('搜索地址:', searchAddress);
+  // console.log('合约地址:', contractAddress);
+  
+  // 检查是否为有效的地址格式，如果不是则禁用查询
+  const isValidAddress = searchAddress.startsWith('0x') && 
+                        searchAddress.length === 42 && 
+                        /^0x[a-fA-F0-9]{40}$/.test(searchAddress);
+  
+  return {
+    address: contractAddress as `0x${string}`,
+    abi: CELEBRITY_REGISTRY_V1_ABI,
+    functionName: 'getByAddress',
+    args: [searchAddress as `0x${string}`],
+    query: {
+      enabled: !!contractAddress && 
+               contractAddress.startsWith('0x') && 
+               contractAddress.length === 42 &&
+               !!searchAddress && 
+               searchAddress.trim().length > 0 &&
+               isValidAddress,  // 只有有效地址时才启用查询
+      retry: 3,
+      retryDelay: 1000,
+    }
+  };
+}
+
 // 将合约数据转换为前端使用的Contact格式
 export function convertContractDataToContact(contractData: CelebrityFromContract, rank?: number): Contact {
   // 构建IPFS头像URL

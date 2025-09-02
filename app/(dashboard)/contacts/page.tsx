@@ -17,6 +17,7 @@ import {
   formatNetWorth,
   formatWalletAddress,
   prepareCelebrityContractCall,
+  prepareGetByAddressCall,
   createCelebrityContractHooks,
   type CelebrityFromContract
 } from '@/lib/contacts';
@@ -107,7 +108,15 @@ export default function ContactsPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  // 真实的智能合约调用 - 获取名人列表
+  // 是否有搜索内容
+  const hasSearchTerm = searchTerm.trim().length > 0;
+  
+  // 检查是否为有效的地址格式
+  const isValidAddress = searchTerm.startsWith('0x') && 
+                        searchTerm.length === 42 && 
+                        /^0x[a-fA-F0-9]{40}$/.test(searchTerm);
+
+  // 真实的智能合约调用 - 获取名人列表（无搜索时显示）
   const { 
     data: celebrityData, 
     isLoading: isLoadingCelebs, 
@@ -119,10 +128,23 @@ export default function ContactsPage() {
     activeOnly: false  // 不限制活跃状态，显示所有名人
   }));
 
+  // 搜索接口 - 用户输入任何内容后都调用此接口
+  const { 
+    data: searchResult, 
+    isLoading: isLoadingSearch, 
+    error: searchError,
+    refetch: refetchSearch
+  } = useReadContract(prepareGetByAddressCall(searchTerm));
+
   const { processContractData, handleContractError } = createCelebrityContractHooks();
 
   // 处理合约数据
   const contractCelebrities = processContractData(celebrityData as CelebrityFromContract[] | undefined);
+  
+  // 处理地址搜索结果
+  const searchResultCelebrities = searchResult 
+    ? processContractData([searchResult as CelebrityFromContract])
+    : [];
 
   // 复制钱包地址
   const copyAddress = async (address: string) => {
@@ -160,7 +182,13 @@ export default function ContactsPage() {
 
   const filteredTradedContacts = filterContacts(tradedContacts);
   const filteredMutualContacts = filterContacts(mutualFriendsContacts);
-  const filteredCelebrities = filterContacts(contractCelebrities); // 使用真实合约数据
+  
+  // 根据搜索状态决定显示的数据
+  const filteredCelebrities = hasSearchTerm && isValidAddress
+    ? searchResultCelebrities  // 有效地址搜索：显示搜索结果
+    : !hasSearchTerm 
+      ? contractCelebrities    // 无搜索内容：显示分页数据
+      : [];                    // 无效地址格式：显示空数组
 
   return (
     <div className="flex flex-col h-full">
@@ -201,13 +229,13 @@ export default function ContactsPage() {
         <h1 className="text-base font-medium text-center">通讯录</h1>
       </div>
 
-      {/* 搜索栏 - 精确还原圆角矩形样式 */}
+      {/* 搜索栏  */}
       <div className="px-4 py-3 bg-white">
         <div className="relative bg-gray-100 rounded-full">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="请输入对方钱包地址"
+            placeholder="请输入钱包地址(0x...)"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-transparent border-none focus:outline-none text-sm"
@@ -215,7 +243,7 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* 切换标签 - 精确还原图片中的样式 */}
+      {/* 切换标签 -   */}
       <div className="flex justify-between bg-white px-4 pt-2 pb-5">
         <button
           onClick={() => setActiveTab('contacts')}
@@ -312,16 +340,16 @@ export default function ContactsPage() {
             )}
           </div>
         ) : (
-          /* 名人列表 - 使用真实合约数据 */
+          /* 名人列表 - 根据搜索类型显示不同数据 */
           <div className="">
-            {isLoadingCelebs ? (
+            {(hasSearchTerm && isValidAddress ? isLoadingSearch : !hasSearchTerm ? isLoadingCelebs : false) ? (
               <CelebrityListSkeleton />
-            ) : celebError ? (
+            ) : (hasSearchTerm && isValidAddress ? searchError : !hasSearchTerm ? celebError : null) ? (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mx-4 mt-4">
                 <h3 className="text-red-800 font-semibold">❌ 合约调用错误</h3>
-                <p className="text-red-600 text-sm mt-1">{celebError.message}</p>
+                <p className="text-red-600 text-sm mt-1">{(hasSearchTerm && isValidAddress ? searchError : celebError)?.message}</p>
                 <button 
-                  onClick={() => refetchCelebs()}
+                  onClick={() => hasSearchTerm && isValidAddress ? refetchSearch() : refetchCelebs()}
                   className="mt-2 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
                 >
                   重试
@@ -329,10 +357,28 @@ export default function ContactsPage() {
               </div>
             ) : filteredCelebrities.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg mx-4 mt-4">
-                <p className="text-gray-600">📭 智能合约中暂无名人数据</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  请确保合约中已添加名人数据，或检查合约地址是否正确
-                </p>
+                {hasSearchTerm && !isValidAddress ? (
+                  <>
+                    <p className="text-gray-600">⚠️ 请输入有效的钱包地址</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      钱包地址应该以0x开头，包含42个字符
+                    </p>
+                  </>
+                ) : hasSearchTerm && isValidAddress ? (
+                  <>
+                    <p className="text-gray-600">🔍 未找到该地址的名人信息</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      请检查钱包地址是否正确，或该地址未注册为名人
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-600">📭 智能合约中暂无名人数据</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      请确保合约中已添加名人数据，或检查合约地址是否正确
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="bg-white">
