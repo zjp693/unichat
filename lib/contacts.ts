@@ -87,14 +87,13 @@ export function prepareGetByAddressCall(searchAddress: string) {
     address: contractAddress as `0x${string}`,
     abi: CELEBRITY_REGISTRY_V1_ABI,
     functionName: 'getByAddress',
-    args: [searchAddress as `0x${string}`],
+    args: [searchAddress],  // 直接传用户输入，不做任何验证
     query: {
       enabled: !!contractAddress && 
                contractAddress.startsWith('0x') && 
                contractAddress.length === 42 &&
                !!searchAddress && 
-               searchAddress.trim().length > 0 &&
-               isValidAddress,  // 只有有效地址时才启用查询
+               searchAddress.trim().length > 0,  // 只要有搜索内容就启用查询
       retry: 3,
       retryDelay: 1000,
     }

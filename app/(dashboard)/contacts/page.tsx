@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Search, Copy, Eye, Users, DollarSign, Crown } from 'lucide-react';
@@ -110,11 +110,13 @@ export default function ContactsPage() {
 
   // 是否有搜索内容
   const hasSearchTerm = searchTerm.trim().length > 0;
-  
-  // 检查是否为有效的地址格式
-  const isValidAddress = searchTerm.startsWith('0x') && 
-                        searchTerm.length === 42 && 
-                        /^0x[a-fA-F0-9]{40}$/.test(searchTerm);
+
+  // 搜索时自动跳转到名人tab（任何搜索内容都跳转）
+  useEffect(() => {
+    if (hasSearchTerm) {
+      setActiveTab('celebrities');
+    }
+  }, [hasSearchTerm]);
 
   // 真实的智能合约调用 - 获取名人列表（无搜索时显示）
   const { 
@@ -184,11 +186,9 @@ export default function ContactsPage() {
   const filteredMutualContacts = filterContacts(mutualFriendsContacts);
   
   // 根据搜索状态决定显示的数据
-  const filteredCelebrities = hasSearchTerm && isValidAddress
-    ? searchResultCelebrities  // 有效地址搜索：显示搜索结果
-    : !hasSearchTerm 
-      ? contractCelebrities    // 无搜索内容：显示分页数据
-      : [];                    // 无效地址格式：显示空数组
+  const filteredCelebrities = hasSearchTerm
+    ? searchResultCelebrities  // 有搜索内容：显示合约搜索结果
+    : contractCelebrities;     // 无搜索内容：显示分页数据
 
   return (
     <div className="flex flex-col h-full">
@@ -235,7 +235,7 @@ export default function ContactsPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
-            placeholder="请输入钱包地址(0x...)"
+            placeholder="请输入搜索内容"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 bg-transparent border-none focus:outline-none text-sm"
@@ -342,40 +342,36 @@ export default function ContactsPage() {
         ) : (
           /* 名人列表 - 根据搜索类型显示不同数据 */
           <div className="">
-            {(hasSearchTerm && isValidAddress ? isLoadingSearch : !hasSearchTerm ? isLoadingCelebs : false) ? (
+            {(hasSearchTerm ? isLoadingSearch : isLoadingCelebs) ? (
               <CelebrityListSkeleton />
-            ) : (hasSearchTerm && isValidAddress ? searchError : !hasSearchTerm ? celebError : null) ? (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mx-4 mt-4">
-                <h3 className="text-red-800 font-semibold">❌ 合约调用错误</h3>
-                <p className="text-red-600 text-sm mt-1">{(hasSearchTerm && isValidAddress ? searchError : celebError)?.message}</p>
-                <button 
-                  onClick={() => hasSearchTerm && isValidAddress ? refetchSearch() : refetchCelebs()}
-                  className="mt-2 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                >
-                  重试
-                </button>
+            ) : (hasSearchTerm && searchError) ? (
+              <div className="text-center py-8 bg-gray-50 rounded-lg mx-4 mt-4">
+                <p className="text-gray-600">🔍 没有搜索到内容</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  请尝试其他搜索词
+                </p>
               </div>
             ) : filteredCelebrities.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg mx-4 mt-4">
-                {hasSearchTerm && !isValidAddress ? (
+                {hasSearchTerm ? (
                   <>
-                    <p className="text-gray-600">⚠️ 请输入有效的钱包地址</p>
+                    <p className="text-gray-600">🔍 没有搜索到内容</p>
                     <p className="text-sm text-gray-500 mt-1">
-                      钱包地址应该以0x开头，包含42个字符
+                      请尝试其他搜索词
                     </p>
                   </>
-                ) : hasSearchTerm && isValidAddress ? (
-                  <>
-                    <p className="text-gray-600">🔍 未找到该地址的名人信息</p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      请检查钱包地址是否正确，或该地址未注册为名人
-                    </p>
-                  </>
-                ) : (
+                ) : celebError ? (
                   <>
                     <p className="text-gray-600">📭 智能合约中暂无名人数据</p>
                     <p className="text-sm text-gray-500 mt-1">
                       请确保合约中已添加名人数据，或检查合约地址是否正确
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-600">📭 暂无数据</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      请稍后再试
                     </p>
                   </>
                 )}
