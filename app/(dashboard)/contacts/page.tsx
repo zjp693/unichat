@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Search, Copy, Eye, Users, DollarSign, Crown } from 'lucide-react';
+import { Search } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useReadContract } from 'wagmi';
@@ -13,92 +11,16 @@ import {
   Contact,
   tradedContacts,
   mutualFriendsContacts,
-  formatCurrency,
-  formatNetWorth,
-  formatWalletAddress,
   prepareCelebrityContractCall,
   prepareGetByAddressCall,
   createCelebrityContractHooks,
   type CelebrityFromContract
 } from '@/lib/contacts';
+import { CelebrityListSkeleton } from './components/CelebrityListSkeleton';
+import { ContactListItem } from './components/ContactListItem';
+import { CelebrityListItem } from './components/CelebrityListItem';
 
-interface ContactItemProps {
-  contact: Contact;
-}
 
-// 名人列表骨架屏组件
-function CelebrityListSkeleton() {
-  return (
-    <div className="bg-white">
-      {Array.from({ length: 8 }, (_, index) => (
-        <div key={index} className="flex items-center px-4 py-3 border-b border-gray-100">
-          {/* 头像骨架 */}
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] mr-3 relative flex-shrink-0">
-            {/* 认证徽章骨架 */}
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-gray-300 via-gray-400 to-gray-300 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full"></div>
-          </div>
-
-          {/* 信息骨架 */}
-          <div className="flex-1 min-w-0 overflow-hidden">
-            {/* 第一行：姓名和金额 */}
-            <div className="flex items-center justify-between mb-2">
-              <div className="h-4 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded w-24"></div>
-              <div className="h-6 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded w-20"></div>
-            </div>
-
-            {/* 第二行：钱包地址 */}
-            <div className="flex items-center">
-              <div className="h-3 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded w-40"></div>
-            </div>
-          </div>
-        </div>
-      ))}
-
-    </div>
-  );
-}
-
-// 头像加载组件（带骨架屏）
-function AvatarWithSkeleton({ 
-  src, 
-  alt, 
-  className 
-}: { 
-  src: string; 
-  alt: string; 
-  className?: string; 
-}) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
-
-  return (
-    <div className={`relative ${className}`}>
-      {/* 骨架屏 - 在图片加载时显示 */}
-      {isLoading && (
-        <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 bg-[length:200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite] rounded-lg"></div>
-      )}
-      
-      {/* 实际图片 */}
-      <img
-        src={src}
-        alt={alt}
-        className={`w-full h-full object-cover rounded-lg transition-opacity duration-300 ${
-          isLoading ? 'opacity-0' : 'opacity-100'
-        }`}
-        onLoad={() => setIsLoading(false)}
-        onError={(e) => {
-          setIsLoading(false);
-          setHasError(true);
-          // 如果IPFS图片加载失败，回退到默认头像
-          const target = e.target as HTMLImageElement;
-          if (!hasError) {
-            target.src = '/me/default.png';
-          }
-        }}
-      />
-    </div>
-  );
-}
 
 export default function ContactsPage() {
   const [activeTab, setActiveTab] = useState<'contacts' | 'celebrities'>(
@@ -192,24 +114,18 @@ export default function ContactsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* 顶部导航栏 - 精确还原图片布局 */}
-      <div className="flex justify-between items-center py-2 px-2 bg-white">
-        <Button
-          variant="outline"
-          className="!px-4 !h-7 !py-1 text-sm rounded-md border-gray-200"
-        >
-          BNB Chain
-        </Button>
+      {/* 顶部导航栏 */}
+      <div className="flex items-center py-2 px-2 bg-white">
+        {/* <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}>
+          <appkit-network-button />
+        </div> */}
 
+        <div className="ml-2" style={{ transform: 'scale(1)', transformOrigin: 'left center' }}>
+          <appkit-button />
+        </div>
         <Button
+          className="ml-auto flex items-center space-x-1 !px-4 !h-7 !py-1 text-sm rounded-md border-gray-200"
           variant="outline"
-          className="!px-4 !h-7 !py-1 text-sm rounded-md border-gray-200"
-        >
-          Commect wallet
-        </Button>
-        <Button
-          variant="outline"
-          className="flex items-center space-x-1 !px-4 !h-7 !py-1 text-sm rounded-md border-gray-200"
         >
           <div className="inline-block align-middle mr-1 w-4 h-4 rounded-full overflow-hidden">
             <Image
@@ -397,210 +313,6 @@ export default function ContactsPage() {
   );
 }
 
-// 联系人项目组件
-function ContactListItem({
-  contact,
-  onCopyAddress,
-  onViewTransactions,
-  isLast
-}: {
-  contact: Contact;
-  onCopyAddress: (address: string) => void;
-  onViewTransactions: (contact: Contact) => void;
-  isLast?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center px-4 py-3 ${!isLast ? 'border-b border-gray-100' : ''}`}
-    >
-      {/* 头像 */}
-      <div className="relative mr-3">
-        <div className="w-12 h-12 rounded-lg overflow-hidden">
-          <AvatarWithSkeleton
-            src={contact.avatar}
-            alt={contact.name}
-            className="w-full h-full"
-          />
-        </div>
-        {/* 在线状态 */}
-        {/* {contact.isOnline && (
-          <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full" />
-        )} */}
-      </div>
 
-      {/* 联系人信息 */}
-      <div className="flex-1 min-w-0">
-        {/* 第一行：姓名和金额 */}
-        <div className={`flex items-center mb-0.5 ${contact.type === 'mutual_friends' ? 'justify-start' : 'justify-between'}`}>
-          <h4 className="text-sm font-medium text-gray-900 truncate">
-            {contact.name}
-          </h4>
-
-          {/* 交易金额 - 精确还原图片中的$符号和金额格式 */}
-          {contact.type === 'traded' && contact.transactionAmount && (
-            <span className="text-sm font-semibold text-gray-900">
-              $
-              {contact.transactionAmount.toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })}
-            </span>
-          )}
-
-          {/* 共同好友数 */}
-          {contact.type === 'mutual_friends' && contact.mutualFriendsCount && (
-            <span className="text-xs  text-gray-600 bg-zinc-100 rounded-lg ml-2  py-1.5 px-3 flex items-center">
-              <img
-                src="/contacts/friend.png"
-                alt="friend"
-                className="w-3 h-3 mr-1"
-              />
-              共同好友:{contact.mutualFriendsCount}个
-            </span>
-          )}
-        </div>
-
-        {/* 第二行：钱包地址和操作按钮 */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center flex-1 mr-3 w-[100%]">
-            <div className="text-sm text-gray-500 font-mono break-all mr-2">
-              {contact.walletAddress}
-              {/* 复制按钮 */}
-              <button
-                onClick={() => onCopyAddress(contact.walletAddress)}
-                className="pl-1 hover:bg-gray-100 rounded flex-shrink-0 translate-y-0.5"
-              >
-                <img
-                  src="/contacts/copy.svg"
-                  alt="复制"
-                  className="w-3.5 h-3.5 object-cover"
-                />
-              </button>
-            </div>
-          </div>
-
-          {/* 查看交易按钮 */}
-          <button
-            onClick={() => onViewTransactions(contact)}
-            className="text-xs text-gray-600 hover:text-gray-800 flex items-center flex-shrink-0"
-          >
-            <span>查看交易</span>
-            <svg
-              className="w-3 h-3 ml-1"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// 名人项目组件
-function CelebrityListItem({
-  contact,
-  onCopyAddress,
-  isLast,
-  contractData,
-  dataIndex
-}: {
-  contact: Contact;
-  onCopyAddress: (address: string) => void;
-  isLast?: boolean;
-  contractData?: CelebrityFromContract[];
-  dataIndex?: number;
-}) {
-  // 获取合约原始数据以获取CID
-  const originalData = contractData && typeof dataIndex === 'number' ? contractData[dataIndex] : null;
-  
-  // 构建头像URL：使用IPFS CID
-  const avatarUrl = originalData?.cid 
-    ? `https://aqua-biological-spider-837.mypinata.cloud/ipfs/${originalData.cid}`
-    : contact.avatar; // 如果没有CID，使用默认头像
-  // 构建带参数的跳转URL - 添加钱包地址参数
-  const detailUrl = `/celebrity/${contact.id}?name=${encodeURIComponent(contact.name)}&avatar=${encodeURIComponent(avatarUrl)}&address=${encodeURIComponent(contact.walletAddress)}`;
-  
-  return (
-    <Link href={detailUrl}>
-      <div
-        className={`flex items-center px-4 py-3 cursor-pointer hover:bg-gray-50 ${!isLast ? 'border-b border-gray-100' : ''}`}
-      >
-      {/* 头像 */}
-      <div className="w-12 h-12 rounded-lg mr-3 relative flex-shrink-0">
-        <AvatarWithSkeleton
-          src={avatarUrl}
-          alt={contact.name}
-          className="w-full h-full"
-        />
-        {/* 认证徽章 */}
-        <div className="absolute -bottom-1 -right-1">
-          <img
-            src="/contacts/badge.png"
-            alt="认证徽章"
-            className="w-4 h-4"
-          />
-        </div>
-      </div>
-
-      {/* 信息 */}
-      <div className="flex-1 min-w-0 overflow-hidden">
-        {/* 第一行：姓名和金额 */}
-        <div className="flex items-center justify-between mb-0.5">
-          <h4 className="text-sm font-medium text-blue-600 truncate">
-            {contact.name}
-          </h4>
-
-          {/* 净资产 */}
-          {contact.netWorth && (
-            <div 
-              className="text-sm font-medium text-[#909399] px-2 py-1"
-              style={{
-                background: 'linear-gradient(270deg, #FFEFD6 0%, #FFFFFF 100%)',
-                borderRadius: '4px 0px 4px 4px'
-              }}
-            >
-              {formatNetWorth(contact.netWorth)}
-            </div>
-          )}
-        </div>
-
-        {/* 第二行：观察标签和钱包地址 */}
-        <div className="flex items-end">
-          {/* <div className="relative mr-2">
-            <span 
-              className="text-xs text-gray-500 px-2 py-1 inline-block"
-              style={{
-                backgroundImage: 'url(/contacts/observe.png)',
-                backgroundSize: 'contain',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                width: '42px',
-                textAlign: 'center'
-              }}
-            >
-              观察
-            </span>
-            {contact.hasNotification && (
-              <div className="absolute -top-0 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
-            )}
-          </div> */}
-          <div className="text-sm text-gray-500 font-mono">
-            {contact.walletAddress}
-          </div>
-        </div>
-      </div>
-    </div>
-    </Link>
-  );
-}
 
 

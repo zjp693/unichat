@@ -336,19 +336,8 @@ export const celebrityContacts: Contact[] = [
   }
 ];
 
-// 工具函数
-export function formatWalletAddress(address: string): string {
-  if (!address || address.length < 10) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2
-  }).format(amount);
-}
+// 从全局工具库导入工具函数
+export { formatAddress as formatWalletAddress, formatCurrency } from '@/lib/utils';
 
 export function formatNetWorth(amount: number): string {
   // 格式化为精确的数字显示，带逗号分隔符

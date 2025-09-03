@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { TransactionItem } from './components/TransactionItem';
+import { TokenDetailSkeleton } from './components/TokenDetailSkeleton';
+import { formatNumber, toDateYMD, toDateTime } from './lib/token-utils';
 
 interface TransferItemRaw {
   transaction_hash?: string;
@@ -33,29 +35,7 @@ interface TransactionItem {
   networkIcon: string; // 添加网络图标路径
 }
 
-function formatNumber(n: number) {
-  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
-}
 
-function toDateYMD(ts?: string) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  return `${y}/${m}/${day}`;
-}
-
-function toDateTime(ts?: string) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  const hh = `${d.getHours()}`.padStart(2, '0');
-  const mm = `${d.getMinutes()}`.padStart(2, '0');
-  return `${y}-${m}-${day} ${hh}:${mm}`;
-}
 
 export default function TokenDetailPage() {
   const params = useParams();
@@ -210,52 +190,7 @@ export default function TokenDetailPage() {
 
   // 骨架屏
   if (initialLoading) {
-    return (
-      <div className="flex flex-col h-full bg-white">
-        <div className="flex items-center px-4 py-4 bg-white">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="p-2 flex items-center justify-center"
-            onClick={() => router.back()}
-          >
-            <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
-          </Button>
-          <div className="flex items-center space-x-2 ml-3">
-            <div className="w-6 h-6 bg-gray-200 rounded animate-pulse" />
-            <div className="text-sm">
-              <div className="h-4 bg-gray-200 rounded w-12 animate-pulse mb-1"></div>
-              <div className="h-3 bg-gray-100 rounded w-16 animate-pulse"></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-8">
-          <div className="h-8 bg-gray-200 rounded w-40 mb-2 animate-pulse" />
-          <div className="h-4 bg-gray-100 rounded w-32 animate-pulse" />
-        </div>
-
-        <div className="px-6 py-1 bg-gray-100">
-          <div className="h-4 bg-gray-200 rounded w-24 animate-pulse" />
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-3 animate-pulse">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="bg-white">
-                <div className="px-6 py-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="h-4 bg-gray-200 rounded w-28" />
-                    <div className="h-4 bg-gray-200 rounded w-24" />
-                  </div>
-                  <div className="h-3 bg-gray-100 rounded w-32" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <TokenDetailSkeleton />;
   }
 
   return (
@@ -327,110 +262,4 @@ export default function TokenDetailPage() {
   );
 }
 
-// 交易记录项组件
-function TransactionItem({
-  transaction,
-  showDate,
-  onClick
-}: {
-  transaction: TransactionItem;
-  showDate: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <div onClick={onClick} className={onClick ? 'cursor-pointer' : undefined}>
-      {/* 日期分组头 */}
-      {showDate && (
-        <div className="px-6 py-3 bg-white border-b border-gray-100">
-          <div className="text-sm font-medium text-black">
-            {transaction.date}
-          </div>
-        </div>
-      )}
 
-      {/* 交易项 */}
-      <div className="px-6 py-4 bg-white">
-        <div className="flex items-center justify-between">
-          {/* 左侧金额信息 */}
-          <div className="flex-1">
-            <div className="flex items-center space-x-2 mb-1">
-              <span className={`text-base font-semibold text-[#303133]`}>
-                {transaction.amount}
-              </span>
-              {transaction.hasDropdown && (
-                <Check className="h-4 w-4 text-[#0B8A64]" />
-              )}
-            </div>
-            <span
-              className={`text-sm bg-gray-100 px-2 py-1 rounded-sm font-semibold ${
-                transaction.isPositive ? 'text-[#0B8A64]' : 'text-[#303133]'
-              }`}
-            >
-              {transaction.usdtAmount}
-            </span>
-
-            {/* 地址信息 */}
-            {transaction.fromAddress && (
-              <div className="mt-2 text-xs text-gray-400 space-y-1.5">
-                {transaction.isPositive ? (
-                  <>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">To</span>{' '}
-                      <span
-                        className={`text-xs ${
-                          transaction.isPositive ? 'text-[#0B8A64]' : 'text-[#303133]'
-                        }`}
-                      >
-                        {transaction.toAddress}
-                      </span>
-                      <img
-                        src="/contacts/copy.svg"
-                        alt="Copy address"
-                        className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.toAddress); }}
-                      />
-                    </div>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">From</span>{' '}
-                      <span className="text-xs">{transaction.fromAddress}</span>
-                      <img
-                        src="/contacts/copy.svg"
-                        alt="Copy address"
-                        className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.fromAddress); }}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">From</span>{' '}
-                      <span className="text-xs">{transaction.fromAddress}</span>
-                      <img
-                        src="/contacts/copy.svg"
-                        alt="Copy address"
-                        className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.fromAddress); }}
-                      />
-                    </div>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">To</span>{' '}
-                      <span className="text-xs text-[#303133]">{transaction.toAddress}</span>
-                      <img
-                        src="/contacts/copy.svg"
-                        alt="Copy address"
-                        className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.toAddress); }}
-                      />
-                    </div>
-                  </>
-                )}
-                <div>{transaction.timestamp}</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
