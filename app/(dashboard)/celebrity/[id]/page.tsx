@@ -137,7 +137,7 @@ function AvatarWithSkeleton({
           // 如果IPFS图片加载失败，回退到默认头像
           const target = e.target as HTMLImageElement;
           if (!hasError) {
-            target.src = '/me/me1.png';
+            target.src = '/me/default.png';
           }
         }}
       />

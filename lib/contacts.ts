@@ -105,7 +105,7 @@ export function convertContractDataToContact(contractData: CelebrityFromContract
   // 构建IPFS头像URL
   const avatarUrl = contractData.cid 
     ? `https://aqua-biological-spider-837.mypinata.cloud/ipfs/${contractData.cid}`
-    : '/me/me1.png'; // 如果没有CID，使用默认头像
+    : '/me/default.png'; // 如果没有CID，使用默认头像
     
   return {
     id: `celebrity_${contractData.id}`,
