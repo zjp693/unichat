@@ -11,12 +11,13 @@ import {
   Contact,
   tradedContacts,
   mutualFriendsContacts,
-  prepareCelebrityContractCall,
   prepareGetByAddressCall,
   createCelebrityContractHooks,
   type CelebrityFromContract
 } from '@/lib/contacts';
+import { useCelebrityPagination } from '@/lib/useCelebrityPagination';
 import { CelebrityListSkeleton } from './components/CelebrityListSkeleton';
+import { CelebrityListItemSkeleton } from './components/CelebrityListItemSkeleton';
 import { ContactListItem } from './components/ContactListItem';
 import { CelebrityListItem } from './components/CelebrityListItem';
 
@@ -40,17 +41,22 @@ export default function ContactsPage() {
     }
   }, [hasSearchTerm]);
 
-  // 真实的智能合约调用 - 获取名人列表（无搜索时显示）
-  const { 
-    data: celebrityData, 
-    isLoading: isLoadingCelebs, 
+  // 分页加载名人（首次 10 条，滚动加载更多）
+  const {
+    celebrities: pagedCelebrities,
+    rawPages,
+  pageSize,
+  page,
+    isLoading: isLoadingCelebs,
+    isLoadingMore,
+    hasMore,
     error: celebError,
-    refetch: refetchCelebs
-  } = useReadContract(prepareCelebrityContractCall({ 
-    page: 0, 
-    pageSize: 50,  // 获取更多名人数据
-    activeOnly: false  // 不限制活跃状态，显示所有名人
-  }));
+    loadNext,
+    reset: resetCelebPagination,
+  } = useCelebrityPagination({ pageSize: 10, activeOnly: false, enabled: true });
+
+  // 原始合约数据合集（用于传给 CelebrityListItem 获取 CID）
+  const celebrityData = rawPages.flat();
 
   // 搜索接口 - 用户输入任何内容后都调用此接口
   const { 
@@ -62,13 +68,20 @@ export default function ContactsPage() {
 
   const { processContractData, handleContractError } = createCelebrityContractHooks();
 
-  // 处理合约数据
-  const contractCelebrities = processContractData(celebrityData as CelebrityFromContract[] | undefined);
+  // 处理合约数据 -（原始数据在分页 hook 中处理为 pagedCelebrities）
   
   // 处理地址搜索结果
   const searchResultCelebrities = searchResult 
     ? processContractData([searchResult as CelebrityFromContract])
     : [];
+
+  // 当搜索或切换 tab 时需要重置分页
+  useEffect(() => {
+    if (hasSearchTerm) {
+      // 切换到名人tab 已在上层 effect 中处理
+      resetCelebPagination();
+    }
+  }, [hasSearchTerm, resetCelebPagination]);
 
   // 复制钱包地址
   const copyAddress = async (address: string) => {
@@ -108,9 +121,34 @@ export default function ContactsPage() {
   const filteredMutualContacts = filterContacts(mutualFriendsContacts);
   
   // 根据搜索状态决定显示的数据
+  const contractCelebrities = pagedCelebrities;
+
   const filteredCelebrities = hasSearchTerm
-    ? searchResultCelebrities  // 有搜索内容：显示合约搜索结果
-    : contractCelebrities;     // 无搜索内容：显示分页数据
+    ? searchResultCelebrities
+    : contractCelebrities;
+
+  // 自动下拉加载：使用 IntersectionObserver 观察 sentinel
+  useEffect(() => {
+    if (hasSearchTerm) return; // 搜索状态下不触发分页加载
+
+    const sentinel = document.getElementById('celebrity-list-sentinel');
+    if (!sentinel) return;
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && hasMore && !isLoadingCelebs) {
+          loadNext();
+        }
+      });
+    }, {
+      root: null,
+      rootMargin: '0px',
+      threshold: 0.25,
+    });
+
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [hasSearchTerm, hasMore, isLoadingCelebs, loadNext]);
 
   return (
     <div className="flex flex-col h-full">
@@ -258,7 +296,10 @@ export default function ContactsPage() {
         ) : (
           /* 名人列表 - 根据搜索类型显示不同数据 */
           <div className="">
-            {(hasSearchTerm ? isLoadingSearch : isLoadingCelebs) ? (
+            {(() => {
+              const showFullSkeleton = hasSearchTerm ? isLoadingSearch : (isLoadingCelebs && page === 0 && !isLoadingMore);
+              return showFullSkeleton;
+            })() ? (
               <CelebrityListSkeleton />
             ) : (hasSearchTerm && searchError) ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg mx-4 mt-4">
@@ -299,11 +340,25 @@ export default function ContactsPage() {
                     key={contact.id}
                     contact={contact}
                     onCopyAddress={copyAddress}
-                    isLast={index === filteredCelebrities.length - 1}
+                    isLast={index === filteredCelebrities.length - 1 && !hasMore}
                     contractData={celebrityData as CelebrityFromContract[] | undefined}
                     dataIndex={index}
                   />
                 ))}
+
+                {/* sentinel for infinite scroll */}
+                {/* 当正在加载更多时，只渲染若干条骨架项在列表底部（追加到列表末尾） */}
+                {isLoadingMore && Array.from({ length: pageSize }).map((_, i) => (
+                  <CelebrityListItemSkeleton key={`skeleton-${i}`} />
+                ))}
+
+                {/* 当没有更多时展示提示 */}
+                {!isLoadingMore && !hasMore && (
+                  <div className="h-8 flex items-center justify-center text-sm text-gray-400">没有更多了</div>
+                )}
+
+                {/* 专门的 sentinel：放在列表最末尾，IntersectionObserver 观察此小元素以触发下一页加载 */}
+                <div id="celebrity-list-sentinel" className="h-1" />
               </div>
             )}
           </div>
