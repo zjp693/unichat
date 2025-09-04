@@ -68,5 +68,8 @@
     "singleQuote": true,
     "tabWidth": 2,
     "trailingComma": "none"
+  },
+  "devDependencies": {
+    "@tanstack/react-query-devtools": "^5.85.9"
   }
 }

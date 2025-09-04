@@ -6,6 +6,7 @@ interface TokenData {
   value: string;
   change: string;
   usdValue: string;
+  priceUsd?: string;
   isPositive: boolean;
   tokenAddress?: string;
   thumbnail?: string | null;
@@ -33,6 +34,16 @@ export function TokenListItem({ token, isLast, onClick }: TokenListItemProps) {
   };
 
   const iconConfig = getTokenIcon(token.symbol);
+
+  // 数量显示格式化（最多保留3位小数）
+  function formatAmountDisplay(value: string, fractionDigits = 3) {
+    const num = Number(value);
+    if (!isFinite(num)) return value;
+    return num.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: fractionDigits
+    });
+  }
 
   return (
     <div className="bg-white">
@@ -66,13 +77,13 @@ export function TokenListItem({ token, isLast, onClick }: TokenListItemProps) {
 
             {/* 数量 */}
             <div className="text-base font-medium text-gray-900">
-              {token.value}
+              {formatAmountDisplay(token.amount, 3)}
             </div>
           </div>
 
           {/* 底部信息 */}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500 ">{token.amount}
+            <span className="text-xs text-gray-500 ">{token.priceUsd ?? token.amount}
             {token.change && (
                 <span
                   className={`text-xs pl-1 ${

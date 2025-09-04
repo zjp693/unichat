@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -18,6 +19,7 @@ interface TokenData {
   value: string;
   change: string;
   usdValue: string;
+  priceUsd: string;
   isPositive: boolean;
   tokenAddress?: string;
   thumbnail?: string | null;
@@ -39,13 +41,6 @@ export default function CelebrityDetailPage() {
 
   // 获取当前连接的钱包链信息
   const { moralisChain, dexScreenerChain } = useMoralisChain();
-  const [tokensData, setTokensData] = useState<TokenData[]>([]);
-  const [netWorthData, setNetWorthData] = useState<{
-    total: number;
-    change24h: number | null;
-    loading: boolean;
-  }>({ total: 0, change24h: null, loading: true });
-  const [loading, setLoading] = useState<boolean>(true);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // 从URL参数获取名字、头像和钱包地址
@@ -65,109 +60,58 @@ export default function CelebrityDetailPage() {
     return undefined;
   }, [params, passedWalletAddress]);
 
-  useEffect(() => {
-    let aborted = false;
-    
-    async function loadTokens() {
-      try {
-        setLoading(true);
-        const address = walletAddress;
-        const res = await fetch(`/api/moralis?address=${encodeURIComponent(address || '')}&chain=${moralisChain}`, {
-          cache: 'no-store'
-        });
-        if (!res.ok) {
-          setTokensData([]);
-          return;
-        }
-        const json = await res.json();
-        const list: MoralisTokenItem[] = Array.isArray(json?.result) ? json.result : [];
-        if (aborted) return;
-        const mapped: TokenData[] = list.map((item) => {
-          const pct = item.usd_price_24hr_percent_change ?? 0;
-          const isPositive = pct >= 0;
-          return {
-            symbol: (item.symbol || 'UNKNOWN').toUpperCase(),
-            amount: item.balance_formatted ? String(item.balance_formatted) : '0',
-            value: formatNumber(item.usd_value ?? 0),
-            change: `${pct >= 0 ? '+' : ''}${formatNumber(Math.abs(pct), 2)}%`,
-            usdValue: `$${formatNumber(item.usd_value ?? 0)}`,
-            isPositive,
-            tokenAddress: item.token_address,
-            thumbnail: item.thumbnail || null
-          };
-        });
-        setTokensData(mapped);
-      } catch (e) {
-        setTokensData([]);
-      } finally {
-        setLoading(false);
-      }
+  const tokensQuery = useQuery({
+    queryKey: ['wallet-tokens', walletAddress, moralisChain],
+    enabled: Boolean(walletAddress),
+    queryFn: async () => {
+      const res = await fetch(`/api/moralis?address=${encodeURIComponent(walletAddress || '')}&chain=${moralisChain}`, {
+        cache: 'no-store'
+      });
+      if (!res.ok) return { result: [] };
+      return res.json();
+    },
+    select: (json: any) => {
+      const list: MoralisTokenItem[] = Array.isArray(json?.result) ? json.result : [];
+      const mapped: TokenData[] = list.map((item) => {
+        const pct = item.usd_price_24hr_percent_change ?? 0;
+        const isPositive = pct >= 0;
+        const amountNum = Number(item.balance_formatted || 0);
+        const totalUsd = item.usd_value ?? 0;
+        const price = amountNum > 0 ? totalUsd / amountNum : 0;
+        return {
+          symbol: (item.symbol || 'UNKNOWN').toUpperCase(),
+          amount: item.balance_formatted ? String(item.balance_formatted) : '0',
+          value: formatNumber(item.usd_value ?? 0),
+          change: `${pct >= 0 ? '+' : ''}${formatNumber(Math.abs(pct), 2)}%`,
+          usdValue: `$${formatNumber(item.usd_value ?? 0)}`,
+          priceUsd: `$${formatNumber(price)}`,
+          isPositive,
+          tokenAddress: item.token_address,
+          thumbnail: item.thumbnail || null
+        };
+      });
+      return mapped;
     }
+  });
 
-    async function loadNetWorth() {
-      try {
-        setNetWorthData(prev => ({ ...prev, loading: true }));
-        const address = walletAddress;
-        
-        if (!address) {
-          console.error('❌ 钱包地址为空，无法获取净资产');
-          setNetWorthData({ total: 0, change24h: null, loading: false });
-          return;
-        }
-        
-        const res = await fetch(`/api/moralis/net-worth?address=${encodeURIComponent(address)}&chain=${moralisChain}`, {
-          cache: 'no-store'
-        });
-        
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          const errorMessage = errorData.error || `HTTP ${res.status}: ${res.statusText}`;
-          console.error('❌ 净资产API调用失败:', {
-            status: res.status,
-            statusText: res.statusText,
-            error: errorMessage
-          });
-          setNetWorthData({ total: 0, change24h: null, loading: false });
-          return;
-        }
-        
-        const data = await res.json();
-        
-        if (aborted) return;
-        
-        // 检查数据完整性
-        if (!data || typeof data.total_networth_usd === 'undefined') {
-          console.error('❌ 净资产数据格式错误:', data);
-          setNetWorthData({ total: 0, change24h: null, loading: false });
-          return;
-        }
-        
-        const totalNetWorth = parseFloat(data.total_networth_usd || '0');
-        const change24h = data.total_networth_usd_24hr_percent_change;
-        
-        setNetWorthData({
-          total: isNaN(totalNetWorth) ? 0 : totalNetWorth,
-          change24h: change24h,
-          loading: false
-        });
-        
-      } catch (e: any) {
-        const errorMessage = e?.message || '未知错误';
-        console.error('💥 净资产数据获取错误:', {
-          error: errorMessage,
-          stack: e?.stack
-        });
-        setNetWorthData({ total: 0, change24h: null, loading: false });
-      }
+  const netWorthQuery = useQuery({
+    queryKey: ['wallet-net-worth', walletAddress, moralisChain],
+    enabled: Boolean(walletAddress),
+    queryFn: async () => {
+      const res = await fetch(`/api/moralis/net-worth?address=${encodeURIComponent(walletAddress || '')}&chain=${moralisChain}`, {
+        cache: 'no-store'
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || typeof data.total_networth_usd === 'undefined') return null;
+      const totalNetWorth = parseFloat(data.total_networth_usd || '0');
+      const change24h = data.total_networth_usd_24hr_percent_change;
+      return {
+        total: isNaN(totalNetWorth) ? 0 : totalNetWorth,
+        change24h: change24h
+      } as { total: number; change24h: number | null };
     }
-
-    // 并行加载代币和净资产数据
-    Promise.all([loadTokens(), loadNetWorth()]);
-    
-    return () => {
-      aborted = true;
-    };
-  }, [walletAddress, moralisChain]);
+  });
 
   // 格式化数字函数
   function formatNumber(value: number | string | null, fractionDigits = 2) {
@@ -219,22 +163,22 @@ export default function CelebrityDetailPage() {
 
         {/* 总资产 */}
         <NetWorthDisplay
-          total={netWorthData.total}
-          change24h={netWorthData.change24h}
-          loading={netWorthData.loading}
+          total={netWorthQuery.data?.total || 0}
+          change24h={netWorthQuery.data?.change24h ?? null}
+          loading={netWorthQuery.isLoading}
         />
       </div>
 
       {/* 代币信息头部 */}
       <TokenListHeader
-        total={netWorthData.total}
-        loading={netWorthData.loading}
+        total={netWorthQuery.data?.total || 0}
+        loading={netWorthQuery.isLoading}
         onSearchClick={() => setIsSearchOpen(true)}
       />
 
       {/* 代币列表 */}
       <div className="flex-1 overflow-y-auto bg-white">
-        {loading && (
+        {tokensQuery.isLoading && (
           <div className="p-4">
             <div className="space-y-3 animate-pulse">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -261,15 +205,15 @@ export default function CelebrityDetailPage() {
             </div>
           </div>
         )}
-        {tokensData.map((token, index) => (
+        {(tokensQuery.data || []).map((token, index) => (
           <TokenListItem
             key={`main-${token.tokenAddress || token.symbol}-${index}`}
             token={token}
-            isLast={index === tokensData.length - 1}
+            isLast={index === (tokensQuery.data || []).length - 1}
             onClick={() => router.push(`/token/${token.symbol}`)}
           />
         ))}
-        {(!loading && tokensData.length === 0) && (
+        {(!tokensQuery.isLoading && (tokensQuery.data || []).length === 0) && (
           <div className="h-full flex items-center justify-center py-12">
             <div className="text-gray-500 text-sm">暂无数据</div>
           </div>

@@ -123,7 +123,7 @@ export function TransactionItem({
           </div>
 
           {/* 右侧方向图标：转入=向上，转出=向下 */}
-          <div className="ml-3 flex-shrink-0 absolute right-2 top-2/4 -translate-y-2" >
+          <div className="ml-3 flex-shrink-0 absolute right-2 top-2/4 translate-y-1" >
             <img
               src={transaction.isPositive ? '/contacts/linkUp.jpg' : '/contacts/linkDown.jpg'}
               alt={transaction.isPositive ? '转入' : '转出'}
