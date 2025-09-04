@@ -114,7 +114,6 @@ export function convertContractDataToContact(contractData: CelebrityFromContract
     avatar: avatarUrl,
     type: 'celebrity',
     rank: rank,
-    bio: '观察', // 简化为统一的观察状态
     hasNotification: Math.random() > 0.5 // 随机通知状态
   };
 }

@@ -103,6 +103,8 @@ export default function ContactsPage() {
 
   // 查看交易记录
   const viewTransactions = (contact: Contact) => {
+  console.log(contact,"交易记录");
+  
     // 跳转到交易记录页面，使用ETH作为默认symbol
     router.push(`/token/ETH/transactions?contact=${encodeURIComponent(contact.name)}&address=${encodeURIComponent(contact.walletAddress)}`);
   };

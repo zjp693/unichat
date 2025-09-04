@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Contact, formatNetWorth } from '@/lib/contacts';
 import { AvatarWithSkeleton } from './AvatarWithSkeleton';
 import type { CelebrityFromContract } from '@/lib/contacts';
+import { setSelectedCelebrityDirect } from '@/hooks/useSelectedCelebrity';
 
 interface CelebrityListItemProps {
   contact: Contact;
@@ -21,18 +22,25 @@ export function CelebrityListItem({
   dataIndex
 }: CelebrityListItemProps) {
   // 获取合约原始数据以获取CID
-  const originalData = contractData && typeof dataIndex === 'number' ? contractData[dataIndex] : null;
-  
+  const originalData =
+    contractData && typeof dataIndex === 'number'
+      ? contractData[dataIndex]
+      : null;
+
   // 构建头像URL：使用IPFS CID
-  const avatarUrl = originalData?.cid 
+  const avatarUrl = originalData?.cid
     ? `https://aqua-biological-spider-837.mypinata.cloud/ipfs/${originalData.cid}`
     : contact.avatar; // 如果没有CID，使用默认头像
-  
+
   // 构建带参数的跳转URL - 添加钱包地址参数
   const detailUrl = `/celebrity/${contact.id}?name=${encodeURIComponent(contact.name)}&avatar=${encodeURIComponent(avatarUrl)}&address=${encodeURIComponent(contact.walletAddress)}`;
-  
+
+  const handleClick = () => {
+    setSelectedCelebrityDirect(contact);
+  };
+
   return (
-    <Link href={detailUrl}>
+    <Link href={detailUrl} onClick={handleClick}>
       <div
         className={`flex items-center px-4 py-3 cursor-pointer hover:bg-gray-50 ${!isLast ? 'border-b border-gray-100' : ''}`}
       >
@@ -45,11 +53,7 @@ export function CelebrityListItem({
           />
           {/* 认证徽章 */}
           <div className="absolute -bottom-1 -right-1">
-            <img
-              src="/contacts/badge.png"
-              alt="认证徽章"
-              className="w-4 h-4"
-            />
+            <img src="/contacts/badge.png" alt="认证徽章" className="w-4 h-4" />
           </div>
         </div>
 
@@ -63,10 +67,11 @@ export function CelebrityListItem({
 
             {/* 净资产 */}
             {contact.netWorth && (
-              <div 
+              <div
                 className="text-sm font-medium text-[#909399] px-2 py-1"
                 style={{
-                  background: 'linear-gradient(270deg, #FFEFD6 0%, #FFFFFF 100%)',
+                  background:
+                    'linear-gradient(270deg, #FFEFD6 0%, #FFFFFF 100%)',
                   borderRadius: '4px 0px 4px 4px'
                 }}
               >

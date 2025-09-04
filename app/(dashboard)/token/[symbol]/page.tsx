@@ -5,7 +5,8 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { TransactionItem } from './components/TransactionItem';
 import { TokenDetailSkeleton } from './components/TokenDetailSkeleton';
-import { formatNumber, toDateYMD, toDateTime } from './lib/token-utils';
+import { formatNumber, toDateYMD, toDateTime, fetchErc20Transfers } from './lib/token-utils';
+import { useSelectedCelebrity } from '@/hooks/useSelectedCelebrity';
 
 interface TransferItemRaw {
   transaction_hash?: string;
@@ -42,13 +43,18 @@ export default function TokenDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const symbol = (params.symbol as string).toUpperCase();
+  const chain = (searchParams.get('chain') || 'arbitrum').toLowerCase();
+  const { selected, hydrated } = useSelectedCelebrity();
 
   const walletAddress = useMemo(() => {
-    const a = searchParams?.get('address');
-    if (a && a.startsWith('0x')) return a;
-    // 默认示例地址（可替换）
-    return '0x1f9090aaE28b8a3dCeaDf281B0F12828e676c326';
-  }, [searchParams]);
+    // 首选：本地存储 Hook 中的地址
+    const fromHook = (selected as any)?.walletAddress;
+    return fromHook
+  }, [selected, searchParams]);
+
+  const hasAddress = useMemo(() => {
+    return typeof walletAddress === 'string' && walletAddress.startsWith('0x');
+  }, [walletAddress]);
 
   const [items, setItems] = useState<TransactionItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -58,22 +64,18 @@ export default function TokenDetailPage() {
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  async function fetchPage(nextCursor?: string | null, chain: string = 'eth') {
-    const url = new URL(`/api/moralis/transfers`, window.location.origin);
-    url.searchParams.set('address', walletAddress);
-    url.searchParams.set('chain', chain);
-    if (nextCursor) url.searchParams.set('cursor', nextCursor);
-    url.searchParams.set('limit', '100');
-
-    const res = await fetch(url.toString(), { cache: 'no-store' });
-    if (!res.ok) return { cursor: null as string | null, list: [] as TransferItemRaw[] };
-    const json = await res.json();
-    const list = Array.isArray(json?.result) ? (json.result as TransferItemRaw[]) : [];
-    const cur = json?.cursor ?? null;
-    return { cursor: cur, list };
+  async function fetchPage(nextCursor?: string | null, chainParam: string = chain) {
+    const { cursor, list } = await fetchErc20Transfers({
+      address: walletAddress,
+      chain: chainParam,
+      cursor: nextCursor,
+      limit: 100,
+      order: 'DESC'
+    });
+    return { cursor, list: list as TransferItemRaw[] };
   }
 
-  function mapToUI(raw: TransferItemRaw[], chain: string = 'eth'): TransactionItem[] {
+  function mapToUI(raw: TransferItemRaw[], chainParam: string = chain): TransactionItem[] {
     const out: TransactionItem[] = [];
     let lastDate = items.length > 0 ? items[items.length - 1].date : '';
     for (const r of raw) {
@@ -96,7 +98,7 @@ export default function TokenDetailPage() {
       if (showDate) lastDate = date;
 
       // 根据当前链设置网络信息和图标
-      const networkInfo = getNetworkInfo(chain);
+      const networkInfo = getNetworkInfo(chainParam);
       
       // 计算USD价值（这里使用简单的1:1比例，实际应该从API获取汇率）
       const usdValue = `$${formatNumber(amountAbs)}`;
@@ -144,11 +146,18 @@ export default function TokenDetailPage() {
     let aborted = false;
     (async () => {
       try {
+        if (hydrated && !hasAddress) {
+          console.warn('未找到钱包地址');
+          setItems([]);
+          setCursor(null);
+          setHasMore(false);
+          setInitialLoading(false);
+          return;
+        }
         setInitialLoading(true);
         let nextCursor: string | null = null;
         const initialPages = 2; // 初次加载页数
         let aggregated: TransactionItem[] = [];
-        const chain = 'arbitrum'; // 可以根据需要修改为不同的网络
         for (let i = 0; i < initialPages; i++) {
           const { cursor: c, list } = await fetchPage(nextCursor, chain);
           aggregated = aggregated.concat(mapToUI(list, chain));
@@ -165,7 +174,7 @@ export default function TokenDetailPage() {
     })();
     return () => { aborted = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddress, symbol]);
+  }, [walletAddress, symbol, chain, hasAddress]);
 
   // 触底加载更多
   useEffect(() => {
@@ -175,7 +184,6 @@ export default function TokenDetailPage() {
       const first = entries[0];
       if (first.isIntersecting && !loadingMore && hasMore && !initialLoading) {
         setLoadingMore(true);
-        const chain = 'arbitrum'; // 与初始加载保持一致
         fetchPage(cursor, chain).then(({ cursor: c, list }) => {
           const mapped = mapToUI(list, chain);
           setItems((prev) => prev.concat(mapped));
@@ -186,9 +194,17 @@ export default function TokenDetailPage() {
     }, { rootMargin: '200px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [cursor, hasMore, loadingMore, initialLoading]);
+  }, [cursor, hasMore, loadingMore, initialLoading, chain]);
 
   // 骨架屏
+  if (!hasAddress) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-gray-500">
+        未找到钱包地址
+      </div>
+    );
+  }
+
   if (initialLoading) {
     return <TokenDetailSkeleton />;
   }
@@ -212,7 +228,7 @@ export default function TokenDetailPage() {
           </div>
           <div className="text-sm">
             <div className="text-[#303133] font-medium">{symbol}</div>
-            <div className="text-xs text-gray-400">Arbitrum</div>
+            <div className="text-xs text-gray-400">{getNetworkInfo(chain).name}</div>
           </div>
         </div>
       </div>

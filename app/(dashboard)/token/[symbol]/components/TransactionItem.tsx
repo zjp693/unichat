@@ -42,7 +42,7 @@ export function TransactionItem({
 
       {/* 交易项 */}
       <div className="px-5 py-4 bg-white">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between relative">
           {/* 左侧金额信息 */}
           <div className="flex-1">
             <div className="flex items-center space-x-2 mb-1">
@@ -120,6 +120,15 @@ export function TransactionItem({
                 <div>{transaction.timestamp}</div>
               </div>
             )}
+          </div>
+
+          {/* 右侧方向图标：转入=向上，转出=向下 */}
+          <div className="ml-3 flex-shrink-0 absolute right-2 top-2/4 -translate-y-2" >
+            <img
+              src={transaction.isPositive ? '/contacts/linkUp.jpg' : '/contacts/linkDown.jpg'}
+              alt={transaction.isPositive ? '转入' : '转出'}
+              className="w-2 object-contain opacity-80"
+            />
           </div>
         </div>
       </div>

@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const address = searchParams.get('address');
-    const chain = searchParams.get('chain') || 'eth';
+    const chain = searchParams.get('chain') || 'arbitrum';
     const cursor = searchParams.get('cursor');
     const limit = searchParams.get('limit');
 
