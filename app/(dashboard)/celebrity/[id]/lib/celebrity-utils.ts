@@ -13,9 +13,8 @@ export function isValidEthereumAddress(input: string): boolean {
   return hexRegex.test(hexPart);
 }
 
-// 格式化数字
-// 从全局工具库导入
-export { formatNumber } from '@/lib/utils';
+// 格式化数字 - 本地导入以供本文件使用
+import { formatNumber } from '@/lib/utils';
 
 // DexScreener API搜索
 export async function searchDexScreener(query: string, dexScreenerChain: string): Promise<any[]> {
