@@ -35,7 +35,7 @@ export function BottomNav() {
           icon={
             pathname === '/contacts' ? (
               <Image
-                src="/bottom/contacts.png"
+                src="/bottom/contacts-active.png"
                 alt="contacts"
                 width={25}
                 height={25}

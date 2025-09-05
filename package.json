@@ -43,6 +43,7 @@
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dayjs": "^1.11.18",
     "keccak256": "^1.0.6",
     "lucide-react": "^0.400.0",
     "merkletreejs": "^0.5.2",
@@ -67,5 +68,8 @@
     "singleQuote": true,
     "tabWidth": 2,
     "trailingComma": "none"
+  },
+  "devDependencies": {
+    "@tanstack/react-query-devtools": "^5.85.9"
   }
 }

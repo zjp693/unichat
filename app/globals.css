@@ -91,3 +91,13 @@ input[type='search']::-moz-search-cancel-button {
 input[type='search']::-ms-clear {
   display: none;
 }
+
+/* 骨架屏动画 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
