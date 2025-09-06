@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const chain = searchParams.get('chain') || 'arbitrum';
     const cursor = searchParams.get('cursor');
     const limit = searchParams.get('limit');
+    const tokenAddress = searchParams.get('contract_addresses');
 
     if (!address) {
       return NextResponse.json({ error: '缺少必需的 address 参数' }, { status: 400 });
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     const query: string[] = [`chain=${encodeURIComponent(chain)}`];
     if (cursor) query.push(`cursor=${encodeURIComponent(cursor)}`);
     if (limit) query.push(`limit=${encodeURIComponent(limit)}`);
+    if (tokenAddress) query.push(`contract_addresses=${encodeURIComponent(tokenAddress)}`);
 
     // 兼容你提供的路径形式
     const url = `${MORALIS_BASE_URL}/${encodeURIComponent(address)}/erc20/transfers?${query.join('&')}`;

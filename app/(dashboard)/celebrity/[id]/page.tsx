@@ -72,24 +72,29 @@ export default function CelebrityDetailPage() {
     },
     select: (json: any) => {
       const list: MoralisTokenItem[] = Array.isArray(json?.result) ? json.result : [];
-      const mapped: TokenData[] = list.map((item) => {
-        const pct = item.usd_price_24hr_percent_change ?? 0;
-        const isPositive = pct >= 0;
-        const amountNum = Number(item.balance_formatted || 0);
-        const totalUsd = item.usd_value ?? 0;
-        const price = amountNum > 0 ? totalUsd / amountNum : 0;
-        return {
-          symbol: (item.symbol || 'UNKNOWN').toUpperCase(),
-          amount: item.balance_formatted ? String(item.balance_formatted) : '0',
-          value: formatNumber(item.usd_value ?? 0),
-          change: `${pct >= 0 ? '+' : ''}${formatNumber(Math.abs(pct), 2)}%`,
-          usdValue: `$${formatNumber(item.usd_value ?? 0)}`,
-          priceUsd: `$${formatNumber(price)}`,
-          isPositive,
-          tokenAddress: item.token_address,
-          thumbnail: item.thumbnail || null
-        };
-      });
+      const mapped: TokenData[] = list
+        .filter((item) => {
+          // 过滤掉地址为 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee 的代币
+          return item.token_address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+        })
+        .map((item) => {
+          const pct = item.usd_price_24hr_percent_change ?? 0;
+          const isPositive = pct >= 0;
+          const amountNum = Number(item.balance_formatted || 0);
+          const totalUsd = item.usd_value ?? 0;
+          const price = amountNum > 0 ? totalUsd / amountNum : 0;
+          return {
+            symbol: (item.symbol || 'UNKNOWN').toUpperCase(),
+            amount: item.balance_formatted ? String(item.balance_formatted) : '0',
+            value: formatNumber(item.usd_value ?? 0),
+            change: `${pct >= 0 ? '+' : ''}${formatNumber(Math.abs(pct), 2)}%`,
+            usdValue: `$${formatNumber(item.usd_value ?? 0)}`,
+            priceUsd: `$${formatNumber(price)}`,
+            isPositive,
+            tokenAddress: item.token_address,
+            thumbnail: item.thumbnail || null
+          };
+        });
       return mapped;
     }
   });
@@ -210,7 +215,10 @@ export default function CelebrityDetailPage() {
             key={`main-${token.tokenAddress || token.symbol}-${index}`}
             token={token}
             isLast={index === (tokensQuery.data || []).length - 1}
-            onClick={() => router.push(`/token/${token.symbol}`)}
+            onClick={() => {
+                // 传递完整的 token 信息
+                router.push(`/token/${token.symbol}?thumbnail=${encodeURIComponent(token.thumbnail || '')}&tokenAddress=${encodeURIComponent(token.tokenAddress || '')}&amount=${encodeURIComponent(token.amount || '')}&usdValue=${encodeURIComponent(token.usdValue || '')}`);
+            }}
           />
         ))}
         {(!tokensQuery.isLoading && (tokensQuery.data || []).length === 0) && (

@@ -1,7 +1,6 @@
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { CircleCheck  } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 
@@ -30,10 +29,13 @@ export default function TransactionDetailPage() {
   const [transaction, setTransaction] = useState<TransactionItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [tokenThumbnail, setTokenThumbnail] = useState<string | null>(null);
 
   useEffect(() => {
     // 从 URL 参数中获取传递的交易数据
     const transactionData = searchParams?.get('data');
+    const thumbnail = searchParams?.get('thumbnail');
+    
     if (transactionData) {
       try {
         const decodedData = JSON.parse(decodeURIComponent(transactionData));
@@ -47,6 +49,9 @@ export default function TransactionDetailPage() {
       // 如果没有传递数据，显示错误
       setError('未找到交易数据');
     }
+    
+    // 设置 token 图标
+    setTokenThumbnail(thumbnail);
     setLoading(false);
   }, [searchParams]);
 
@@ -271,13 +276,21 @@ export default function TransactionDetailPage() {
 
       {/* 中心图标与金额区域  */}
       <div className="px-6 pt-6 pb-4 flex flex-col items-center">
-        <div className="w-14 h-14 bg-[#26a37b] rounded flex items-center justify-center mb-4">
-          <span className="text-white text-2xl font-bold">T</span>
-        </div>
+        {tokenThumbnail ? (
+          <img 
+            src={tokenThumbnail} 
+            alt={symbol} 
+            className="w-14 h-14 rounded object-cover mb-4" 
+          />
+        ) : (
+          <div className="w-14 h-14 bg-gray-500 rounded flex items-center justify-center mb-4">
+            <span className="text-white text-2xl font-bold">{symbol?.charAt(0)}</span>
+          </div>
+        )}
         <div className="text-[34px]  font-semibold text-[#012332] mb-2">{transaction.amount}</div>
         <div className="text-sm text-gray-500">≈{transaction.usdValue}</div>
         <div className="mt-4 flex items-center  text-[#0B8A64] text-base font-semibold ">
-          <CircleCheck  className="h-5 w-5 mr-1 text-[#0B8A64]"/> 交易完成
+          <img src="/contacts/circleCheck.jpg" alt="交易完成" className="h-5 w-5 mr-1" /> 交易完成
         </div>
       </div>
 

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '缺少必需的 address 参数' }, { status: 400 });
     }
 
-    const url = `${MORALIS_BASE_URL}/wallets/${encodeURIComponent(address)}/tokens?chain=${encodeURIComponent(chain)}`;
+    const url = `${MORALIS_BASE_URL}/wallets/${encodeURIComponent(address)}/tokens?chain=${encodeURIComponent(chain)}&exclude_spam=true&exclude_unverified_contracts=true`;
 
     const moralisResponse = await fetch(url, {
       headers: {

@@ -61,16 +61,34 @@ export default function TokenDetailPage() {
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [tokenData, setTokenData] = useState<{thumbnail?: string | null; tokenAddress?: string; amount?: string; usdValue?: string} | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // 接收从上一个页面传递的 token 数据
+  useEffect(() => {
+    const thumbnail = searchParams?.get('thumbnail');
+    const tokenAddress = searchParams?.get('tokenAddress');
+    const amount = searchParams?.get('amount');
+    const usdValue = searchParams?.get('usdValue');
+    if (thumbnail || tokenAddress || amount || usdValue) {
+      setTokenData({ 
+        thumbnail: thumbnail || undefined, 
+        tokenAddress: tokenAddress || undefined,
+        amount: amount || undefined,
+        usdValue: usdValue || undefined
+      });
+    }
+  }, [searchParams]);
 
   async function fetchPage(nextCursor?: string | null, chainParam: string = chain) {
     const { cursor, list } = await fetchErc20Transfers({
       address: walletAddress,
       chain: chainParam,
       cursor: nextCursor,
-      limit: 100,
-      order: 'DESC'
+      limit: 20,
+      order: 'DESC',
+      tokenAddress: tokenData?.tokenAddress
     });
     return { cursor, list: list as TransferItemRaw[] };
   }
@@ -146,14 +164,18 @@ export default function TokenDetailPage() {
     let aborted = false;
     (async () => {
       try {
-        if (hydrated && !hasAddress) {
-          console.warn('未找到钱包地址');
-          setItems([]);
-          setCursor(null);
-          setHasMore(false);
+        // 确保所有必要数据都已准备好
+        if (!hydrated || !hasAddress || !tokenData) {
+          if (hydrated && !hasAddress) {
+            console.warn('未找到钱包地址');
+            setItems([]);
+            setCursor(null);
+            setHasMore(false);
+          }
           setInitialLoading(false);
           return;
         }
+        
         setInitialLoading(true);
         let nextCursor: string | null = null;
         const initialPages = 2; // 初次加载页数
@@ -174,11 +196,11 @@ export default function TokenDetailPage() {
     })();
     return () => { aborted = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddress, symbol, chain, hasAddress]);
+  }, [hydrated, hasAddress, tokenData, symbol, chain]);
 
   // 触底加载更多
   useEffect(() => {
-    if (!sentinelRef.current) return;
+    if (!sentinelRef.current || !hasAddress || !tokenData) return;
     const el = sentinelRef.current;
     const io = new IntersectionObserver((entries) => {
       const first = entries[0];
@@ -194,7 +216,7 @@ export default function TokenDetailPage() {
     }, { rootMargin: '200px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [cursor, hasMore, loadingMore, initialLoading, chain]);
+  }, [cursor, hasMore, loadingMore, initialLoading, chain, tokenData, hasAddress]);
 
   // 骨架屏
   if (!hasAddress) {
@@ -221,11 +243,19 @@ export default function TokenDetailPage() {
         >
           <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
         </Button>
-        {/* USDT 图标和名称 - 紧邻返回按钮 */}
+        {/* Token 图标和名称 - 紧邻返回按钮 */}
         <div className="flex items-center space-x-2 ml-3">
-          <div className="w-6 h-6 bg-[#26a37b] rounded flex items-center justify-center">
-            <span className="text-white text-xs font-bold">T</span>
-          </div>
+          {tokenData?.thumbnail ? (
+            <img 
+              src={tokenData.thumbnail} 
+              alt={symbol} 
+              className="w-6 h-6 rounded object-cover" 
+            />
+          ) : (
+            <div className="w-6 h-6 bg-gray-500 rounded flex items-center justify-center">
+              <span className="text-white text-xs font-bold">{symbol.charAt(0)}</span>
+            </div>
+          )}
           <div className="text-sm">
             <div className="text-[#303133] font-medium">{symbol}</div>
             <div className="text-xs text-gray-400">{getNetworkInfo(chain).name}</div>
@@ -235,8 +265,8 @@ export default function TokenDetailPage() {
 
       {/* 余额显示 */}
       <div className="px-6 py-8">
-        <div className="text-3xl font-semibold text-[#012332] mb-2">202,081,514</div>
-        <div className="text-sm text-gray-500">$202,081,514</div>
+        <div className="text-3xl font-semibold text-[#012332] mb-2">{tokenData?.amount || '0'}</div>
+        <div className="text-sm text-gray-500">{tokenData?.usdValue || '$0'}</div>
       </div>
 
       {/* 交易历史标题 */}
@@ -254,7 +284,8 @@ export default function TokenDetailPage() {
             onClick={() => {
               // 将完整的交易对象数据编码到 URL 参数中
               const transactionData = encodeURIComponent(JSON.stringify(transaction));
-              router.push(`/token/${symbol}/tx/${transaction.id}?data=${transactionData}`);
+              const thumbnailParam = tokenData?.thumbnail ? `&thumbnail=${encodeURIComponent(tokenData.thumbnail)}` : '';
+              router.push(`/token/${symbol}/tx/${transaction.id}?data=${transactionData}${thumbnailParam}`);
             }}
           />
         ))}
