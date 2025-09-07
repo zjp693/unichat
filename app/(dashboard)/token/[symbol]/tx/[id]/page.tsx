@@ -3,6 +3,7 @@
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
+import { useGasFee } from '@/hooks/use-gas-fee';
 
 interface TransactionItem {
   id: string;
@@ -30,6 +31,17 @@ export default function TransactionDetailPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [tokenThumbnail, setTokenThumbnail] = useState<string | null>(null);
+
+  // Gas费信息
+  const {
+    gasFeeText,
+    loading: gasLoading,
+    error: gasError
+  } = useGasFee({
+    transactionHash: transaction?.transactionHash || '',
+    network: transaction?.network || 'ethereum',
+    enabled: !!transaction?.transactionHash
+  });
 
   useEffect(() => {
     // 从 URL 参数中获取传递的交易数据
@@ -309,12 +321,20 @@ export default function TransactionDetailPage() {
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <div className="text-sm text-[#606266]">USD价值</div>
+          {/* <div className="text-sm text-[#606266]">USD价值</div> */}
           <div className="text-black text-xs">{transaction.usdValue}</div>
         </div>
         <div className="flex items-center justify-between">
           <div className="text-sm text-[#606266]">Gas费</div>
-          <div className="text-black text-xs">0.0000000106 ETH ≈ &lt;$0.01</div>
+          <div className="text-black text-xs">
+            {gasLoading ? (
+              <div className="animate-pulse bg-gray-200 rounded w-32 h-4"></div>
+            ) : gasError ? (
+              <span className="text-red-500">获取失败</span>
+            ) : (
+              `${gasFeeText} ≈＜${transaction.usdValue}` || '暂无数据'
+            )}
+          </div>
         </div>
       </div>
 
