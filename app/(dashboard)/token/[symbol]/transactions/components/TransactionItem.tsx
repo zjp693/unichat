@@ -1,5 +1,5 @@
 'use client';
-
+import { Check } from 'lucide-react';
 interface TransactionRecord {
   id: string;
   contactName: string;
@@ -21,68 +21,70 @@ interface TransactionItemProps {
   isLast: boolean;
   onCopyAddress: (address: string) => void;
   formatAddress: (address: string) => string;
+  onClick?: () => void;
 }
 
 export function TransactionItem({
   transaction,
   isLast,
   onCopyAddress,
-  formatAddress
+  formatAddress,
+  onClick
 }: TransactionItemProps) {
   return (
-    <div className={`px-4 py-3 ${!isLast ? 'border-b border-gray-100' : ''}`}>
-      <div className="flex items-start">
-        <div className="text-sm text-gray-600 mr-4 min-w-[80px] mt-1">
-          转账给 {transaction.contactName}
-          {transaction.isPositive && (
-            <div className="inline-block ml-2 w-3 h-3 bg-green-500 rounded-full relative">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              </div>
-            </div>
-          )}
+    <div className={`relative py-3 ${!isLast ? 'border-b border-[#DCDFE6]' : ''}`} onClick={onClick}>
+      <div className="flex items-start justify-between">
+        {/* 左侧：交易描述和勾选图标 */}
+        <div className="flex items-center">
+          <div className="text-base font-medium text-[#303133] mr-2">
+            转账给 {transaction.contactName}
+          </div>
+          <Check className="h-4 w-4 text-[#2AC496]" />
         </div>
         
-        <div className="flex-1">
-          {/* 第一行：From地址和金额 */}
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-sm text-gray-600">
-              From <span className="font-mono text-xs">{formatAddress(transaction.fromAddress)}</span>
-              <button
-                onClick={() => onCopyAddress(transaction.fromAddress)}
-                className="ml-1 hover:bg-gray-100 rounded p-0.5 transition-colors"
-              >
-                <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
-              </button>
-            </div>
-            <div className={`text-lg font-semibold ${
-              transaction.isPositive ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {transaction.amount}
-            </div>
-          </div>
-          
-          {/* 第二行：To地址和USD价值 */}
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              To <span className="font-mono text-xs">{formatAddress(transaction.toAddress)}</span>
-              <button
-                onClick={() => onCopyAddress(transaction.toAddress)}
-                className="ml-1 hover:bg-gray-100 rounded p-0.5 transition-colors"
-              >
-                <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="text-sm text-gray-500">{transaction.usdValue}</div>
-          </div>
-          
-          {/* 第三行：时间戳 */}
-          <div className="flex items-center justify-between mt-1">
-            <div className="text-xs text-gray-500">{transaction.timestamp}</div>
-          </div>
+        {/* 右侧：金额 */}
+        <div className={`text-base font-medium text-[#303133]`}>
+          {transaction.amount}
         </div>
+      </div>
+      {/* 右侧方向图标：转入=向上，转出=向下 */}
+      <div className="ml-3 flex-shrink-0 absolute right-2 top-1/2 -translate-y-1/2">
+        <img
+          src={transaction.isPositive ? '/contacts/linkUp.jpg' : '/contacts/linkDown.jpg'}
+          alt={transaction.isPositive ? '转入' : '转出'}
+          className="w-2 object-contain opacity-80"
+        />
+      </div>
+      
+      {/* 地址信息 */}
+      <div className="mt-3 space-y-2">
+        <div className="flex items-center text-sm text-[#666666]">
+          <span className="mr-2 w-8">From</span>
+          <span className="font-mono text-xs text-[#999999]">{transaction.fromAddress}</span>
+          <button
+            onClick={() => onCopyAddress(transaction.fromAddress)}
+            className="ml-2 hover:bg-gray-100 rounded p-0.5 transition-colors"
+          >
+            <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
+          </button>
+        </div>
+        
+        <div className="flex items-center text-sm text-[#666666]">
+          <span className="mr-2 w-8">To</span>
+          <span className="font-mono text-xs text-[#999999]">{transaction.toAddress}</span>
+          <button
+            onClick={() => onCopyAddress(transaction.toAddress)}
+            className="ml-2 hover:bg-gray-100 rounded p-0.5 transition-colors"
+          >
+            <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+      
+      {/* 底部：时间和USD价值 */}
+      <div className="flex items-center justify-between mt-3">
+        <div className="text-xs text-[#999999]">{transaction.timestamp}</div>
+        <div className="text-xs text-[#999999]">{transaction.usdValue}</div>
       </div>
     </div>
   );

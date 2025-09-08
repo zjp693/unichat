@@ -12,8 +12,9 @@ export async function fetchErc20Transfers(params: {
   cursor?: string | null;
   limit?: number;
   order?: 'ASC' | 'DESC';
+  tokenAddress?: string;
 }): Promise<FetchTransfersResult> {
-  const { address, chain, cursor, limit = 100, order = 'DESC' } = params;
+  const { address, chain, cursor, limit = 100, order = 'DESC', tokenAddress } = params;
   const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
   const url = new URL(`/api/moralis/transfers`, base);
   url.searchParams.set('address', address);
@@ -21,6 +22,7 @@ export async function fetchErc20Transfers(params: {
   if (cursor) url.searchParams.set('cursor', cursor);
   if (limit) url.searchParams.set('limit', String(limit));
   if (order) url.searchParams.set('order', order);
+  if (tokenAddress) url.searchParams.set('contract_addresses', tokenAddress);
 
   const res = await fetch(url.toString(), { cache: 'no-store' });
   if (!res.ok) return { cursor: null, list: [] };

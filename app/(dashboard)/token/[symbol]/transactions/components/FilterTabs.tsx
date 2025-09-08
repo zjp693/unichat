@@ -9,34 +9,34 @@ export function FilterTabs({ activeTab, onTabChange }: FilterTabsProps) {
   return (
     <div className="mx-4 mt-4 mb-3">
       <div className="flex items-center justify-between">
-        <span className="text-gray-900 font-medium text-sm">最近交易记录</span>
-        <div className="flex items-center space-x-2">
+        <span className="text-[#303133] font-medium text-base">最近交易记录</span>
+        <div className="flex items-center space-x-2 rounded-lg bg-white">
           <button
             onClick={() => onTabChange('all')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            className={`px-2 py-1 rounded text-sm font-medium transition-colors ${
               activeTab === 'all'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-[#e8e7fc] text-[#722ED1]'
+                : 'text-[#666666]'
             }`}
-          >
+          > 
             全部
           </button>
           <button
             onClick={() => onTabChange('income')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            className={`px-2 py-1 rounded text-sm font-medium transition-colors ${
               activeTab === 'income'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-[#F0F0FF] text-[#722ED1]'
+                : ' text-[#666666]'
             }`}
           >
             收入
           </button>
           <button
             onClick={() => onTabChange('expense')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            className={`px-2 py-1 rounded text-sm font-medium transition-colors ${
               activeTab === 'expense'
-                ? 'bg-red-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-[#F0F0FF] text-[#722ED1]'
+                : ' text-[#666666] hover:bg-[#E8E8E8]'
             }`}
           >
             支出
