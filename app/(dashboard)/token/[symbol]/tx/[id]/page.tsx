@@ -124,7 +124,7 @@ export default function TransactionDetailPage() {
         <div className="h-[10px] bg-gray-100" />
 
         {/* 明细部分骨架屏 - 完全匹配实际布局 */}
-        <div className="px-6 py-3 space-y-4">
+        <div className="px-3 py-3 space-y-4">
           {/* InfoRow 时间行骨架 - 匹配 InfoRow 组件结构 */}
           <div className="flex items-start justify-between">
             <div className="text-sm mr-4 whitespace-nowrap">
@@ -309,20 +309,20 @@ export default function TransactionDetailPage() {
       <div className="h-[10px] bg-gray-100" />
 
       {/* 明细 */}
-      <div className="px-6 py-3 space-y-4">
+      <div className="px-3 py-3 space-y-4">
         <InfoRow label="时间" value={transaction.timestamp} />
         <InfoRow label="转出地址" value={transaction.fromAddress} canCopy onCopy={() => copy(transaction.fromAddress)} />
         <InfoRow label="交易ID" value={transaction.transactionHash} canCopy onCopy={() => copy(transaction.transactionHash)} />
         <div className="flex items-center justify-between">
           <div className="text-sm text-[#606266]">网络</div>
           <div className="text-xs flex items-center text-black">
-            <img src={transaction.networkIcon} alt={transaction.network} className="w-4 h-4 mr-1" />
+            <img src={transaction.networkIcon} alt={transaction.network} className="w-3.5 h-3.5" />
            <div>{transaction.network}</div>
           </div>
         </div>
         <div className="flex items-center justify-between">
           {/* <div className="text-sm text-[#606266]">USD价值</div> */}
-          <div className="text-black text-xs">{transaction.usdValue}</div>
+          {/* <div className="text-black text-xs">{transaction.usdValue}</div> */}
         </div>
         <div className="flex items-center justify-between">
           <div className="text-sm text-[#606266]">Gas费</div>
@@ -342,7 +342,7 @@ export default function TransactionDetailPage() {
 
       {/* 区块链浏览器链接 */}
       <div 
-        className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50"
+        className="px-3 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50"
         onClick={openBlockchainExplorer}
       >
         <div className="text-sm text-[#606266]">区块链浏览器</div>
@@ -357,7 +357,7 @@ export default function TransactionDetailPage() {
 function InfoRow({ label, value, canCopy, onCopy }: { label: string; value: string; canCopy?: boolean; onCopy?: () => void }) {
   return (
     <div className="flex items-start justify-between">
-      <div className="text-[#606266] text-sm mr-4 whitespace-nowrap">{label}</div>
+      <div className="text-[#606266] text-sm mr-3 whitespace-nowrap">{label}</div>
       <div className="flex-1 text-right text-black break-all">
         <span className="align-middle text-xs">{value}</span>
         {canCopy && (

@@ -42,7 +42,7 @@ export default function TransactionsPage() {
     router.push(`/token/${symbol}/tx/${tx.id}?data=${data}`);
   };
   
-  // 从URL参数获取联系人信息（写死为图片数据）
+  // 从URL参数获取联系人信息
   const contactName = 'James';
   const contactAddress = '0x052cc4e91eaDC9a40BD66F4b6f63BE4f9c0559ab';
   
@@ -138,7 +138,7 @@ export default function TransactionsPage() {
         <FilterTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* 交易记录列表 */}
-        <div className="mx-4 rounded-lg overflow-hidden mb-4">
+        <div className="mx-3 rounded-lg overflow-hidden mb-4">
           {filteredTransactions.length === 0 ? (
             <div className="text-center py-8 text-[#999999]">
               <div className="text-2xl mb-2">📭</div>
