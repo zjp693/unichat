@@ -333,7 +333,7 @@ export default function TransactionDetailPage() {
         <div className="flex items-center justify-between">
           <div className="text-sm text-[#606266]">网络</div>
           <div className="text-xs flex items-center text-black">
-            <img src={transaction.networkIcon} alt={transaction.network} className="w-4 h-4 mr-1" />
+            <img src={transaction.networkIcon} alt={transaction.network} className="w-3.5 h-3.5" />
            <div>{transaction.network}</div>
           </div>
         </div>
@@ -359,7 +359,7 @@ export default function TransactionDetailPage() {
 
       {/* 区块链浏览器链接 */}
       <div 
-        className="px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50"
+        className="px-3 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50"
         onClick={openBlockchainExplorer}
       >
         <div className="text-sm text-[#606266]">区块链浏览器</div>

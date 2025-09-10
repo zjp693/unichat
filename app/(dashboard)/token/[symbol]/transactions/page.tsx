@@ -42,7 +42,7 @@ export default function TransactionsPage() {
     router.push(`/token/${symbol}/tx/${tx.id}?data=${data}`);
   };
   
-  // 从URL参数获取联系人信息（写死为图片数据）
+  // 从URL参数获取联系人信息
   const contactName = 'James';
   const contactAddress = '0x052cc4e91eaDC9a40BD66F4b6f63BE4f9c0559ab';
   

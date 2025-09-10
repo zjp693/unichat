@@ -16,7 +16,7 @@ export function TransactionsSkeleton() {
   
   return (
     <div className="flex flex-col h-full bg-[#F2F4F9]">
-      {/* 顶部导航栏（与实页面一致，无边框、白色背景去除） */}
+      {/* 顶部导航栏 */}
       <div className="flex items-center justify-between px-4 py-4">
         <Button
           variant="ghost"

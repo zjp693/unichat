@@ -131,7 +131,7 @@ export function TransactionItem({
           {/* 右侧方向图标：转入=向上，转出=向下，位置在两个地址的中间 */}
           <div className="flex-shrink-0 flex items-center justify-center translate-y-4">
             <img
-              src={transaction.isPositive ? '/contacts/linkUp.jpg' : '/contacts/linkDown.jpg'}
+              src={transaction.isPositive ? '/contacts/linkUp.png' : '/contacts/linkDown.png'}
               alt={transaction.isPositive ? '转入' : '转出'}
               className="w-2 object-contain opacity-80"
             />
