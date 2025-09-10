@@ -1,3 +1,11 @@
+/*
+ * @Author: zhangjianping 942680978@qq.com
+ * @Date: 2025-09-04 10:09:26
+ * @LastEditors: zhangjianping 942680978@qq.com
+ * @LastEditTime: 2025-09-10 14:21:04
+ * @FilePath: \unichat\app\(dashboard)\token\[symbol]\transactions\components\TransactionsSkeleton.tsx
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 'use client';
 
 import { Button } from '@/components/ui/button';
@@ -8,7 +16,7 @@ export function TransactionsSkeleton() {
   
   return (
     <div className="flex flex-col h-full bg-[#F2F4F9]">
-      {/* 顶部导航栏（与实页面一致，无边框、白色背景去除） */}
+      {/* 顶部导航栏 */}
       <div className="flex items-center justify-between px-4 py-4">
         <Button
           variant="ghost"
@@ -25,7 +33,7 @@ export function TransactionsSkeleton() {
       {/* 加载骨架屏（结构与实渲染一致） */}
       <div className="flex-1 bg-[#F2F4F9]">
         {/* 联系人信息骨架屏 */}
-        <div className="bg-white mx-4 mt-4 rounded-lg p-6">
+        <div className="bg-white mx-3 mt-4 rounded-lg p-6">
           <div className="flex flex-col items-center">
             <div className="w-20 h-20 bg-gray-200 rounded-full animate-pulse mb-4" />
             <div className="h-5 bg-gray-200 rounded w-24 animate-pulse mb-4" />

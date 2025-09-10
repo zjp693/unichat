@@ -7,7 +7,7 @@ interface FilterTabsProps {
 
 export function FilterTabs({ activeTab, onTabChange }: FilterTabsProps) {
   return (
-    <div className="mx-4 mt-4 mb-3">
+    <div className="mx-3 mt-4 mb-3">
       <div className="flex items-center justify-between">
         <span className="text-[#303133] font-medium text-base">最近交易记录</span>
         <div className="flex items-center space-x-2 rounded-lg bg-white">

@@ -22,18 +22,20 @@ interface TransactionItemProps {
   transaction: TransactionItem;
   showDate: boolean;
   onClick?: () => void;
+  onCopy?: (text: string) => void;
 }
 
 export function TransactionItem({
   transaction,
   showDate,
-  onClick
+  onClick,
+  onCopy
 }: TransactionItemProps) {
   return (
     <div onClick={onClick} className={onClick ? 'cursor-pointer' : undefined}>
       {/* 日期分组头 */}
       {showDate && (
-        <div className="px-5 py-3 bg-white border-b border-gray-100">
+        <div className="mx-3 sm:mx-4 pt-2 bg-white">
           <div className="text-sm font-medium text-black">
             {transaction.date}
           </div>
@@ -41,8 +43,8 @@ export function TransactionItem({
       )}
 
       {/* 交易项 */}
-      <div className="px-5 py-4 bg-white">
-        <div className="flex items-center justify-between relative">
+        <div className="mx-3 sm:mx-4 py-3 bg-white border-b border-gray-100">
+        <div className="flex items-center justify-between">
           {/* 左侧金额信息 */}
           <div className="flex-1">
             <div className="flex items-center space-x-2 mb-1">
@@ -66,9 +68,10 @@ export function TransactionItem({
               <div className="mt-2 text-xs text-gray-400 space-y-1.5">
                 {transaction.isPositive ? (
                   <>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">To</span>{' '}
-                      <span
+                    <div className="flex justify-between items-center">
+                      <div className="text-[#606266] w-10 text-sm">To</div>{' '}
+                  <div className="flex items-center">
+                  <span
                         className={`text-xs ${
                           transaction.isPositive ? 'text-[#0B8A64]' : 'text-[#303133]'
                         }`}
@@ -79,40 +82,43 @@ export function TransactionItem({
                         src="/contacts/copy.svg"
                         alt="Copy address"
                         className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.toAddress); }}
+                        onClick={(e) => { e.stopPropagation(); onCopy?.(transaction.toAddress); }}
                       />
+                  </div>
                     </div>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">From</span>{' '}
+                    <div className="flex justify-between items-center">
+                      <div  className="text-[#606266] w-10 text-sm">From</div>{' '}
+                      <div className="flex items-center">
                       <span className="text-xs">{transaction.fromAddress}</span>
                       <img
                         src="/contacts/copy.svg"
                         alt="Copy address"
                         className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.fromAddress); }}
+                        onClick={(e) => { e.stopPropagation(); onCopy?.(transaction.fromAddress); }}
                       />
+                      </div>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">From</span>{' '}
+                    <div className="flex justify-between items-center">
+                      <div className="text-[#606266] w-10 text-sm">From</div>{' '}
                       <span className="text-xs">{transaction.fromAddress}</span>
                       <img
                         src="/contacts/copy.svg"
                         alt="Copy address"
                         className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.fromAddress); }}
+                        onClick={(e) => { e.stopPropagation(); onCopy?.(transaction.fromAddress); }}
                       />
                     </div>
-                    <div className="">
-                      <span className="text-[#606266] text-sm">To</span>{' '}
+                    <div className="flex justify-between items-center">
+                      <div className="text-[#606266] w-10 text-sm">To</div>{' '}
                       <span className="text-xs text-[#303133]">{transaction.toAddress}</span>
                       <img
                         src="/contacts/copy.svg"
                         alt="Copy address"
                         className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(transaction.toAddress); }}
+                        onClick={(e) => { e.stopPropagation(); onCopy?.(transaction.toAddress); }}
                       />
                     </div>
                   </>
@@ -122,10 +128,10 @@ export function TransactionItem({
             )}
           </div>
 
-          {/* 右侧方向图标：转入=向上，转出=向下 */}
-          <div className="ml-3 flex-shrink-0 absolute right-2 top-2/4 translate-y-1" >
+          {/* 右侧方向图标：转入=向上，转出=向下，位置在两个地址的中间 */}
+          <div className="flex-shrink-0 flex items-center justify-center translate-y-4">
             <img
-              src={transaction.isPositive ? '/contacts/linkUp.jpg' : '/contacts/linkDown.jpg'}
+              src={transaction.isPositive ? '/contacts/linkUp.png' : '/contacts/linkDown.png'}
               alt={transaction.isPositive ? '转入' : '转出'}
               className="w-2 object-contain opacity-80"
             />

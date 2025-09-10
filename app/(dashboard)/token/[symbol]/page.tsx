@@ -7,6 +7,7 @@ import { TransactionItem } from './components/TransactionItem';
 import { TokenDetailSkeleton } from './components/TokenDetailSkeleton';
 import { formatNumber, toDateYMD, toDateTime, fetchErc20Transfers } from './lib/token-utils';
 import { useSelectedCelebrity } from '@/hooks/useSelectedCelebrity';
+import { useToast } from '@/hooks/use-toast';
 
 interface TransferItemRaw {
   transaction_hash?: string;
@@ -45,6 +46,7 @@ export default function TokenDetailPage() {
   const symbol = (params.symbol as string).toUpperCase();
   const chain = (searchParams.get('chain') || 'arbitrum').toLowerCase();
   const { selected, hydrated } = useSelectedCelebrity();
+  const { toast } = useToast();
 
   const walletAddress = useMemo(() => {
     // 首选：本地存储 Hook 中的地址
@@ -64,6 +66,24 @@ export default function TokenDetailPage() {
   const [tokenData, setTokenData] = useState<{thumbnail?: string | null; tokenAddress?: string; amount?: string; usdValue?: string} | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // 复制函数
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "复制成功",
+        description: "内容已复制到剪贴板",
+        variant: "success"
+      });
+    } catch (err) {
+      toast({
+        title: "复制失败",
+        description: "无法复制内容，请手动复制",
+        variant: "destructive"
+      });
+    }
+  };
 
   // 接收从上一个页面传递的 token 数据
   useEffect(() => {
@@ -264,13 +284,13 @@ export default function TokenDetailPage() {
       </div>
 
       {/* 余额显示 */}
-      <div className="px-6 py-8">
+      <div className="px-4 sm:mx-6 sm:py-6 py-8">
         <div className="text-3xl font-semibold text-[#012332] mb-2">{tokenData?.amount || '0'}</div>
         <div className="text-sm text-gray-500">{tokenData?.usdValue || '$0'}</div>
       </div>
 
       {/* 交易历史标题 */}
-      <div className="px-6 py-1 bg-gray-100">
+      <div className="px-3 sm:px-4 py-1 bg-gray-100">
         <h3 className="text-base font-semibold text-black">交易历史</h3>
       </div>
 
@@ -281,6 +301,7 @@ export default function TokenDetailPage() {
             key={transaction.id}
             transaction={transaction}
             showDate={transaction.date !== ''}
+            onCopy={copy}
             onClick={() => {
               // 将完整的交易对象数据编码到 URL 参数中
               const transactionData = encodeURIComponent(JSON.stringify(transaction));
