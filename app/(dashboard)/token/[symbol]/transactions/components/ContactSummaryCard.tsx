@@ -1,11 +1,3 @@
-/*
- * @Author: zhangjianping 942680978@qq.com
- * @Date: 2025-09-04 10:09:26
- * @LastEditors: zhangjianping 942680978@qq.com
- * @LastEditTime: 2025-09-10 14:20:46
- * @FilePath: \unichat\app\(dashboard)\token\[symbol]\transactions\components\ContactSummaryCard.tsx
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 'use client';
 
 interface ContactSummary {
@@ -54,9 +46,9 @@ export function ContactSummaryCard({
           <span className="font-mono text-xs">{contactSummary.walletAddress}</span>
           <button
             onClick={() => onCopyAddress(contactSummary.walletAddress)}
-            className="ml-2 hover:bg-gray-100 rounded p-1 transition-colors"
+            className=" hover:bg-gray-100 rounded p-1 transition-colors"
           >
-            <img src="/contacts/copy.svg" alt="复制" className="w-4 h-4" />
+            <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3 object-contain" />
           </button>
         </div>
       </div>
