@@ -43,7 +43,7 @@ export function calculateGasFee(gasUsed: string, effectiveGasPrice: string): Gas
 
     return {
       gasFeeWei: gasFeeWei.toString(),
-      gasFeeEth: weiToEth(gasFeeWei),
+      gasFeeEth: weiToEth(gasFeeWei.toString()),
       gasUsed: gasUsed,
       effectiveGasPrice: effectiveGasPrice
     };
