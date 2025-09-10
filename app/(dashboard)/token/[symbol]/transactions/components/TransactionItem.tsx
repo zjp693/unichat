@@ -61,7 +61,7 @@ export function TransactionItem({
         <div className="flex items-center justify-between md:hidden">
           <div className="flex-1 min-w-0">
             <div className="flex items-center text-sm text-[#666666]">
-              <span className="mr-2 w-8 text-sm">From</span>
+              <span className="w-10 text-sm">From</span>
               <span className="font-mono text-xs text-[#999999] truncate mr-1">{transaction.fromAddress}</span>
               <button
                 onClick={() => onCopyAddress(transaction.fromAddress)}
@@ -72,7 +72,7 @@ export function TransactionItem({
             </div>
 
             <div className="flex items-center text-sm text-[#666666]">
-              <span className="mr-2 w-8 text-sm">To</span>
+              <span className="w-10 text-sm">To</span>
               <span className="font-mono text-xs text-[#999999] truncate mr-1">{transaction.toAddress}</span>
               <button
                 onClick={() => onCopyAddress(transaction.toAddress)}
