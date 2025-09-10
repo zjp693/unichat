@@ -4,6 +4,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 import { useGasFee } from '@/hooks/use-gas-fee';
+import { useToast } from '@/hooks/use-toast';
 
 interface TransactionItem {
   id: string;
@@ -26,6 +27,7 @@ export default function TransactionDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { symbol, id } = params as { symbol: string; id: string };
+  const { toast } = useToast();
   
   const [transaction, setTransaction] = useState<TransactionItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,7 +69,22 @@ export default function TransactionDetailPage() {
     setLoading(false);
   }, [searchParams]);
 
-  const copy = (text: string) => navigator.clipboard.writeText(text);
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "复制成功",
+        description: "内容已复制到剪贴板",
+        variant: "success"
+      });
+    } catch (err) {
+      toast({
+        title: "复制失败",
+        description: "无法复制内容，请手动复制",
+        variant: "destructive"
+      });
+    }
+  };
 
   // 获取区块链浏览器URL
   const getBlockchainExplorerUrl = (transactionHash: string, network: string) => {
@@ -124,7 +141,7 @@ export default function TransactionDetailPage() {
         <div className="h-[10px] bg-gray-100" />
 
         {/* 明细部分骨架屏 - 完全匹配实际布局 */}
-        <div className="px-6 py-3 space-y-4">
+        <div className="px-3 py-2 space-y-4">
           {/* InfoRow 时间行骨架 - 匹配 InfoRow 组件结构 */}
           <div className="flex items-start justify-between">
             <div className="text-sm mr-4 whitespace-nowrap">
@@ -309,7 +326,7 @@ export default function TransactionDetailPage() {
       <div className="h-[10px] bg-gray-100" />
 
       {/* 明细 */}
-      <div className="px-6 py-3 space-y-4">
+      <div className="px-3 py-2 space-y-2">
         <InfoRow label="时间" value={transaction.timestamp} />
         <InfoRow label="转出地址" value={transaction.fromAddress} canCopy onCopy={() => copy(transaction.fromAddress)} />
         <InfoRow label="交易ID" value={transaction.transactionHash} canCopy onCopy={() => copy(transaction.transactionHash)} />
@@ -322,7 +339,7 @@ export default function TransactionDetailPage() {
         </div>
         <div className="flex items-center justify-between">
           {/* <div className="text-sm text-[#606266]">USD价值</div> */}
-          <div className="text-black text-xs">{transaction.usdValue}</div>
+          {/* <div className="text-black text-xs">{transaction.usdValue}</div> */}
         </div>
         <div className="flex items-center justify-between">
           <div className="text-sm text-[#606266]">Gas费</div>
@@ -357,14 +374,14 @@ export default function TransactionDetailPage() {
 function InfoRow({ label, value, canCopy, onCopy }: { label: string; value: string; canCopy?: boolean; onCopy?: () => void }) {
   return (
     <div className="flex items-start justify-between">
-      <div className="text-[#606266] text-sm mr-4 whitespace-nowrap">{label}</div>
+      <div className="text-[#606266] text-sm mr-1 whitespace-nowrap">{label}</div>
       <div className="flex-1 text-right text-black break-all">
         <span className="align-middle text-xs">{value}</span>
         {canCopy && (
           <img
             src="/contacts/copy.svg"
             alt="Copy"
-            className="inline-block w-4 h-4 ml-2 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
+            className="inline-block w-3.5 h-3.5 ml-1 cursor-pointer opacity-70 hover:opacity-100 align-[-2px]"
             onClick={onCopy}
           />
         )}

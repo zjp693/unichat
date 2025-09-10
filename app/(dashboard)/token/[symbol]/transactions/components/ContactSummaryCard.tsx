@@ -1,3 +1,11 @@
+/*
+ * @Author: zhangjianping 942680978@qq.com
+ * @Date: 2025-09-04 10:09:26
+ * @LastEditors: zhangjianping 942680978@qq.com
+ * @LastEditTime: 2025-09-10 14:20:46
+ * @FilePath: \unichat\app\(dashboard)\token\[symbol]\transactions\components\ContactSummaryCard.tsx
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 'use client';
 
 interface ContactSummary {
@@ -20,7 +28,7 @@ export function ContactSummaryCard({
   formatAddress
 }: ContactSummaryCardProps) {
   return (
-    <div className="bg-white mx-4 mt-4 rounded-lg p-6">
+    <div className="bg-white mx-3 mt-4 rounded-lg p-6">
       <div className="flex flex-col items-center">
         <div className="w-20 h-20 rounded-full overflow-hidden mb-4">
           <img 

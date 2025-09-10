@@ -138,7 +138,7 @@ export default function TransactionsPage() {
         <FilterTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* 交易记录列表 */}
-        <div className="mx-4 rounded-lg overflow-hidden mb-4">
+        <div className="mx-3 rounded-lg overflow-hidden mb-4">
           {filteredTransactions.length === 0 ? (
             <div className="text-center py-8 text-[#999999]">
               <div className="text-2xl mb-2">📭</div>
