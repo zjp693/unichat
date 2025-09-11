@@ -62,10 +62,10 @@ export function TransactionItem({
           <div className="flex-1 min-w-0">
             <div className="flex items-center text-sm text-[#666666]">
               <span className="w-10 text-sm">From</span>
-              <span className="font-mono text-xs text-[#999999] truncate mr-1">{transaction.fromAddress}</span>
+              <span className="font-mono text-xs text-[#999999] truncate">{transaction.fromAddress}</span>
               <button
                 onClick={() => onCopyAddress(transaction.fromAddress)}
-                className="hover:bg-gray-100 rounded p-0.5 transition-colors flex-shrink-0"
+                className="hover:bg-gray-100 rounded transition-colors flex-shrink-0 ml-1"
               >
                 <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
               </button>
@@ -73,10 +73,10 @@ export function TransactionItem({
 
             <div className="flex items-center text-sm text-[#666666]">
               <span className="w-10 text-sm">To</span>
-              <span className="font-mono text-xs text-[#999999] truncate mr-1">{transaction.toAddress}</span>
+              <span className="font-mono text-xs text-[#999999] truncate">{transaction.toAddress}</span>
               <button
                 onClick={() => onCopyAddress(transaction.toAddress)}
-                className="hover:bg-gray-100 rounded p-0.5 transition-colors flex-shrink-0"
+                className="hover:bg-gray-100 rounded transition-colors flex-shrink-0 ml-1"
               >
                 <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
               </button>
@@ -88,42 +88,6 @@ export function TransactionItem({
               src={transaction.isPositive ? '/contacts/linkUp.png' : '/contacts/linkDown.png'}
               alt={transaction.isPositive ? '转入' : '转出'}
               className="w-3 h-3 object-contain opacity-80"
-            />
-          </div>
-        </div>
-
-        {/* 大屏幕：3列布局 */}
-        <div className="hidden md:flex items-center justify-between">
-          {/* 左侧：From地址 */}
-          <div className="flex items-center text-sm text-[#666666] flex-1 min-w-0">
-            <span className="mr-2 w-8 text-sm">From</span>
-            <span className="font-mono text-xs text-[#999999] truncate mr-2">{transaction.fromAddress}</span>
-            <button
-              onClick={() => onCopyAddress(transaction.fromAddress)}
-              className="hover:bg-gray-100 rounded p-0.5 transition-colors flex-shrink-0"
-            >
-              <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* 中间：To地址 */}
-          <div className="flex items-center text-sm text-[#666666] flex-1 min-w-0 justify-center">
-            <span className="mr-2 w-8 text-sm">To</span>
-            <span className="font-mono text-xs text-[#999999] truncate mr-2">{transaction.toAddress}</span>
-            <button
-              onClick={() => onCopyAddress(transaction.toAddress)}
-              className="hover:bg-gray-100 rounded p-0.5 transition-colors flex-shrink-0"
-            >
-              <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* 右侧：方向图标 */}
-          <div className="flex items-center justify-end flex-1">
-            <img
-              src={transaction.isPositive ? '/contacts/linkUp.png' : '/contacts/linkDown.png'}
-              alt={transaction.isPositive ? '转入' : '转出'}
-              className="w-4 h-4 object-contain opacity-80"
             />
           </div>
         </div>
