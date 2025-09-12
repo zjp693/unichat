@@ -43,9 +43,9 @@ export function ContactSummaryCard({
         </div>
         
         <div className="flex items-center text-sm text-[#999999]">
-          <span className="font-mono text-xs">{contactSummary.walletAddress}</span>
+          <span className="  text-xs">{contactSummary.walletAddress}</span>
           <button
-            onClick={() => onCopyAddress(contactSummary.walletAddress)}
+            onClick={(e) =>{e.stopPropagation();onCopyAddress(contactSummary.walletAddress)} }
             className=" hover:bg-gray-100 rounded p-1 transition-colors"
           >
             <img src="/contacts/copy.svg" alt="复制" className="w-3 h-3 object-contain" />

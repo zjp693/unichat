@@ -70,11 +70,11 @@ export function ContactListItem({
         {/* 第二行：钱包地址和操作按钮 */}
         <div className="flex items-center justify-between">
           <div className="flex items-center flex-1 mr-3 w-[100%]">
-            <div className="text-xs text-gray-500 font-mono break-all mr-2">
+            <div className="text-xs text-gray-500   break-all mr-2">
               {contact.walletAddress}
               {/* 复制按钮 */}
               <button
-                onClick={() => onCopyAddress(contact.walletAddress)}
+                onClick={(e) => {e.stopPropagation(); onCopyAddress(contact.walletAddress)}}
                 className="pl-1 hover:bg-gray-100 rounded flex-shrink-0 translate-y-0.5"
               >
                 <img

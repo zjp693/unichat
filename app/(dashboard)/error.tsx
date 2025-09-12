@@ -58,7 +58,7 @@ export default function DashboardError({ error, reset }: ErrorProps) {
             <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
               错误详情
             </summary>
-            <div className="mt-2 rounded bg-muted p-2 text-xs font-mono">
+            <div className="mt-2 rounded bg-muted p-2 text-xs  ">
               <p className="text-destructive">{error.message}</p>
             </div>
           </details>
