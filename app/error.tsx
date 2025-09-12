@@ -45,7 +45,7 @@ export default function Error({ error, reset }: ErrorProps) {
                 <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
                   查看错误详情
                 </summary>
-                <div className="mt-2 rounded bg-muted p-3 text-xs font-mono">
+                <div className="mt-2 rounded bg-muted p-3 text-xs  ">
                   <p className="text-destructive">{error.message}</p>
                   {error.digest && (
                     <p className="mt-1 text-muted-foreground">
