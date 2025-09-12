@@ -152,7 +152,7 @@ export default function TransactionsPage() {
                 isLast={index === filteredTransactions.length - 1}
                 onCopyAddress={copyAddress}
                 formatAddress={formatAddress}
-                onClick={() => gotoTxDetail(transaction)}
+                // onClick={() => gotoTxDetail(transaction)}
               />
             ))
           )}
