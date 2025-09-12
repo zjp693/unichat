@@ -61,7 +61,7 @@ export async function fetchTransactions(contactName?: string, contactAddress?: s
     },
     {
       id: '2',
-      contactName: 'My add',
+      contactName: 'James',
       contactAvatar: '/placeholder-user.jpg',
       amount: '+0.75 ETH',
       usdValue: '≈$2004.3',
@@ -91,7 +91,7 @@ export async function fetchTransactions(contactName?: string, contactAddress?: s
     },
     {
       id: '4',
-      contactName: 'My add',
+      contactName: 'James',
       contactAvatar: '/placeholder-user.jpg',
       amount: '+1.8 ETH',
       usdValue: '≈$2004.3',
