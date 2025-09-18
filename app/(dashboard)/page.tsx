@@ -129,9 +129,10 @@ export default function ChatPage() {
 
 function ChatListItem({ chat }: { chat: ChatItem }) {
   return (
-    <div className="relative flex items-center p-3 hover:bg-gray-100/50 cursor-pointer bg-white">
+    <a href={`/chat/${chat.id}`} className="block">
+      <div className="relative flex items-center p-3 hover:bg-gray-100/50 cursor-pointer bg-white">
       <div className="relative">
-        <div className="h-14 w-14 rounded overflow-hidden border border-gray-200">
+        <div className="h-12 w-12 rounded overflow-hidden border border-gray-200">
           {chat.unreadCount && (
             <Badge
               variant="destructive"
@@ -167,6 +168,7 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
         {/* 下边框 */}
         <div className="border-t w-[calc(100%-5rem)] border-border absolute bottom-0"></div>
       </div>
-    </div>
+      </div>
+    </a>
   );
 }
