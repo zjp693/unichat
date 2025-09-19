@@ -4,9 +4,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, MoreHorizontal, Plus, Smile } from 'lucide-react';
+import { MoreHorizontal, Plus, Smile } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
 import { useKeyManagement } from '@/hooks/useKeyManagement';
@@ -22,7 +22,9 @@ interface Message {
   isEncrypted?: boolean;
 }
 
-export default function ChatPage({ params }: { params: { id: string } }) {
+export default function ChatPage() {
+  const params = useParams();
+  const id = params.id as string;
   const router = useRouter();
   const { decryptMessage, encryptMessage, keys } = useKeyManagement();
   const [messages, setMessages] = useState<Message[]>([
@@ -61,7 +63,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   const handleSendMessage = () => {
     if (inputMessage.trim()) {
       let content = inputMessage.trim();
-      let isEncrypted = true; // 默认所有消息都加密
+      const isEncrypted = true; // 默认所有消息都加密
 
       try {
         if (keys.length > 0) {
@@ -109,30 +111,32 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   // 处理密钥选择
   const handleKeySelect = (key: KeyPair) => {
     if (!selectedMessageId) return;
-    
-    const message = messages.find(msg => msg.id === selectedMessageId);
+
+    const message = messages.find((msg) => msg.id === selectedMessageId);
     if (!message) return;
 
     try {
       const decryptedContent = decryptMessage(message.content, key.privateKey);
-      
+
       // 更新消息状态
-      setMessages(prev => prev.map(msg => {
-        if (msg.id === selectedMessageId) {
-          return {
-            ...msg,
-            content: decryptedContent,
-            isEncrypted: false,
-            originalContent: msg.content
-          };
-        }
-        return msg;
-      }));
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id === selectedMessageId) {
+            return {
+              ...msg,
+              content: decryptedContent,
+              isEncrypted: false,
+              originalContent: msg.content
+            };
+          }
+          return msg;
+        })
+      );
     } catch (error) {
       console.error('解密失败:', error);
       alert('解密失败，请检查密钥是否正确');
     }
-    
+
     setSelectedMessageId('');
   };
 
@@ -184,7 +188,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
             src="/chats/arrow_left.png"
             alt="返回"
             width={10}
-			height={12}
+            height={12}
           />
         </Button>
 
@@ -222,60 +226,64 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                     </div>
                   </div>
 
-                   {/* 消息内容容器 */}
-                   <div className={cn(
-                     'flex-1 flex',
-                     message.sender === 'user' ? 'justify-end' : 'justify-start'
-                   )}>
-                     <div
-                       className={cn(
-                         'max-w-[85%] rounded-lg px-2 py-1 relative overflow-hidden',
-                         message.sender === 'user'
-                           ? 'bg-[#95ec69] text-[#303133]'
-                           : 'bg-white text-[#303133] shadow-sm'
-                       )}
-                     >
+                  {/* 消息内容容器 */}
+                  <div
+                    className={cn(
+                      'flex-1 flex',
+                      message.sender === 'user'
+                        ? 'justify-end'
+                        : 'justify-start'
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'max-w-[85%] rounded-lg px-2 py-1 relative overflow-hidden',
+                        message.sender === 'user'
+                          ? 'bg-[#95ec69] text-[#303133]'
+                          : 'bg-white text-[#303133] shadow-sm'
+                      )}
+                    >
                       <p className="text-sm break-all leading-6 font-mono whitespace-pre-wrap mb-1 py-1 overflow-hidden">
                         {message.content}
                       </p>
 
                       {/* 解密按钮 - 在消息内部 */}
                       <div className="flex items-center justify-start">
-                        <button 
+                        <button
                           onClick={() => handleDecryptClick(message.id)}
                           className={cn(
-                            "flex items-center hover:bg-gray-200 rounded-sm mr-2 px-1 py-0.5 transition-colors",
-                            message.sender === 'user' 
-                              ? 'bg-[#c9f3b5]' 
+                            'flex items-center hover:bg-gray-200 rounded-sm mr-2 px-1 py-0.5 transition-colors',
+                            message.sender === 'user'
+                              ? 'bg-[#c9f3b5]'
                               : 'bg-[#f9ebeb]'
                           )}
                         >
-                            <Image
-                              src="/chats/keyIcon.png"
-                              alt="解密"
-                              width={14}
-                              height={14}
-							  className='mr-0.5'
-                            />
+                          <Image
+                            src="/chats/keyIcon.png"
+                            alt="解密"
+                            width={14}
+                            height={14}
+                            className="mr-0.5"
+                          />
                           <div className="text-[#606266] text-xs font-medium">
                             解密
                           </div>
                         </button>
-						<button 
+                        <button
                           className={cn(
-                            "flex items-center hover:bg-gray-200 rounded-sm px-1 py-0.5 transition-colors",
-                            message.sender === 'user' 
-                              ? 'bg-[#c9f3b5]' 
+                            'flex items-center hover:bg-gray-200 rounded-sm px-1 py-0.5 transition-colors',
+                            message.sender === 'user'
+                              ? 'bg-[#c9f3b5]'
                               : 'bg-[#e8f7ed]'
                           )}
                         >
-                            <Image
-                              src="/chats/news.png"
-                              alt="剩余次数"
-                              width={14}
-                              height={14}
-							  className='mr-0.5'
-                            />
+                          <Image
+                            src="/chats/news.png"
+                            alt="剩余次数"
+                            width={14}
+                            height={14}
+                            className="mr-0.5"
+                          />
                           <div className="text-[#606266] text-xs font-medium">
                             165
                           </div>

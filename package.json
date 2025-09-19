@@ -25,7 +25,8 @@
     "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "husky"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",
@@ -72,7 +73,21 @@
     "tabWidth": 2,
     "trailingComma": "none"
   },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "prettier --write"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
-    "@tanstack/react-query-devtools": "^5.85.9"
+    "@tanstack/react-query-devtools": "^5.85.9",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6"
   }
 }

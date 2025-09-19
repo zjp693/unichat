@@ -1,0 +1,9 @@
+echo "🔍 运行构建检查..."
+pnpm build
+
+if [ $? -ne 0 ]; then
+    echo "❌ 构建失败！请修复构建错误后再推送。"
+    exit 1
+fi
+
+echo "✅ 构建检查通过！"

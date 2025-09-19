@@ -1,0 +1,2 @@
+echo "🔍 运行代码检查和格式化..."
+pnpm exec lint-staged
