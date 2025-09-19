@@ -1,32 +1,38 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useChainId, useDisconnect } from 'wagmi';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  useChainId,
+  useDisconnect
+} from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  CheckCircle, 
-  AlertCircle, 
-  Loader2, 
-  Gift, 
+import {
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Gift,
   Wallet,
   Copy,
   ExternalLink
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  AirdropData, 
-  getUserAirdropData, 
-  formatTokenAmount, 
+import {
+  AirdropData,
+  getUserAirdropData,
+  formatTokenAmount,
   formatAddress,
   isValidAirdropData
 } from '@/lib/airdrop';
-import { 
-  getMerkleDistributorAddress, 
-  MERKLE_DISTRIBUTOR_ABI, 
-  isValidContractAddress 
+import {
+  getMerkleDistributorAddress,
+  MERKLE_DISTRIBUTOR_ABI,
+  isValidContractAddress
 } from '@/lib/contracts';
 
 export default function AirdropPage() {
@@ -40,16 +46,20 @@ export default function AirdropPage() {
   const [airdropData, setAirdropData] = useState<AirdropData | null>(null);
   const [checkStatus, setCheckStatus] = useState<string>('');
   const [checkProgress, setCheckProgress] = useState<number>(0);
-  
+
   // 获取合约地址
   const contractAddress = getMerkleDistributorAddress() as `0x${string}`;
 
   // 智能合约交互
-  const { writeContract, isPending: isClaimPending, isSuccess: isClaimSuccess } = useWriteContract();
-  
+  const {
+    writeContract,
+    isPending: isClaimPending,
+    isSuccess: isClaimSuccess
+  } = useWriteContract();
+
   // 检查是否已被领取
-  const { 
-    data: isClaimedData, 
+  const {
+    data: isClaimedData,
     refetch: refetchIsClaimed,
     isLoading: isCheckingClaimed
   } = useReadContract({
@@ -58,10 +68,14 @@ export default function AirdropPage() {
     functionName: 'isClaimed',
     args: airdropData ? [BigInt(airdropData.index)] : undefined,
     query: {
-      enabled: !!contractAddress && !!airdropData && isConnected && isValidContractAddress(contractAddress),
+      enabled:
+        !!contractAddress &&
+        !!airdropData &&
+        isConnected &&
+        isValidContractAddress(contractAddress)
     }
   });
-  
+
   const alreadyClaimed = !!isClaimedData;
 
   // 监听认领成功事件
@@ -69,9 +83,9 @@ export default function AirdropPage() {
     if (isClaimSuccess && airdropData) {
       refetchIsClaimed();
       toast({
-        title: "认领成功！",
-        description: "代币已成功转入您的钱包",
-        variant: "success"
+        title: '认领成功！',
+        description: '代币已成功转入您的钱包',
+        variant: 'success'
       });
     }
   }, [isClaimSuccess, airdropData, refetchIsClaimed, toast]);
@@ -81,7 +95,7 @@ export default function AirdropPage() {
     if (isConnected && address && !airdropData && !checkingEligibility) {
       checkEligibility();
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, airdropData, checkingEligibility]);
 
   // 进度模拟函数
   const simulateProgress = async (targetProgress: number, status: string) => {
@@ -89,18 +103,18 @@ export default function AirdropPage() {
     const startProgress = checkProgress;
     const increment = targetProgress - startProgress;
     const steps = 10;
-  
+
     for (let i = 1; i <= steps; i++) {
-      const nextProgress = startProgress + (increment * i / steps);
+      const nextProgress = startProgress + (increment * i) / steps;
       setCheckProgress(nextProgress);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   };
 
   // 检查空投资格
   const checkEligibility = async () => {
     if (!address) {
-      setError("请先连接钱包");
+      setError('请先连接钱包');
       return;
     }
 
@@ -120,18 +134,18 @@ export default function AirdropPage() {
       if (data && isValidAirdropData(data)) {
         await simulateProgress(100, '验证成功！');
         setAirdropData(data);
-        
+
         setTimeout(() => {
           refetchIsClaimed();
           setCheckingEligibility(false);
         }, 500);
       } else {
         setCheckStatus('验证失败');
-        setError("抱歉，您的地址不在本次空投列表中");
+        setError('抱歉，您的地址不在本次空投列表中');
         setCheckingEligibility(false);
       }
     } catch (err: Error | unknown) {
-      console.error("获取空投数据失败:", err);
+      console.error('获取空投数据失败:', err);
       const errorMessage = err instanceof Error ? err.message : '未知错误';
       setError(`获取空投数据失败: ${errorMessage}`);
       setCheckStatus('检查出错');
@@ -142,12 +156,12 @@ export default function AirdropPage() {
   // 认领代币
   const claimAirdrop = async () => {
     if (!address || !airdropData || !contractAddress) {
-      setError("缺少必要信息，无法进行认领");
+      setError('缺少必要信息，无法进行认领');
       return;
     }
 
     if (!isValidContractAddress(contractAddress)) {
-      setError("合约地址无效，请检查配置");
+      setError('合约地址无效，请检查配置');
       return;
     }
 
@@ -157,7 +171,7 @@ export default function AirdropPage() {
       writeContract({
         address: contractAddress,
         abi: MERKLE_DISTRIBUTOR_ABI,
-        functionName: "claimFromBatch",
+        functionName: 'claimFromBatch',
         args: [
           BigInt(airdropData.index),
           BigInt(airdropData.batchIndex || 0),
@@ -166,15 +180,14 @@ export default function AirdropPage() {
           airdropData.proof as `0x${string}`[]
         ]
       });
-
     } catch (err: Error | unknown) {
-      console.error("认领失败:", err);
+      console.error('认领失败:', err);
       const errorMessage = err instanceof Error ? err.message : '认领失败';
       setError(errorMessage);
       toast({
-        title: "认领失败",
+        title: '认领失败',
         description: errorMessage,
-        variant: "destructive"
+        variant: 'destructive'
       });
     }
   };
@@ -184,15 +197,15 @@ export default function AirdropPage() {
     try {
       await navigator.clipboard.writeText(addr);
       toast({
-        title: "复制成功",
-        description: "地址已复制到剪贴板",
-        variant: "success"
+        title: '复制成功',
+        description: '地址已复制到剪贴板',
+        variant: 'success'
       });
     } catch (err) {
       toast({
-        title: "复制失败",
-        description: "无法复制地址",
-        variant: "destructive"
+        title: '复制失败',
+        description: '无法复制地址',
+        variant: 'destructive'
       });
     }
   };
@@ -207,9 +220,9 @@ export default function AirdropPage() {
     setCheckProgress(0);
     setCheckStatus('');
     toast({
-      title: "钱包已断开",
-      description: "您已成功断开钱包连接",
-      variant: "success"
+      title: '钱包已断开',
+      description: '您已成功断开钱包连接',
+      variant: 'success'
     });
   };
 
@@ -254,17 +267,17 @@ export default function AirdropPage() {
                 <div className="mb-4">
                   <p className="text-muted-foreground mb-3">
                     钱包已连接: {formatAddress(address!)}
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => copyAddress(address!)}
                       className="ml-2 h-auto p-1"
                     >
                       <Copy className="w-3 h-3" />
                     </Button>
                   </p>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={handleDisconnect}
                     className="text-xs text-muted-foreground hover:text-destructive hover:border-destructive"
@@ -272,8 +285,8 @@ export default function AirdropPage() {
                     断开钱包连接
                   </Button>
                 </div>
-                
-                <Button 
+
+                <Button
                   onClick={checkEligibility}
                   disabled={checkingEligibility}
                   className="w-full max-w-xs"
@@ -299,8 +312,8 @@ export default function AirdropPage() {
                       <span>{Math.round(checkProgress)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-purple-600 h-2 rounded-full transition-all duration-300" 
+                      <div
+                        className="bg-purple-600 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${checkProgress}%` }}
                       ></div>
                     </div>
@@ -343,7 +356,10 @@ export default function AirdropPage() {
                   {/* 外圆环 - 适中尺寸 */}
                   <div className="relative w-48 h-48 mb-6">
                     {/* 背景圆环 */}
-                    <svg className="w-48 h-48 transform -rotate-90" viewBox="0 0 160 160">
+                    <svg
+                      className="w-48 h-48 transform -rotate-90"
+                      viewBox="0 0 160 160"
+                    >
                       <circle
                         cx="80"
                         cy="80"
@@ -363,25 +379,35 @@ export default function AirdropPage() {
                         strokeLinecap="round"
                         strokeDasharray={`${alreadyClaimed ? 408 : 306} 408`}
                         className="transition-all duration-1500 ease-out"
-                        style={{ filter: 'drop-shadow(0 0 10px rgba(139, 92, 246, 0.3))' }}
+                        style={{
+                          filter:
+                            'drop-shadow(0 0 10px rgba(139, 92, 246, 0.3))'
+                        }}
                       />
                       {/* 渐变定义 */}
                       <defs>
-                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <linearGradient
+                          id="gradient"
+                          x1="0%"
+                          y1="0%"
+                          x2="100%"
+                          y2="0%"
+                        >
                           <stop offset="0%" stopColor="#8b5cf6" />
                           <stop offset="50%" stopColor="#a855f7" />
                           <stop offset="100%" stopColor="#ec4899" />
                         </linearGradient>
                       </defs>
                     </svg>
-                    
+
                     {/* 中心内容 */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <div className="w-10 h-10 mb-3 text-purple-600">
                         <Gift className="w-full h-full" />
                       </div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {airdropData?.amountInEther || formatTokenAmount(airdropData?.amount || '0')}
+                        {airdropData?.amountInEther ||
+                          formatTokenAmount(airdropData?.amount || '0')}
                       </div>
                     </div>
                   </div>
@@ -396,11 +422,16 @@ export default function AirdropPage() {
                   <div className="relative overflow-hidden">
                     <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-3xl p-6 shadow-lg border border-cyan-200">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="text-xs text-cyan-600 font-semibold uppercase tracking-wider">已领取</div>
+                        <div className="text-xs text-cyan-600 font-semibold uppercase tracking-wider">
+                          已领取
+                        </div>
                         <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
                       </div>
                       <div className="text-2xl font-bold text-cyan-800 mb-1">
-                        {alreadyClaimed ? airdropData?.amountInEther || formatTokenAmount(airdropData?.amount || '0') : '0.00'}
+                        {alreadyClaimed
+                          ? airdropData?.amountInEther ||
+                            formatTokenAmount(airdropData?.amount || '0')
+                          : '0.00'}
                       </div>
                       <div className="text-xs text-cyan-600">UNICHAT</div>
                     </div>
@@ -408,11 +439,16 @@ export default function AirdropPage() {
                   <div className="relative overflow-hidden">
                     <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-3xl p-6 shadow-lg border border-blue-200">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="text-xs text-blue-600 font-semibold uppercase tracking-wider">待领</div>
+                        <div className="text-xs text-blue-600 font-semibold uppercase tracking-wider">
+                          待领
+                        </div>
                         <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                       </div>
                       <div className="text-2xl font-bold text-blue-800 mb-1">
-                        {alreadyClaimed ? '0.00' : airdropData?.amountInEther || formatTokenAmount(airdropData?.amount || '0')}
+                        {alreadyClaimed
+                          ? '0.00'
+                          : airdropData?.amountInEther ||
+                            formatTokenAmount(airdropData?.amount || '0')}
                       </div>
                       <div className="text-xs text-blue-600">UNICHAT</div>
                     </div>
@@ -424,10 +460,12 @@ export default function AirdropPage() {
                   {/* 主认领按钮 */}
                   <Button
                     onClick={claimAirdrop}
-                    disabled={alreadyClaimed || isClaimPending || isCheckingClaimed}
+                    disabled={
+                      alreadyClaimed || isClaimPending || isCheckingClaimed
+                    }
                     className={`w-full h-14 text-lg font-semibold rounded-2xl transition-all duration-300 ${
-                      alreadyClaimed 
-                        ? '!bg-black hover:!bg-gray-900 !text-white shadow-lg border-0' 
+                      alreadyClaimed
+                        ? '!bg-black hover:!bg-gray-900 !text-white shadow-lg border-0'
                         : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl'
                     }`}
                     size="lg"
@@ -455,7 +493,9 @@ export default function AirdropPage() {
                     <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                       <div className="flex items-center">
                         <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
-                        <p className="text-red-700 text-sm font-medium">{error}</p>
+                        <p className="text-red-700 text-sm font-medium">
+                          {error}
+                        </p>
                       </div>
                     </div>
                   )}

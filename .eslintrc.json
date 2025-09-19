@@ -1,6 +1,8 @@
 {
   "extends": ["next/core-web-vitals"],
   "rules": {
-    "@next/next/no-async-client-component": "error"
+    "@next/next/no-async-client-component": "error",
+    "@next/next/no-img-element": "warn",
+    "react-hooks/exhaustive-deps": "warn"
   }
 }

@@ -131,43 +131,45 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
   return (
     <a href={`/chat/${chat.id}`} className="block">
       <div className="relative flex items-center p-3 hover:bg-gray-100/50 cursor-pointer bg-white">
-      <div className="relative">
-        <div className="h-12 w-12 rounded overflow-hidden border border-gray-200">
-          {chat.unreadCount && (
-            <Badge
-              variant="destructive"
-              className="absolute top-0 right-[-0.6rem] ml-2 h-5 min-w-[20px] text-xs flex items-center justify-center rounded-full"
-            >
-              {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
-            </Badge>
-          )}
-          <img
-            src={chat.avatar}
-            alt={chat.name}
-            className="h-full w-full object-cover"
-          />
-        </div>
-        {chat.isOnline && (
-          <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-white rounded-full" />
-        )}
-      </div>
-
-      <div className="flex-1 ml-3 min-w-0">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-sm truncate">{chat.name}</h3>
-          <span className="text-xs text-gray-400">{chat.time}</span>
-        </div>
-        <div className="flex items-center justify-between mt-1">
-          <div className="w-[100%]">
-            <p className="text-xs text-gray-500 truncate max-w-[94%] inline-block align-middle">
-              {chat.lastMessage}
-            </p>
-            {!chat.copy && <Copy className="h-3 w-3 inline-block ml-1" />}
+        <div className="relative">
+          <div className="h-12 w-12 rounded overflow-hidden border border-gray-200">
+            {chat.unreadCount && (
+              <Badge
+                variant="destructive"
+                className="absolute top-0 right-[-0.6rem] ml-2 h-5 min-w-[20px] text-xs flex items-center justify-center rounded-full"
+              >
+                {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
+              </Badge>
+            )}
+            <Image
+              src={chat.avatar}
+              alt={chat.name}
+              width={48}
+              height={48}
+              className="h-full w-full object-cover"
+            />
           </div>
+          {chat.isOnline && (
+            <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-white rounded-full" />
+          )}
         </div>
-        {/* 下边框 */}
-        <div className="border-t w-[calc(100%-5rem)] border-border absolute bottom-0"></div>
-      </div>
+
+        <div className="flex-1 ml-3 min-w-0">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-sm truncate">{chat.name}</h3>
+            <span className="text-xs text-gray-400">{chat.time}</span>
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <div className="w-[100%]">
+              <p className="text-xs text-gray-500 truncate max-w-[94%] inline-block align-middle">
+                {chat.lastMessage}
+              </p>
+              {!chat.copy && <Copy className="h-3 w-3 inline-block ml-1" />}
+            </div>
+          </div>
+          {/* 下边框 */}
+          <div className="border-t w-[calc(100%-5rem)] border-border absolute bottom-0"></div>
+        </div>
       </div>
     </a>
   );

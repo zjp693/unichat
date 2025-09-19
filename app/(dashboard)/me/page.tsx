@@ -42,7 +42,9 @@ export default function MePage() {
         {
           id: 'serve',
           title: 'Serve',
-          icon: <Image src="/me/serve.png" alt="serve" width={30} height={30} />,
+          icon: (
+            <Image src="/me/serve.png" alt="serve" width={30} height={30} />
+          ),
           type: 'group'
         },
         {
@@ -61,7 +63,12 @@ export default function MePage() {
           id: 'video',
           title: 'Video number',
           icon: (
-            <Image src="/me/video-call.png" alt="video" width={30} height={30} />
+            <Image
+              src="/me/video-call.png"
+              alt="video"
+              width={30}
+              height={30}
+            />
           )
         },
         {
@@ -95,16 +102,16 @@ export default function MePage() {
       try {
         await navigator.clipboard.writeText(address);
         toast({
-          title: "复制成功",
-          description: "钱包地址已复制到剪贴板",
-          variant: "success"
+          title: '复制成功',
+          description: '钱包地址已复制到剪贴板',
+          variant: 'success'
         });
       } catch (err) {
         console.error('复制失败:', err);
         toast({
-          title: "复制失败",
-          description: "无法复制地址，请手动复制",
-          variant: "destructive"
+          title: '复制失败',
+          description: '无法复制地址，请手动复制',
+          variant: 'destructive'
         });
       }
     }
@@ -146,9 +153,11 @@ export default function MePage() {
         <div className="flex items-center space-x-4">
           <div className="relative">
             <div className="h-16 w-16 rounded overflow-hidden">
-              <img
+              <Image
                 src="/me/me.png"
                 alt="me"
+                width={64}
+                height={64}
                 className="h-full w-full object-cover"
               />
             </div>
@@ -166,8 +175,8 @@ export default function MePage() {
               {isConnected ? (
                 <>
                   <span>钱包 {formatAddress(address!)}</span>
-                  <Copy 
-                    className="h-3 w-3 inline-block ml-1 cursor-pointer hover:text-foreground" 
+                  <Copy
+                    className="h-3 w-3 inline-block ml-1 cursor-pointer hover:text-foreground"
                     onClick={copyAddress}
                   />
                 </>
@@ -222,9 +231,7 @@ function MenuListItem({ item, isLast }: { item: MenuItem; isLast: boolean }) {
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </div>
         {item.description && (
-          <p className="text-xs text-muted-foreground">
-            {item.description}
-          </p>
+          <p className="text-xs text-muted-foreground">{item.description}</p>
         )}
       </div>
       {/* 下边框 */}

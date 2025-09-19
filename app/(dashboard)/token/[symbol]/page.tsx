@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { TransactionItem } from './components/TransactionItem';
 import { TokenDetailSkeleton } from './components/TokenDetailSkeleton';
-import { formatNumber, toDateYMD, toDateTime, fetchErc20Transfers } from './lib/token-utils';
+import {
+  formatNumber,
+  toDateYMD,
+  toDateTime,
+  fetchErc20Transfers
+} from './lib/token-utils';
 import { useSelectedCelebrity } from '@/hooks/useSelectedCelebrity';
 import { useToast } from '@/hooks/use-toast';
 
@@ -37,8 +42,6 @@ interface TransactionItem {
   networkIcon: string; // 添加网络图标路径
 }
 
-
-
 export default function TokenDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -51,8 +54,8 @@ export default function TokenDetailPage() {
   const walletAddress = useMemo(() => {
     // 首选：本地存储 Hook 中的地址
     const fromHook = (selected as any)?.walletAddress;
-    return fromHook
-  }, [selected, searchParams]);
+    return fromHook;
+  }, [selected]);
 
   const hasAddress = useMemo(() => {
     return typeof walletAddress === 'string' && walletAddress.startsWith('0x');
@@ -63,7 +66,12 @@ export default function TokenDetailPage() {
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
-  const [tokenData, setTokenData] = useState<{thumbnail?: string | null; tokenAddress?: string; amount?: string; usdValue?: string} | null>(null);
+  const [tokenData, setTokenData] = useState<{
+    thumbnail?: string | null;
+    tokenAddress?: string;
+    amount?: string;
+    usdValue?: string;
+  } | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -72,15 +80,15 @@ export default function TokenDetailPage() {
     try {
       await navigator.clipboard.writeText(text);
       toast({
-        title: "复制成功",
-        description: "内容已复制到剪贴板",
-        variant: "success"
+        title: '复制成功',
+        description: '内容已复制到剪贴板',
+        variant: 'success'
       });
     } catch (err) {
       toast({
-        title: "复制失败",
-        description: "无法复制内容，请手动复制",
-        variant: "destructive"
+        title: '复制失败',
+        description: '无法复制内容，请手动复制',
+        variant: 'destructive'
       });
     }
   };
@@ -92,8 +100,8 @@ export default function TokenDetailPage() {
     const amount = searchParams?.get('amount');
     const usdValue = searchParams?.get('usdValue');
     if (thumbnail || tokenAddress || amount || usdValue) {
-      setTokenData({ 
-        thumbnail: thumbnail || undefined, 
+      setTokenData({
+        thumbnail: thumbnail || undefined,
         tokenAddress: tokenAddress || undefined,
         amount: amount || undefined,
         usdValue: usdValue || undefined
@@ -101,64 +109,70 @@ export default function TokenDetailPage() {
     }
   }, [searchParams]);
 
-  async function fetchPage(nextCursor?: string | null, chainParam: string = chain) {
-    const { cursor, list } = await fetchErc20Transfers({
-      address: walletAddress,
-      chain: chainParam,
-      cursor: nextCursor,
-      limit: 20,
-      order: 'DESC',
-      tokenAddress: tokenData?.tokenAddress
-    });
-    return { cursor, list: list as TransferItemRaw[] };
-  }
-
-  function mapToUI(raw: TransferItemRaw[], chainParam: string = chain): TransactionItem[] {
-    const out: TransactionItem[] = [];
-    let lastDate = items.length > 0 ? items[items.length - 1].date : '';
-    for (const r of raw) {
-      const txSymbol = (r.symbol || '').toUpperCase();
-      if (txSymbol && txSymbol !== symbol) continue;
-      const my = walletAddress.toLowerCase();
-      const from = (r.from_address || '').toLowerCase();
-      const to = (r.to_address || '').toLowerCase();
-      const positive = to === my && from !== my;
-      const negative = from === my && to !== my;
-      const signed = positive ? '+' : negative ? '-' : '';
-
-      const valueStr = r.value_decimal || r.value_formatted || '0';
-      const amountAbs = Number(valueStr || '0');
-      const amountText = `${signed}$ ${formatNumber(amountAbs)}`;
-      const usdtText = `${signed} ${symbol} ${formatNumber(amountAbs)}`;
-
-      const date = toDateYMD(r.block_timestamp);
-      const showDate = date !== lastDate;
-      if (showDate) lastDate = date;
-
-      // 根据当前链设置网络信息和图标
-      const networkInfo = getNetworkInfo(chainParam);
-      
-      // 计算USD价值（这里使用简单的1:1比例，实际应该从API获取汇率）
-      const usdValue = `$${formatNumber(amountAbs)}`;
-
-      out.push({
-        id: (r.transaction_hash || '') + '-' + out.length,
-        date: showDate ? date : '',
-        amount: amountText,
-        usdtAmount: usdtText,
-        isPositive: positive,
-        fromAddress: r.from_address || '',
-        toAddress: r.to_address || '',
-        timestamp: toDateTime(r.block_timestamp),
-        hasDropdown: true,
-        transactionHash: r.transaction_hash || '',
-        network: networkInfo.name,
-        usdValue: usdValue,
-        networkIcon: networkInfo.icon
+  const fetchPage = useCallback(
+    async (nextCursor?: string | null, chainParam: string = chain) => {
+      const { cursor, list } = await fetchErc20Transfers({
+        address: walletAddress,
+        chain: chainParam,
+        cursor: nextCursor,
+        limit: 20,
+        order: 'DESC',
+        tokenAddress: tokenData?.tokenAddress
       });
-    }
-    return out;
-  }
+      return { cursor, list: list as TransferItemRaw[] };
+    },
+    [walletAddress, chain, tokenData?.tokenAddress]
+  );
+
+  const mapToUI = useCallback(
+    (raw: TransferItemRaw[], chainParam: string = chain): TransactionItem[] => {
+      const out: TransactionItem[] = [];
+      let lastDate = items.length > 0 ? items[items.length - 1].date : '';
+      for (const r of raw) {
+        const txSymbol = (r.symbol || '').toUpperCase();
+        if (txSymbol && txSymbol !== symbol) continue;
+        const my = walletAddress.toLowerCase();
+        const from = (r.from_address || '').toLowerCase();
+        const to = (r.to_address || '').toLowerCase();
+        const positive = to === my && from !== my;
+        const negative = from === my && to !== my;
+        const signed = positive ? '+' : negative ? '-' : '';
+
+        const valueStr = r.value_decimal || r.value_formatted || '0';
+        const amountAbs = Number(valueStr || '0');
+        const amountText = `${signed}$ ${formatNumber(amountAbs)}`;
+        const usdtText = `${signed} ${symbol} ${formatNumber(amountAbs)}`;
+
+        const date = toDateYMD(r.block_timestamp);
+        const showDate = date !== lastDate;
+        if (showDate) lastDate = date;
+
+        // 根据当前链设置网络信息和图标
+        const networkInfo = getNetworkInfo(chainParam);
+
+        // 计算USD价值（这里使用简单的1:1比例，实际应该从API获取汇率）
+        const usdValue = `$${formatNumber(amountAbs)}`;
+
+        out.push({
+          id: (r.transaction_hash || '') + '-' + out.length,
+          date: showDate ? date : '',
+          amount: amountText,
+          usdtAmount: usdtText,
+          isPositive: positive,
+          fromAddress: r.from_address || '',
+          toAddress: r.to_address || '',
+          timestamp: toDateTime(r.block_timestamp),
+          hasDropdown: true,
+          transactionHash: r.transaction_hash || '',
+          network: networkInfo.name,
+          usdValue: usdValue,
+          networkIcon: networkInfo.icon
+        });
+      }
+      return out;
+    },
+    [items, walletAddress, symbol, chain]
+  );
 
   // 根据chain参数获取网络信息
   function getNetworkInfo(chain: string) {
@@ -195,7 +209,7 @@ export default function TokenDetailPage() {
           setInitialLoading(false);
           return;
         }
-        
+
         setInitialLoading(true);
         let nextCursor: string | null = null;
         const initialPages = 2; // 初次加载页数
@@ -214,7 +228,9 @@ export default function TokenDetailPage() {
         if (!aborted) setInitialLoading(false);
       }
     })();
-    return () => { aborted = true; };
+    return () => {
+      aborted = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, hasAddress, tokenData, symbol, chain]);
 
@@ -222,21 +238,41 @@ export default function TokenDetailPage() {
   useEffect(() => {
     if (!sentinelRef.current || !hasAddress || !tokenData) return;
     const el = sentinelRef.current;
-    const io = new IntersectionObserver((entries) => {
-      const first = entries[0];
-      if (first.isIntersecting && !loadingMore && hasMore && !initialLoading) {
-        setLoadingMore(true);
-        fetchPage(cursor, chain).then(({ cursor: c, list }) => {
-          const mapped = mapToUI(list, chain);
-          setItems((prev) => prev.concat(mapped));
-          setCursor(c);
-          setHasMore(Boolean(c));
-        }).finally(() => setLoadingMore(false));
-      }
-    }, { rootMargin: '200px' });
+    const io = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (
+          first.isIntersecting &&
+          !loadingMore &&
+          hasMore &&
+          !initialLoading
+        ) {
+          setLoadingMore(true);
+          fetchPage(cursor, chain)
+            .then(({ cursor: c, list }) => {
+              const mapped = mapToUI(list, chain);
+              setItems((prev) => prev.concat(mapped));
+              setCursor(c);
+              setHasMore(Boolean(c));
+            })
+            .finally(() => setLoadingMore(false));
+        }
+      },
+      { rootMargin: '200px' }
+    );
     io.observe(el);
     return () => io.disconnect();
-  }, [cursor, hasMore, loadingMore, initialLoading, chain, tokenData, hasAddress]);
+  }, [
+    cursor,
+    hasMore,
+    loadingMore,
+    initialLoading,
+    chain,
+    tokenData,
+    hasAddress,
+    fetchPage,
+    mapToUI
+  ]);
 
   // 骨架屏
   if (!hasAddress) {
@@ -261,32 +297,44 @@ export default function TokenDetailPage() {
           className="p-2 flex items-center justify-center"
           onClick={() => router.back()}
         >
-          <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
+          <img
+            src="/contacts/arrow_left.png"
+            alt=""
+            className="h-4 object-cover"
+          />
         </Button>
         {/* Token 图标和名称 - 紧邻返回按钮 */}
         <div className="flex items-center space-x-2 ml-3">
           {tokenData?.thumbnail ? (
-            <img 
-              src={tokenData.thumbnail} 
-              alt={symbol} 
-              className="w-6 h-6 rounded object-cover" 
+            <img
+              src={tokenData.thumbnail}
+              alt={symbol}
+              className="w-6 h-6 rounded object-cover"
             />
           ) : (
             <div className="w-6 h-6 bg-gray-500 rounded flex items-center justify-center">
-              <span className="text-white text-xs font-bold">{symbol.charAt(0)}</span>
+              <span className="text-white text-xs font-bold">
+                {symbol.charAt(0)}
+              </span>
             </div>
           )}
           <div className="text-sm">
             <div className="text-[#303133] font-medium">{symbol}</div>
-            <div className="text-xs text-gray-400">{getNetworkInfo(chain).name}</div>
+            <div className="text-xs text-gray-400">
+              {getNetworkInfo(chain).name}
+            </div>
           </div>
         </div>
       </div>
 
       {/* 余额显示 */}
       <div className="px-4 sm:mx-6 sm:py-6 py-8">
-        <div className="text-3xl font-semibold text-[#012332] mb-2">{tokenData?.amount || '0'}</div>
-        <div className="text-sm text-gray-500">{tokenData?.usdValue || '$0'}</div>
+        <div className="text-3xl font-semibold text-[#012332] mb-2">
+          {tokenData?.amount || '0'}
+        </div>
+        <div className="text-sm text-gray-500">
+          {tokenData?.usdValue || '$0'}
+        </div>
       </div>
 
       {/* 交易历史标题 */}
@@ -304,9 +352,15 @@ export default function TokenDetailPage() {
             onCopy={copy}
             onClick={() => {
               // 将完整的交易对象数据编码到 URL 参数中
-              const transactionData = encodeURIComponent(JSON.stringify(transaction));
-              const thumbnailParam = tokenData?.thumbnail ? `&thumbnail=${encodeURIComponent(tokenData.thumbnail)}` : '';
-              router.push(`/token/${symbol}/tx/${transaction.id}?data=${transactionData}${thumbnailParam}`);
+              const transactionData = encodeURIComponent(
+                JSON.stringify(transaction)
+              );
+              const thumbnailParam = tokenData?.thumbnail
+                ? `&thumbnail=${encodeURIComponent(tokenData.thumbnail)}`
+                : '';
+              router.push(
+                `/token/${symbol}/tx/${transaction.id}?data=${transactionData}${thumbnailParam}`
+              );
             }}
           />
         ))}
@@ -323,11 +377,11 @@ export default function TokenDetailPage() {
           </div>
         )}
         {!hasMore && items.length > 0 && (
-          <div className="flex items-center justify-center py-4 text-gray-400 text-xs">没有更多了</div>
+          <div className="flex items-center justify-center py-4 text-gray-400 text-xs">
+            没有更多了
+          </div>
         )}
       </div>
     </div>
   );
 }
-
-
