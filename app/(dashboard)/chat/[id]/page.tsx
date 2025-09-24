@@ -150,9 +150,9 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden">
+    <div className="flex flex-col h-[100dvh] bg-white relative">
       {/* 顶部状态栏 */}
-      <div className="bg-white px-2 py-2  flex items-center justify-between">
+      <div className="bg-white px-2 py-2 flex items-center justify-between flex-shrink-0 relative z-10">
         <div
           className="ml-2"
           style={{ transform: 'scale(1)', transformOrigin: 'left center' }}
@@ -199,9 +199,9 @@ export default function ChatPage() {
         </Button>
       </div>
 
-      {/* 聊天消息区域 - 固定高度，内部滚动 */}
-      <div className="flex-1 px-2 bg-[#f4f4f4]">
-        <ScrollArea className="h-[calc(100vh-220px)]">
+      {/* 聊天消息区域 - 自适应高度，内部滚动 */}
+      <div className="flex-1 px-2 bg-[#f4f4f4] overflow-hidden min-h-0">
+        <ScrollArea className="h-full">
           <div className="space-y-2 py-2">
             {messages.map((message, index) => (
               <div key={message.id} className="space-y-2">
@@ -300,13 +300,13 @@ export default function ChatPage() {
       </div>
 
       {/* 底部输入区域 - 固定在底部 */}
-      <div className="bg-[#f4f4f4] px-4 py-3 flex-shrink-0">
+      <div className="bg-[#f4f4f4] px-4 py-3 flex-shrink-0 border-t border-gray-200 relative z-20 safe-area-inset-bottom">
         <div className="flex items-center space-x-3">
           {/* 语音按钮 */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 p-0 text-gray-500"
+            className="p-0 text-gray-500"
           >
             <div className="w-5 h-5 flex items-center justify-center">
               <svg
