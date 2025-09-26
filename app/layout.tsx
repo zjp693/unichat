@@ -8,6 +8,12 @@ import { Toaster } from '@/components/ui/toaster';
 export const metadata = {
   title: 'UniChat - Web3 社交平台',
   description: '现代化 Web3 社交平台',
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
   icons: {
     icon: [
       { url: '/discover/unishop.png' },

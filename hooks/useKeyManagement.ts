@@ -27,7 +27,7 @@ export const useKeyManagement = () => {
   const generateKeyPair = async (name: string): Promise<KeyPair> => {
     setLoading(true);
     try {
-      const { publicKey, privateKey } = chatEncryption.generateKeyPair(2048);
+      const { publicKey, privateKey } = chatEncryption.generateKeyPair();
       
       const newKey: KeyPair = {
         id: Date.now().toString(),

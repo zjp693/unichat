@@ -10,7 +10,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
 import { useKeyManagement } from '@/hooks/useKeyManagement';
-import { KeyPair, chatEncryption } from '@/lib/encryption';
+import { KeyPair, chatEncryption, DEFAULT_KEY_PAIR } from '@/lib/encryption';
 
 // 消息类型定义
 interface Message {
@@ -48,36 +48,91 @@ export default function ChatPage() {
   const [inputMessage, setInputMessage] = useState('');
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // 自动滚动到底部
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // 自动滚动到底部 - 只滚动消息容器内部
+  const scrollToBottom = (smooth = true) => {
+    if (messagesEndRef.current) {
+      // 查找 ScrollArea 的视口容器
+      const scrollContainer = messagesEndRef.current.closest('[data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({
+          top: scrollContainer.scrollHeight,
+          behavior: smooth ? 'smooth' : 'auto'
+        });
+      }
+    }
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    // 防止页面滚动
+    document.body.classList.add('chat-page');
+    
+    // 监听键盘弹出/收起
+    const handleViewportChange = () => {
+      // 当键盘弹出时，确保滚动到底部显示最新消息
+      if (window.visualViewport) {
+        const keyboardHeight = window.innerHeight - window.visualViewport.height;
+        if (keyboardHeight > 0) {
+          // 键盘弹出，滚动到底部
+          setTimeout(() => {
+            scrollToBottom(false);
+          }, 100);
+        }
+      }
+    };
 
-  // 发送消息
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+    }
+    
+    return () => {
+      document.body.classList.remove('chat-page');
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportChange);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // 使用 setTimeout 确保 DOM 更新完成后再滚动
+    const timer = setTimeout(() => {
+      if (isFirstLoad) {
+        scrollToBottom(false); // 首次加载不使用动画
+        setIsFirstLoad(false);
+      } else {
+        scrollToBottom(true); // 后续使用平滑滚动
+      }
+    }, 50);
+    
+    return () => clearTimeout(timer);
+  }, [messages, isFirstLoad]);
+
+  // 发送消息 - 优化版本
   const handleSendMessage = () => {
     if (inputMessage.trim()) {
       let content = inputMessage.trim();
-      const isEncrypted = true; // 默认所有消息都加密
+      let isEncrypted = false;
 
       try {
+        let publicKeyToUse: string;
+        
         if (keys.length > 0) {
-          // 如果有本地密钥，使用第一个可用密钥的公钥加密
-          content = encryptMessage(inputMessage.trim(), keys[0].publicKey);
+          // 优先使用用户的密钥
+          publicKeyToUse = keys[0].publicKey;
         } else {
-          // 如果没有本地密钥，生成临时密钥对进行加密
-          const { publicKey } = chatEncryption.generateKeyPair(2048);
-          content = encryptMessage(inputMessage.trim(), publicKey);
+          // 没有用户密钥时，使用默认密钥
+          publicKeyToUse = DEFAULT_KEY_PAIR.publicKey;
         }
+        
+        content = encryptMessage(inputMessage.trim(), publicKeyToUse);
+        isEncrypted = true;
       } catch (error) {
         console.error('加密失败:', error);
-        // 如果加密失败，仍然标记为加密（显示解密按钮）
-        // 这样用户可以知道这条消息原本应该是加密的
+        // 加密失败时保持原文，但标记为未加密
+        isEncrypted = false;
       }
 
       const newMessage: Message = {
@@ -88,8 +143,14 @@ export default function ChatPage() {
         type: 'text',
         isEncrypted
       };
+      
       setMessages((prev) => [...prev, newMessage]);
       setInputMessage('');
+      
+      // 发送消息后收起键盘
+      if (inputRef.current) {
+        inputRef.current.blur();
+      }
     }
   };
 
@@ -150,7 +211,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-white relative">
+    <div className="chat-container flex flex-col bg-white">
       {/* 顶部状态栏 */}
       <div className="bg-white px-2 py-2 flex items-center justify-between flex-shrink-0 relative z-10">
         <div
@@ -180,7 +241,7 @@ export default function ChatPage() {
       <div className="flex items-center justify-between px-4 py-3 bg-white flex-shrink-0">
         <Button
           variant="ghost"
-          size="icon"
+          size="sm"
           onClick={() => router.back()}
           className="h-8 w-8 p-0"
         >
@@ -194,14 +255,14 @@ export default function ChatPage() {
 
         <h1 className="text-base font-medium text-black">张三</h1>
 
-        <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
           <MoreHorizontal className="h-5 w-5 text-black" />
         </Button>
       </div>
 
       {/* 聊天消息区域 - 自适应高度，内部滚动 */}
       <div className="flex-1 px-2 bg-[#f4f4f4] overflow-hidden min-h-0">
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full" style={{ touchAction: 'pan-y' }}>
           <div className="space-y-2 py-2">
             {messages.map((message, index) => (
               <div key={message.id} className="space-y-2">
@@ -300,53 +361,71 @@ export default function ChatPage() {
       </div>
 
       {/* 底部输入区域 - 固定在底部 */}
-      <div className="bg-[#f4f4f4] px-4 py-3 flex-shrink-0 border-t border-gray-200 relative z-20 safe-area-inset-bottom">
-        <div className="flex items-center space-x-3">
-          {/* 语音按钮 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="p-0 text-gray-500"
-          >
-            <div className="w-5 h-5 flex items-center justify-center">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.49 6-3.3 6-6.72h-1.7z" />
-              </svg>
+      <div className="bg-[#f4f4f4] border-t border-gray-200 flex-shrink-0 relative z-20">
+        <div className="px-4 py-3 safe-area-inset-bottom">
+          <div className="flex items-center space-x-3">
+            {/* 语音按钮 */}
+            <Button variant="ghost" size="sm" className="p-0 text-gray-500">
+              <div className="w-5 h-5 flex items-center justify-center">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.49 6-3.3 6-6.72h-1.7z" />
+                </svg>
+              </div>
+            </Button>
+
+            <div className="flex-1 relative">
+              <Input
+                ref={inputRef}
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder=""
+                className="bg-white border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-sm px-2 text-sm"
+                style={{ fontSize: '16px' }} // 防止iOS缩放
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+              />
             </div>
-          </Button>
 
-          <div className="flex-1 relative">
-            <Input
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="今天群聊会很有利"
-              className="bg-white border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-sm px-2 text-sm"
-            />
+            {/* 表情按钮 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 text-gray-500"
+            >
+              <Smile className="h-5 w-5" />
+            </Button>
+
+            {/* 发送按钮 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 text-gray-500"
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim()}
+            >
+              {inputMessage.trim() ? (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="text-blue-500"
+                >
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+              ) : (
+                <Plus className="h-5 w-5" />
+              )}
+            </Button>
           </div>
-
-          {/* 表情按钮 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 p-0 text-gray-500"
-          >
-            <Smile className="h-5 w-5" />
-          </Button>
-
-          {/* 发送/添加按钮 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 p-0 text-gray-500"
-          >
-            <Plus className="h-5 w-5" />
-          </Button>
         </div>
       </div>
 

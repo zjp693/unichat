@@ -69,7 +69,7 @@ export const KeyManagementModal = ({
     try {
       const keyNameToUse = keyName.trim() || `密钥_${Date.now()}`;
       // 只生成密钥对，不保存到本地存储
-      const { publicKey, privateKey } = chatEncryption.generateKeyPair(2048);
+      const { publicKey, privateKey } = chatEncryption.generateKeyPair();
 
       const newKey: KeyPair = {
         id: Date.now().toString(),
