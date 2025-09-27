@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 确保html和body占满全屏 */
+html, body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 @layer base {
   :root {
     --background: 0 0% 96%;
@@ -146,10 +155,8 @@ button, .clickable {
 
 /* 聊天页面布局优化 */
 .chat-container {
-  height: 100vh;
-  height: 100dvh; /* 动态视口高度 */
-  width: 100vw;
-  width: 100dvw;
+  height: 100%;
+  width: 100%;
   position: fixed;
   top: 0;
   left: 0;

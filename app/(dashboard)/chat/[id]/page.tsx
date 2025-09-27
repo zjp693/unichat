@@ -4,13 +4,27 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MoreHorizontal, Plus, Smile } from 'lucide-react';
+import { 
+  MoreHorizontal, 
+  Plus, 
+  Smile, 
+  Image as ImageIcon, 
+  Camera, 
+  Phone, 
+  Bot, 
+  Redo, 
+  ShoppingCart, 
+  Vote,
+  Gift,
+  AudioLines
+} from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
 import { useKeyManagement } from '@/hooks/useKeyManagement';
 import { KeyPair, chatEncryption, DEFAULT_KEY_PAIR } from '@/lib/encryption';
+import dayjs from 'dayjs';
 
 // 消息类型定义
 interface Message {
@@ -20,149 +34,93 @@ interface Message {
   timestamp: Date;
   type: 'text' | 'image';
   isEncrypted?: boolean;
-  originalContent?: string; // 保存原始加密内容
+  originalContent?: string;
 }
+
+const TOP_BAR_HEIGHT = 56;
+const NAV_BAR_HEIGHT = 56;
+const FOOTER_HEIGHT = 68;
+const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
 
 export default function ChatPage() {
   const params = useParams();
-  const id = params.id as string;
   const router = useRouter();
   const { decryptMessage, encryptMessage, keys } = useKeyManagement();
+  
   const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      content: '你好！这是一条测试消息',
-      sender: 'other',
-      timestamp: new Date('2024-01-01T10:32:00'),
-      type: 'text',
-      isEncrypted: false
-    },
-    {
-      id: '2',
-      content: '欢迎使用加密聊天功能',
-      sender: 'other',
-      timestamp: new Date('2024-01-01T10:33:00'),
-      type: 'text',
-      isEncrypted: false
-    }
+    { id: '1', content: 'QPPMDEWEYBTI5L003WQV8AXQGMIPIVEUFLUC7X5QKWD0GBQ7S2E20GWTXXR47JRU7V3KYXI+HNZYVR60UM0PULFVIEBCH1TG1M5HIEG+DWKKQVW34MR5X8UIIRQKFTNWT3JGAKCPMIUD/H51XZA/R2YVITMD8FYTDW9NC5+PE=', sender: 'other', timestamp: new Date('2025-09-27T10:32:00'), type: 'text', isEncrypted: true, originalContent: 'Original message before encryption.' },
+    { id: '2', content: 'QPPMDEWEYBTI5L003WQV8AXQGMIPIVEUFLUC7X5QKWD0GBQ7S2E20GWTXXR47JRU7V3KYXI+HNZYVR60UM0PULFVIEBCH1TG1M5HIEG+DWKKQVW34MR5X8UIIRQKFTNWT3JGAKCPMIUD/H51XZA/R2YVITMD8FYTDW9NC5+PE=', sender: 'user', timestamp: new Date('2025-09-27T10:34:00'), type: 'text', isEncrypted: true, originalContent: 'Original message for user sender.' },
   ]);
+  
   const [inputMessage, setInputMessage] = useState('');
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
-  const [isFirstLoad, setIsFirstLoad] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isClient, setIsClient] = useState(false);
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(250);
+  
   const inputRef = useRef<HTMLInputElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLengthRef = useRef(messages.length);
 
-  // 自动滚动到底部 - 只滚动消息容器内部
-  const scrollToBottom = (smooth = true) => {
-    if (messagesEndRef.current) {
-      // 查找 ScrollArea 的视口容器
-      const scrollContainer = messagesEndRef.current.closest('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTo({
-          top: scrollContainer.scrollHeight,
-          behavior: smooth ? 'smooth' : 'auto'
-        });
-      }
+  useEffect(() => {
+    if (!isClient) return;
+    const listener = () => {
+      const currentKeyboardHeight = window.innerHeight - (window.visualViewport?.height ?? window.innerHeight);
+      if (currentKeyboardHeight > 100) { setPanelHeight(currentKeyboardHeight); }
+    };
+    window.visualViewport?.addEventListener('resize', listener);
+    return () => window.visualViewport?.removeEventListener('resize', listener);
+  }, [isClient]);
+
+  const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
+    if (!scrollAreaRef.current) return;
+    const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior });
     }
   };
 
-  useEffect(() => {
-    // 防止页面滚动
-    document.body.classList.add('chat-page');
-    
-    // 监听键盘弹出/收起
-    const handleViewportChange = () => {
-      // 当键盘弹出时，确保滚动到底部显示最新消息
-      if (window.visualViewport) {
-        const keyboardHeight = window.innerHeight - window.visualViewport.height;
-        if (keyboardHeight > 0) {
-          // 键盘弹出，滚动到底部
-          setTimeout(() => {
-            scrollToBottom(false);
-          }, 100);
-        }
-      }
-    };
+  useEffect(() => { setIsClient(true); }, []);
 
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleViewportChange);
+  useEffect(() => {
+    if (isClient) {
+      setTimeout(() => scrollToBottom('smooth'), 50);
+      if (messages.length > prevMessagesLengthRef.current && !isActionsOpen) {
+        const focusTimeout = setTimeout(() => inputRef.current?.focus(), 300);
+        return () => clearTimeout(focusTimeout);
+      }
+      prevMessagesLengthRef.current = messages.length;
     }
-    
-    return () => {
-      document.body.classList.remove('chat-page');
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleViewportChange);
-      }
-    };
-  }, []);
+  }, [messages, isActionsOpen, isClient]);
+  
+  const handleOpenActions = () => { setIsActionsOpen(true); };
 
-  useEffect(() => {
-    // 使用 setTimeout 确保 DOM 更新完成后再滚动
-    const timer = setTimeout(() => {
-      if (isFirstLoad) {
-        scrollToBottom(false); // 首次加载不使用动画
-        setIsFirstLoad(false);
-      } else {
-        scrollToBottom(true); // 后续使用平滑滚动
-      }
-    }, 50);
-    
-    return () => clearTimeout(timer);
-  }, [messages, isFirstLoad]);
-
-  // 发送消息 - 优化版本
   const handleSendMessage = () => {
-    if (inputMessage.trim()) {
-      let content = inputMessage.trim();
-      let isEncrypted = false;
-
-      try {
-        let publicKeyToUse: string;
-        
-        if (keys.length > 0) {
-          // 优先使用用户的密钥
-          publicKeyToUse = keys[0].publicKey;
-          console.log('使用用户密钥进行加密');
-        } else {
-          // 没有用户密钥时，使用默认密钥
-          publicKeyToUse = DEFAULT_KEY_PAIR.publicKey;
-          console.log('使用默认密钥进行加密');
-        }
-        
-        content = encryptMessage(inputMessage.trim(), publicKeyToUse);
-        isEncrypted = true;
-        console.log('消息加密成功');
-      } catch (error) {
-        console.error('加密失败详情:', error);
-        
-        // 显示用户友好的错误提示
-        alert(`加密失败: ${error instanceof Error ? error.message : '未知错误'}\n\n消息将以明文形式发送。\n\n建议：\n1. 检查密钥是否有效\n2. 尝试重新生成密钥\n3. 刷新页面重试`);
-        
-        // 加密失败时保持原文，但标记为未加密
-        isEncrypted = false;
-      }
-
-      const newMessage: Message = {
-        id: Date.now().toString(),
-        content,
-        sender: 'user',
-        timestamp: new Date(),
-        type: 'text',
-        isEncrypted
-      };
-      
-      setMessages((prev) => [...prev, newMessage]);
-      setInputMessage('');
-      
-      // 发送消息后收起键盘
-      if (inputRef.current) {
-        inputRef.current.blur();
-      }
+    if (!inputMessage.trim()) return;
+    let content = inputMessage.trim();
+    let isEncrypted = true;
+    try {
+      const publicKeyToUse = keys.length > 0 ? keys[0].publicKey : DEFAULT_KEY_PAIR.publicKey;
+      content = encryptMessage(inputMessage.trim(), publicKeyToUse);
+    } catch (error) {
+      content = "⚠️ 加密失败: " + inputMessage.trim();
+      isEncrypted = false;
+      alert(`加密失败`);
     }
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      content,
+      sender: 'user',
+      timestamp: new Date(),
+      type: 'text',
+      isEncrypted,
+      originalContent: inputMessage.trim()
+    };
+    setMessages((prev) => [...prev, newMessage]);
+    setInputMessage('');
   };
 
-  // 按回车发送
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -170,287 +128,170 @@ export default function ChatPage() {
     }
   };
 
-  // 处理解密按钮点击
   const handleDecryptClick = (messageId: string) => {
-    console.log('点击解密按钮，消息ID:', messageId);
+    const message = messages.find((msg) => msg.id === messageId);
+    if (!message || !message.isEncrypted) return;
     setSelectedMessageId(messageId);
     setShowKeyModal(true);
   };
 
-  // 处理密钥选择
   const handleKeySelect = (key: KeyPair) => {
     if (!selectedMessageId) return;
-
     const message = messages.find((msg) => msg.id === selectedMessageId);
     if (!message) return;
-
     try {
       const decryptedContent = decryptMessage(message.content, key.privateKey);
-
-      // 更新消息状态
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === selectedMessageId) {
-            return {
-              ...msg,
-              content: decryptedContent,
-              isEncrypted: false,
-              originalContent: msg.content
-            };
-          }
-          return msg;
-        })
-      );
-      
-      console.log('解密成功');
+      if (decryptedContent) {
+        setMessages(prev => prev.map(msg => msg.id === selectedMessageId ? { ...msg, content: decryptedContent, isEncrypted: false } : msg));
+      } else {
+        alert('解密返回null，可能是密钥不匹配或消息格式错误');
+      }
     } catch (error) {
-      console.error('解密失败:', error);
-      alert('解密失败，请检查密钥是否正确');
+      console.error("解密失败:", error);
+      alert('解密返回null，可能是密钥不匹配或消息格式错误');
     }
-
-    // 清空选中的消息ID，关闭弹窗
     setSelectedMessageId('');
     setShowKeyModal(false);
   };
 
-  // 格式化时间
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-  };
-
   return (
-    <div className="chat-container flex flex-col bg-white">
-      {/* 顶部状态栏 */}
-      <div className="bg-white px-2 py-2 flex items-center justify-between flex-shrink-0 relative z-10">
-        <div
-          className="ml-2"
-          style={{ transform: 'scale(1)', transformOrigin: 'left center' }}
-        >
-          <appkit-button />
-        </div>
-        <Button
-          className="ml-auto flex items-center space-x-1 !px-4 !h-7 !py-1 text-sm rounded-md border-gray-200"
-          variant="outline"
-        >
-          <div className="inline-block align-middle mr-1 w-4 h-4 rounded-full overflow-hidden">
-            <Image
-              src="/top/usa.png"
-              alt="usa"
-              className="w-full h-full object-cover"
-              width={16}
-              height={16}
-            />
+    <div className="bg-gray-100 w-full h-full">
+      <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ height: `${TOP_BAR_HEIGHT}px`}}>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="rounded-full">BNB Chain</Button>
+            <Button variant="outline" className="rounded-full">Connect wallet</Button>
           </div>
-          <span className="text-xs">USA</span>
-        </Button>
+          <Button variant="outline" className="rounded-full flex items-center gap-2">
+            <Image src="/top/usa.png" alt="USA Flag" width={20} height={20} className="rounded-full" />
+            USA
+          </Button>
+        </div>
+        <div className="flex items-center justify-between px-4" style={{ height: `${NAV_BAR_HEIGHT}px` }}>
+            <Button variant="ghost" onClick={() => router.back()}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </Button>
+            <h1 className="text-lg font-semibold text-black">张三</h1>
+            <Button variant="ghost">
+                <MoreHorizontal className="h-6 w-6 text-black" />
+            </Button>
+        </div>
       </div>
 
-      {/* 导航栏 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white flex-shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.back()}
-          className="h-8 w-8 p-0"
-        >
-          <Image
-            src="/chats/arrow_left.png"
-            alt="返回"
-            width={10}
-            height={12}
-          />
-        </Button>
-
-        <h1 className="text-base font-medium text-black">张三</h1>
-
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-          <MoreHorizontal className="h-5 w-5 text-black" />
-        </Button>
-      </div>
-
-      {/* 聊天消息区域 - 自适应高度，内部滚动 */}
-      <div className="flex-1 px-2 bg-[#f4f4f4] overflow-hidden min-h-0">
-        <ScrollArea className="h-full" style={{ touchAction: 'pan-y' }}>
-          <div className="space-y-2 py-2">
-            {messages.map((message, index) => (
-              <div key={message.id} className="space-y-2">
+      <div 
+        className="h-screen w-full"
+        style={{
+            paddingTop: `${TOTAL_HEADER_HEIGHT}px`,
+            paddingBottom: `${FOOTER_HEIGHT + (isActionsOpen ? panelHeight : 0)}px`,
+        }}
+      >
+        <ScrollArea className="h-full w-full" ref={scrollAreaRef}>
+          <div className="p-4 space-y-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  'flex w-full items-start gap-3',
+                  message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
+                )}
+              >
+                <Image
+                  src={message.sender === 'user' ? "/placeholder-user-2.jpg" : "/placeholder-user.jpg"}
+                  alt="Avatar"
+                  width={40}
+                  height={40}
+                  className="rounded-md flex-shrink-0"
+                />
                 <div
                   className={cn(
-                    'flex items-start space-x-3',
-                    message.sender === 'user'
-                      ? 'flex-row-reverse space-x-reverse'
-                      : ''
+                    'max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm',
+                    message.sender === 'user' ? 'bg-purple-600 text-white' : 'bg-white text-black'
                   )}
                 >
-                  {/* 头像 */}
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 rounded-sm bg-gray-300 overflow-hidden">
-                      <Image
-                        src="/placeholder-user.jpg"
-                        alt="用户头像"
-                        width={32}
-                        height={32}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 消息内容容器 */}
-                  <div
-                    className={cn(
-                      'flex-1 flex',
-                      message.sender === 'user'
-                        ? 'justify-end'
-                        : 'justify-start'
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'max-w-[85%] rounded-lg px-2 py-1 relative overflow-hidden',
-                        message.sender === 'user'
-                          ? 'bg-[#95ec69] text-[#303133]'
-                          : 'bg-white text-[#303133] shadow-sm'
-                      )}
-                    >
-                      <p className="text-sm break-all leading-6 font-mono whitespace-pre-wrap mb-1 py-1 overflow-hidden">
-                        {message.content}
-                      </p>
-
-                      {/* 解密按钮 - 在消息内部 */}
-                      <div className="flex items-center justify-start">
-                        <button
-                          onClick={() => {
-                            // 如果已经解密，则不执行任何操作
-                            if (!message.isEncrypted) return;
-                            handleDecryptClick(message.id);
-                          }}
+                  <p className="whitespace-pre-wrap break-all">{message.content}</p>
+                  {(message.isEncrypted || message.originalContent) && (
+                    <div className="flex items-center justify-between mt-2 min-w-[12rem]">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => handleDecryptClick(message.id)}
                           disabled={!message.isEncrypted}
                           className={cn(
-                            'flex items-center rounded-sm mr-2 px-1 py-0.5 transition-colors',
-                            // 根据加密状态设置样式
-                            message.isEncrypted 
-                              ? 'hover:bg-gray-200 cursor-pointer' 
-                              : 'cursor-not-allowed opacity-70',
-                            message.sender === 'user'
-                              ? 'bg-[#c9f3b5]'
-                              : 'bg-[#f9ebeb]'
+                            'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                            message.sender === 'user' ? 'bg-purple-500/80' : 'bg-gray-200/80',
+                            message.isEncrypted && 'hover:bg-black/20',
+                            'disabled:opacity-80 disabled:cursor-not-allowed'
                           )}
                         >
-                          <Image
-                            src="/chats/keyIcon.png"
-                            alt={message.isEncrypted ? "解密" : "已解密"}
-                            width={14}
-                            height={14}
-                            className="mr-0.5"
-                          />
-                          <div className="text-[#606266] text-xs font-medium">
-                            {message.isEncrypted ? '解密' : '已解密'}
-                          </div>
+                          <Image src="/chats/keyIcon.png" alt="解密" width={14} height={14} className="mr-1" />
+                          {message.isEncrypted ? '解密' : '已解密'}
                         </button>
-                        <button
-                          className={cn(
-                            'flex items-center hover:bg-gray-200 rounded-sm px-1 py-0.5 transition-colors',
-                            message.sender === 'user'
-                              ? 'bg-[#c9f3b5]'
-                              : 'bg-[#e8f7ed]'
-                          )}
-                        >
-                          <Image
-                            src="/chats/news.png"
-                            alt="剩余次数"
-                            width={14}
-                            height={14}
-                            className="mr-0.5"
-                          />
-                          <div className="text-[#606266] text-xs font-medium">
-                            165
-                          </div>
-                        </button>
+                        <div className={cn(
+                            'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                             message.sender === 'user' ? 'bg-purple-500/80' : 'bg-gray-200/80',
+                        )}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            156
+                        </div>
                       </div>
+                      <span className={cn("text-xs", message.sender === 'user' ? 'text-purple-200' : 'text-gray-400')}>
+                        {dayjs(message.timestamp).format('MM/DD HH:mm:ss')}
+                      </span>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}
-            <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
       </div>
 
-      {/* 底部输入区域 - 固定在底部 */}
-      <div className="bg-[#f4f4f4] border-t border-gray-200 flex-shrink-0 relative z-20">
-        <div className="px-4 py-3 safe-area-inset-bottom">
-          <div className="flex items-center space-x-3">
-            {/* 语音按钮 */}
-            <Button variant="ghost" size="sm" className="p-0 text-gray-500">
-              <div className="w-5 h-5 flex items-center justify-center">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.49 6-3.3 6-6.72h-1.7z" />
-                </svg>
-              </div>
-            </Button>
-
-            <div className="flex-1 relative">
-              <Input
-                ref={inputRef}
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder=""
-                className="bg-white border-0 focus:ring-0 focus:ring-offset-0 focus:outline-none focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 rounded-sm px-2 text-sm"
-                style={{ fontSize: '16px' }} // 防止iOS缩放
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck="false"
-              />
-            </div>
-
-            {/* 表情按钮 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 w-5 p-0 text-gray-500"
-            >
-              <Smile className="h-5 w-5" />
-            </Button>
-
-            {/* 发送按钮 */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-5 w-5 p-0 text-gray-500"
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim()}
-            >
-              {inputMessage.trim() ? (
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  className="text-blue-500"
-                >
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                </svg>
-              ) : (
-                <Plus className="h-5 w-5" />
-              )}
-            </Button>
+      <div 
+        className="fixed bottom-0 left-0 right-0 z-20"
+        style={{ paddingBottom: `env(safe-area-inset-bottom)` }}
+      >
+        <div className="p-2 flex items-center gap-3 bg-gray-100 border-t" style={{ height: `${FOOTER_HEIGHT}px` }}>
+          <Button variant="ghost" className="flex-shrink-0">
+              <AudioLines className="h-6 w-6 text-gray-500" />
+          </Button>
+          <Input 
+            ref={inputRef} 
+            value={inputMessage} 
+            onChange={(e) => setInputMessage(e.target.value)} 
+            onKeyPress={handleKeyPress} 
+            placeholder="Type a message"
+            onFocus={() => setIsActionsOpen(false)}
+            className="flex-1 bg-white border-none rounded-full h-11 px-4 text-base focus-visible:ring-1 focus-visible:ring-blue-500" 
+            autoComplete="off" 
+          />
+          <Button variant="ghost" className="flex-shrink-0">
+              <Smile className="h-6 w-6 text-gray-500" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            onClick={handleOpenActions}
+            className="flex-shrink-0 bg-white rounded-full w-9 h-9"
+          >
+              <Plus className="h-6 w-6 text-gray-600" />
+          </Button>
+        </div>
+        
+        <div
+          className={cn('bg-gray-100 overflow-hidden transition-all duration-300 ease-in-out')}
+          style={{ height: isActionsOpen ? `${panelHeight}px` : '0px' }}
+        >
+          <div className="p-4 pt-6 grid grid-cols-4 gap-y-6 gap-x-4 text-center">
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><ImageIcon className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">Album</span></div>
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Camera className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">Photography</span></div>
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Phone className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">Voice call</span></div>
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Bot className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">AI</span></div>
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Gift className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">Red envelope</span></div>
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Redo className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">Transfer</span></div>
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><ShoppingCart className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">Send goods</span></div>
+             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1"><div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Vote className="h-7 w-7 text-gray-600" /></div><span className="text-xs text-gray-500">Vote</span></div>
           </div>
         </div>
       </div>
 
-      {/* 密钥管理弹窗 */}
       <KeyManagementModal
         isOpen={showKeyModal}
         onClose={() => setShowKeyModal(false)}
