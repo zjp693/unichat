@@ -20,6 +20,7 @@ interface Message {
   timestamp: Date;
   type: 'text' | 'image';
   isEncrypted?: boolean;
+  originalContent?: string; // 保存原始加密内容
 }
 
 export default function ChatPage() {
@@ -122,15 +123,22 @@ export default function ChatPage() {
         if (keys.length > 0) {
           // 优先使用用户的密钥
           publicKeyToUse = keys[0].publicKey;
+          console.log('使用用户密钥进行加密');
         } else {
           // 没有用户密钥时，使用默认密钥
           publicKeyToUse = DEFAULT_KEY_PAIR.publicKey;
+          console.log('使用默认密钥进行加密');
         }
         
         content = encryptMessage(inputMessage.trim(), publicKeyToUse);
         isEncrypted = true;
+        console.log('消息加密成功');
       } catch (error) {
-        console.error('加密失败:', error);
+        console.error('加密失败详情:', error);
+        
+        // 显示用户友好的错误提示
+        alert(`加密失败: ${error instanceof Error ? error.message : '未知错误'}\n\n消息将以明文形式发送。\n\n建议：\n1. 检查密钥是否有效\n2. 尝试重新生成密钥\n3. 刷新页面重试`);
+        
         // 加密失败时保持原文，但标记为未加密
         isEncrypted = false;
       }
@@ -193,12 +201,16 @@ export default function ChatPage() {
           return msg;
         })
       );
+      
+      console.log('解密成功');
     } catch (error) {
       console.error('解密失败:', error);
       alert('解密失败，请检查密钥是否正确');
     }
 
+    // 清空选中的消息ID，关闭弹窗
     setSelectedMessageId('');
+    setShowKeyModal(false);
   };
 
   // 格式化时间
@@ -311,9 +323,18 @@ export default function ChatPage() {
                       {/* 解密按钮 - 在消息内部 */}
                       <div className="flex items-center justify-start">
                         <button
-                          onClick={() => handleDecryptClick(message.id)}
+                          onClick={() => {
+                            // 如果已经解密，则不执行任何操作
+                            if (!message.isEncrypted) return;
+                            handleDecryptClick(message.id);
+                          }}
+                          disabled={!message.isEncrypted}
                           className={cn(
-                            'flex items-center hover:bg-gray-200 rounded-sm mr-2 px-1 py-0.5 transition-colors',
+                            'flex items-center rounded-sm mr-2 px-1 py-0.5 transition-colors',
+                            // 根据加密状态设置样式
+                            message.isEncrypted 
+                              ? 'hover:bg-gray-200 cursor-pointer' 
+                              : 'cursor-not-allowed opacity-70',
                             message.sender === 'user'
                               ? 'bg-[#c9f3b5]'
                               : 'bg-[#f9ebeb]'
@@ -321,13 +342,13 @@ export default function ChatPage() {
                         >
                           <Image
                             src="/chats/keyIcon.png"
-                            alt="解密"
+                            alt={message.isEncrypted ? "解密" : "已解密"}
                             width={14}
                             height={14}
                             className="mr-0.5"
                           />
                           <div className="text-[#606266] text-xs font-medium">
-                            解密
+                            {message.isEncrypted ? '解密' : '已解密'}
                           </div>
                         </button>
                         <button

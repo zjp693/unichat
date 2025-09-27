@@ -35,13 +35,26 @@ export const KeyManagementModal = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // 只在弹框首次打开时设置初始步骤
+  // 只在弹框首次打开时设置初始步骤和默认选择的密钥
   useEffect(() => {
     if (isOpen) {
       const currentStep = keys.length > 0 ? 'select' : 'generate';
       setStep(currentStep);
+      
+      // 如果有密钥且没有选中的密钥，默认选择第一个
+      if (keys.length > 0 && !selectedKeyId) {
+        setSelectedKeyId(keys[0].id);
+      }
+      
+      // 每次打开弹窗时清空密码输入框
+      setPrivateKeyInput('');
+    } else {
+      // 关闭弹窗时重置所有状态
+      setPrivateKeyInput('');
+      setPasswordInput('');
+      setIsDropdownOpen(false);
     }
-  }, [isOpen, keys.length]);
+  }, [isOpen, keys.length, selectedKeyId]);
 
   // 点击外部关闭下拉列表
   useEffect(() => {
@@ -136,6 +149,8 @@ export const KeyManagementModal = ({
 
   const handleKeySelect = (key: KeyPair) => {
     onKeySelect(key);
+    // 解密成功后清空密码输入框
+    setPrivateKeyInput('');
     onClose();
   };
 
@@ -178,37 +193,28 @@ export const KeyManagementModal = ({
                 >
                   {/* 显示当前选中密钥的详细信息 */}
                   <div className="absolute left-4 top-3 text-xs text-gray-600 font-mono leading-tight">
-                    {selectedKeyId ? (
-                      <div>
-                        <div className="text-orange-500 font-bold text-base mb-1">
-                          {String(
-                            keys.findIndex((key) => key.id === selectedKeyId) +
-                              1
-                          ).padStart(3, '0')}
-                        </div>
-                        <div>
-                          {keys
-                            .find((key) => key.id === selectedKeyId)
-                            ?.publicKey.substring(0, 40)}
-                        </div>
-                        <div>
-                          {keys
-                            .find((key) => key.id === selectedKeyId)
-                            ?.publicKey.substring(40, 80)}
-                          ......
-                        </div>
-                      </div>
-                    ) : (
-                      keys.length > 0 && (
+                    {(() => {
+                      // 获取当前应该显示的密钥：优先显示选中的，否则显示第一个
+                      const currentKey = selectedKeyId 
+                        ? keys.find((key) => key.id === selectedKeyId)
+                        : keys[0];
+                      
+                      const currentIndex = selectedKeyId 
+                        ? keys.findIndex((key) => key.id === selectedKeyId)
+                        : 0;
+                        
+                      if (!currentKey) return null;
+                      
+                      return (
                         <div>
                           <div className="text-orange-500 font-bold text-base mb-1">
-                            001
+                            {String(currentIndex + 1).padStart(3, '0')}
                           </div>
-                          <div>{keys[0].publicKey.substring(0, 40)}</div>
-                          <div>{keys[0].publicKey.substring(40, 80)}......</div>
+                          <div>{currentKey.publicKey.substring(0, 40)}</div>
+                          <div>{currentKey.publicKey.substring(40, 80)}......</div>
                         </div>
-                      )
-                    )}
+                      );
+                    })()}
                   </div>
                   {/* 下拉箭头 */}
                   <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -228,25 +234,36 @@ export const KeyManagementModal = ({
                       scrollbarWidth: 'thin'
                     }}
                   >
-                    {keys.map((key, index) => (
-                      <div
-                        key={key.id}
-                        onClick={() => {
-                          setSelectedKeyId(key.id);
-                          setIsDropdownOpen(false);
-                          setPrivateKeyInput(''); // 重置密码输入
-                        }}
-                        className="p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                      >
-                        <div className="text-xs text-gray-600 font-mono leading-tight">
-                          <div className="text-orange-500 font-bold text-base mb-1">
-                            {String(index + 1).padStart(3, '0')}
+                    {keys.map((key, index) => {
+                      // 判断当前密钥是否被选中（包括默认选中第一个的情况）
+                      const isSelected = selectedKeyId 
+                        ? key.id === selectedKeyId 
+                        : index === 0;
+                        
+                      return (
+                        <div
+                          key={key.id}
+                          onClick={() => {
+                            setSelectedKeyId(key.id);
+                            setIsDropdownOpen(false);
+                            setPrivateKeyInput(''); // 重置密码输入
+                          }}
+                          className={`p-4 cursor-pointer border-b border-gray-100 last:border-b-0 ${
+                            isSelected 
+                              ? 'bg-blue-50 hover:bg-blue-100' 
+                              : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="text-xs text-gray-600 font-mono leading-tight">
+                            <div className="text-orange-500 font-bold text-base mb-1">
+                              {String(index + 1).padStart(3, '0')}
+                            </div>
+                            <div>{key.publicKey.substring(0, 40)}</div>
+                            <div>{key.publicKey.substring(40, 80)}......</div>
                           </div>
-                          <div>{key.publicKey.substring(0, 40)}</div>
-                          <div>{key.publicKey.substring(40, 80)}......</div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -270,8 +287,13 @@ export const KeyManagementModal = ({
               {/* 解密按钮 */}
               <Button
                 onClick={() => {
-                  if (!selectedKeyId) {
-                    alert('请选择一个私钥');
+                  // 获取当前要使用的密钥：优先使用选中的，否则使用第一个
+                  const keyToUse = selectedKeyId 
+                    ? keys.find((key) => key.id === selectedKeyId)
+                    : keys[0];
+
+                  if (!keyToUse) {
+                    alert('没有可用的私钥');
                     return;
                   }
 
@@ -280,29 +302,25 @@ export const KeyManagementModal = ({
                     return;
                   }
 
-                  const selectedKey = keys.find(
-                    (key) => key.id === selectedKeyId
+                  // 验证密码是否正确
+                  const savedKeys = JSON.parse(
+                    localStorage.getItem('chat_keys') || '[]'
                   );
-                  if (selectedKey) {
-                    // 验证密码是否正确
-                    const savedKeys = JSON.parse(
-                      localStorage.getItem('chat_keys') || '[]'
-                    );
-                    const keyWithPassword = savedKeys.find(
-                      (k: any) => k.id === selectedKey.id
-                    );
-                    console.log(keyWithPassword, '111');
+                  const keyWithPassword = savedKeys.find(
+                    (k: any) => k.id === keyToUse.id
+                  );
+                  console.log(keyWithPassword, '验证密钥密码');
 
-                    if (
-                      keyWithPassword &&
-                      keyWithPassword.password !== privateKeyInput
-                    ) {
-                      alert('密码错误，请重新输入');
-                      return;
-                    }
-
-                    handleKeySelect(selectedKey);
+                  if (
+                    keyWithPassword &&
+                    keyWithPassword.password !== privateKeyInput
+                  ) {
+                    alert('密码错误，请重新输入');
+                    return;
                   }
+
+                  // 解密成功，调用回调函数
+                  handleKeySelect(keyToUse);
                 }}
                 className="w-full bg-[#5637f5] hover:bg-[#5637f5] active:bg-[#5637f5] focus:bg-[#5637f5] text-white rounded-lg text-base font-normal"
               >
@@ -317,7 +335,6 @@ export const KeyManagementModal = ({
               <h3 className="text-base font-normal text-black">生成密钥</h3>
               <Button
                 variant="ghost"
-                size="icon"
                 onClick={() => {
                   // 如果没有密钥，直接关闭弹框；如果有密钥，返回选择界面
                   if (keys.length === 0) {
@@ -450,7 +467,6 @@ export const KeyManagementModal = ({
               <h3 className="text-base font-normal text-black">导入私钥</h3>
               <Button
                 variant="ghost"
-                size="icon"
                 onClick={() => setStep('select')}
                 className="h-6 w-6 p-0"
               >
