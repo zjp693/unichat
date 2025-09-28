@@ -174,7 +174,7 @@ export const KeyManagementModal = ({
               </h3>
               {/* <Button
                 variant="ghost"
-                size="icon"
+                size="sm"
                 onClick={onClose}
                 className="h-6 w-6 p-0"
               >
