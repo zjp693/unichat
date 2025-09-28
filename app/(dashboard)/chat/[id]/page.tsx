@@ -1,6 +1,8 @@
 'use client';
 
+// 导入React的核心钩子函数
 import { useState, useRef, useEffect } from 'react';
+// 导入UI组件库和工具
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,60 +15,50 @@ import {
   Redo,
   ShoppingCart,
   Vote,
-  Gift
+  Gift,
+  Plus,
+  Smile,
+  AudioLines,
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
+// 导入加密功能相关的模块
 import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
 import { useKeyManagement } from '@/hooks/useKeyManagement';
 import { KeyPair, chatEncryption, DEFAULT_KEY_PAIR } from '@/lib/encryption';
+// 导入dayjs用于格式化时间
 import dayjs from 'dayjs';
 
-// 消息类型定义
+// 定义消息对象的数据结构
 interface Message {
   id: string;
   content: string;
   sender: 'user' | 'other';
-  timestamp: Date;
+  timestamp: Date | string; // 允许字符串以便从API接收
   type: 'text' | 'image';
   isEncrypted?: boolean;
   originalContent?: string;
+  status?: 'sending' | 'failed'; // 用于UI反馈发送状态
 }
 
+// 定义布局常量
 const TOP_BAR_HEIGHT = 56;
 const NAV_BAR_HEIGHT = 56;
 const FOOTER_HEIGHT = 58;
 const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
+// 定义用于在浏览器本地存储中保存最新CID的Key
+const LOCAL_STORAGE_KEY = 'chat_latest_cid';
 
 export default function ChatPage() {
+  // --- 基础钩子 ---
   const params = useParams();
   const router = useRouter();
   const { decryptMessage, encryptMessage, keys } = useKeyManagement();
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      content:
-        'QPPMDEWEYBTI5L003WQV8AXQGMIPIVEUFLUC7X5QKWD0GBQ7S2E20GWTXXR47JRU7V3KYXI+HNZYVR60UM0PULFVIEBCH1TG1M5HIEG+DWKKQVW34MR5X8UIIRQKFTNWT3JGAKCPMIUD/H51XZA/R2YVITMD8FYTDW9NC5+PE=',
-      sender: 'other',
-      timestamp: new Date('2025-09-27T10:32:00'),
-      type: 'text',
-      isEncrypted: true,
-      originalContent: 'Original message before encryption.'
-    },
-    {
-      id: '2',
-      content:
-        'QPPMDEWEYBTI5L003WQV8AXQGMIPIVEUFLUC7X5QKWD0GBQ7S2E20GWTXXR47JRU7V3KYXI+HNZYVR60UM0PULFVIEBCH1TG1M5HIEG+DWKKQVW34MR5X8UIIRQKFTNWT3JGAKCPMIUD/H51XZA/R2YVITMD8FYTDW9NC5+PE=',
-      sender: 'user',
-      timestamp: new Date('2025-09-27T10:34:00'),
-      type: 'text',
-      isEncrypted: true,
-      originalContent: 'Original message for user sender.'
-    }
-  ]);
-
+  // --- State 管理 ---
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(true); // 用于在获取历史记录时显示加载动画
   const [inputMessage, setInputMessage] = useState('');
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
@@ -74,10 +66,114 @@ export default function ChatPage() {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(250);
 
+  // --- Refs 管理 ---
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(messages.length);
 
+  // --- 数据获取与同步 ---
+
+  // 页面加载时，从localStorage读取指针，调用API获取历史记录
+  useEffect(() => {
+    const fetchHistory = async () => {
+      setIsLoading(true);
+      // 从浏览器本地存储中获取最新消息的CID
+      const latestCid = localStorage.getItem(LOCAL_STORAGE_KEY);
+
+      // 如果没有CID，说明是新对话，无需加载
+      if (!latestCid) {
+        setMessages([]);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        // 调用我们自己的后端API来获取完整的历史记录
+        const response = await fetch(`/api/chat/history?cid=${latestCid}`);
+        if (!response.ok) throw new Error('API request failed');
+        
+        const data = await response.json();
+        if (data.history) {
+          // 将从后端获取的字符串时间戳转换为Date对象，以便格式化
+          const formattedMessages = data.history.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp),
+          }));
+          setMessages(formattedMessages);
+        }
+      } catch (error) {
+        console.error('获取聊天记录失败:', error);
+      }
+      setIsLoading(false);
+    };
+
+    fetchHistory();
+  }, []);
+
+  // 发送新消息（加密 -> 乐观更新UI -> 调用API上传）
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim()) return;
+
+    const originalMessageText = inputMessage;
+    setInputMessage('');
+
+    // 1. 加密消息
+    let encryptedContent: string;
+    try {
+      const publicKeyToUse =
+        keys.length > 0 ? keys[0].publicKey : DEFAULT_KEY_PAIR.publicKey;
+      encryptedContent = encryptMessage(originalMessageText, publicKeyToUse);
+    } catch (error) {
+      alert('加密失败!');
+      return;
+    }
+
+    const newMessageObject: Message = {
+      id: Date.now().toString(),
+      content: encryptedContent, // 保存的是密文
+      sender: 'user',
+      timestamp: new Date(),
+      type: 'text',
+      isEncrypted: true,
+      originalContent: originalMessageText,
+    };
+
+    // 2. 乐观更新UI：立即在界面上显示新消息，让用户感觉流畅
+    setMessages((prev) => [...prev, newMessageObject]);
+
+    try {
+      // 从localStorage获取前一个CID
+      const previousCid = localStorage.getItem(LOCAL_STORAGE_KEY);
+
+      // 3. 调用后端API，在后台进行上传并更新指针
+      const response = await fetch('/api/chat/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newMessageObject: {
+            ...newMessageObject,
+            timestamp: (newMessageObject.timestamp as Date).toISOString(),
+          },
+          previousCid: previousCid,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success && result.newCid) {
+        // 4. **关键一步**: 将后端返回的最新CID保存回localStorage
+        localStorage.setItem(LOCAL_STORAGE_KEY, result.newCid);
+      } else {
+        throw new Error(result.error || '未知的API错误');
+      }
+    } catch (error) {
+      console.error('发送消息失败:', error);
+      // 可以在此更新UI显示发送失败
+    }
+  };
+
+  // --- 其他交互逻辑 (useEffect, handlers) ---
+
+  // 动态"学习"软键盘高度
   useEffect(() => {
     if (!isClient) return;
     const listener = () => {
@@ -92,6 +188,7 @@ export default function ChatPage() {
     return () => window.visualViewport?.removeEventListener('resize', listener);
   }, [isClient]);
 
+  // 滚动到底部的辅助函数
   const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
     if (!scrollAreaRef.current) return;
     const viewport = scrollAreaRef.current.querySelector(
@@ -102,10 +199,12 @@ export default function ChatPage() {
     }
   };
 
+  // 客户端挂载标记
   useEffect(() => {
     setIsClient(true);
   }, []);
 
+  // 核心交互钩子：处理滚动和聚焦
   useEffect(() => {
     if (isClient) {
       setTimeout(() => scrollToBottom('smooth'), 50);
@@ -117,43 +216,12 @@ export default function ChatPage() {
     }
   }, [messages, isActionsOpen, isClient]);
 
+  // 打开底部功能面板
   const handleOpenActions = () => {
     setIsActionsOpen(true);
   };
 
-  const handleSendMessage = () => {
-    if (!inputMessage.trim()) return;
-    let content = inputMessage.trim();
-    let isEncrypted = true;
-    try {
-      const publicKeyToUse =
-        keys.length > 0 ? keys[0].publicKey : DEFAULT_KEY_PAIR.publicKey;
-      console.log('加密消息:', {
-        message: inputMessage.trim(),
-        keyId: keys.length > 0 ? keys[0].id : 'default',
-        keyName: keys.length > 0 ? keys[0].name : 'default',
-        publicKeyLength: publicKeyToUse.length
-      });
-      content = encryptMessage(inputMessage.trim(), publicKeyToUse);
-      console.log('加密成功:', content.substring(0, 50) + '...');
-    } catch (error) {
-      content = '⚠️ 加密失败: ' + inputMessage.trim();
-      isEncrypted = false;
-      alert(`加密失败`);
-    }
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      content,
-      sender: 'user',
-      timestamp: new Date(),
-      type: 'text',
-      isEncrypted,
-      originalContent: inputMessage.trim()
-    };
-    setMessages((prev) => [...prev, newMessage]);
-    setInputMessage('');
-  };
-
+  // 处理回车键发送
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -161,6 +229,7 @@ export default function ChatPage() {
     }
   };
 
+  // 点击"解密"按钮
   const handleDecryptClick = (messageId: string) => {
     const message = messages.find((msg) => msg.id === messageId);
     if (!message || !message.isEncrypted) return;
@@ -168,23 +237,14 @@ export default function ChatPage() {
     setShowKeyModal(true);
   };
 
+  // 在弹窗中选择密钥后进行解密
   const handleKeySelect = (key: KeyPair) => {
     if (!selectedMessageId) return;
     const message = messages.find((msg) => msg.id === selectedMessageId);
     if (!message) return;
-
-    console.log('尝试解密消息:', {
-      messageId: message.id,
-      encryptedContent: message.content.substring(0, 50) + '...',
-      keyId: key.id,
-      keyName: key.name,
-      privateKeyLength: key.privateKey.length
-    });
-
     try {
       const decryptedContent = decryptMessage(message.content, key.privateKey);
       if (decryptedContent) {
-        console.log('解密成功:', decryptedContent);
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === selectedMessageId
@@ -193,20 +253,30 @@ export default function ChatPage() {
           )
         );
       } else {
-        console.error('解密返回null');
         alert('解密返回null，可能是密钥不匹配或消息格式错误');
       }
     } catch (error) {
-      console.error('解密失败:', error);
       alert('解密失败，可能是密钥不匹配或消息格式错误');
     }
     setSelectedMessageId('');
     setShowKeyModal(false);
   };
 
+  // --- JSX 渲染 ---
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        正在加载...
+      </div>
+    );
+  }
+
   return (
+    // 根容器
     <div className="bg-gray-100 w-full h-full">
+      {/* 固定的头部区域 */}
       <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
+        {/* 顶部钱包栏 */}
         <div
           className="flex items-center justify-between px-4 py-3 border-b"
           style={{ height: `${TOP_BAR_HEIGHT}px` }}
@@ -233,6 +303,7 @@ export default function ChatPage() {
             USA
           </Button>
         </div>
+        {/* 聊天导航栏 */}
         <div
           className="flex items-center justify-between px-4"
           style={{ height: `${NAV_BAR_HEIGHT}px` }}
@@ -261,16 +332,19 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {/* 滚动的内容区域 */}
       <div
         className="h-screen w-full"
+        // 动态内边距：为固定的头部和底部留出空间
         style={{
           paddingTop: `${TOTAL_HEADER_HEIGHT}px`,
-          paddingBottom: `${FOOTER_HEIGHT + (isActionsOpen ? panelHeight : 0)}px`
+          paddingBottom: `${FOOTER_HEIGHT + (isActionsOpen ? panelHeight : 0)}px`,
         }}
       >
         <ScrollArea className="h-full w-full" ref={scrollAreaRef}>
           <div className="p-4 space-y-5">
             {messages.map((message) => (
+              // 消息行
               <div
                 key={message.id}
                 className={cn(
@@ -303,6 +377,7 @@ export default function ChatPage() {
                   {(message.isEncrypted || message.originalContent) && (
                     <div className="flex items-center justify-between mt-2 min-w-[12rem]">
                       <div className="flex items-center gap-2">
+                        {/* 解密按钮 */}
                         <button
                           onClick={() => handleDecryptClick(message.id)}
                           disabled={!message.isEncrypted}
@@ -324,6 +399,7 @@ export default function ChatPage() {
                           />
                           {message.isEncrypted ? '解密' : '已解密'}
                         </button>
+                        {/* 计数器按钮 */}
                         <div
                           className={cn(
                             'flex items-center rounded-md px-2 py-1 text-xs font-medium',
@@ -350,6 +426,7 @@ export default function ChatPage() {
                           156
                         </div>
                       </div>
+                      {/* 时间戳 */}
                       <span
                         className={cn(
                           'text-xs pl-2',
@@ -369,12 +446,14 @@ export default function ChatPage() {
         </ScrollArea>
       </div>
 
+      {/* 固定的底部区域 */}
       <div
         className="fixed bottom-0 left-0 right-0 z-20"
         style={{ paddingBottom: `env(safe-area-inset-bottom)` }}
       >
+        {/* 输入框栏 */}
         <div
-          className="p-2 flex items-center  bg-gray-100 border-t  "
+          className="p-2 flex items-center bg-gray-100 border-t"
           style={{ height: `${FOOTER_HEIGHT}px` }}
         >
           <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
@@ -408,7 +487,7 @@ export default function ChatPage() {
           <Button
             variant="ghost"
             onClick={handleOpenActions}
-            className="flex-shrink-0 rounded-full pl-0  pr-2 py-0"
+            className="flex-shrink-0 rounded-full pl-0 pr-2 py-0"
           >
             <Image
               src="/chats/plus.png"
@@ -419,7 +498,7 @@ export default function ChatPage() {
             />
           </Button>
         </div>
-
+        {/* 功能面板 */}
         <div
           className={cn(
             'bg-gray-100 overflow-hidden transition-all duration-300 ease-in-out'
@@ -427,82 +506,42 @@ export default function ChatPage() {
           style={{ height: isActionsOpen ? `${panelHeight}px` : '0px' }}
         >
           <div className="p-4 pt-6 grid grid-cols-4 gap-y-6 gap-x-4 text-center">
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <ImageIcon className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><ImageIcon className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">Album</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Camera className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Camera className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">Photography</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Phone className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Phone className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">Voice call</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Bot className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Bot className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">AI</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Gift className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Gift className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">Red envelope</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Redo className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Redo className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">Transfer</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <ShoppingCart className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><ShoppingCart className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">Send goods</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Vote className="h-7 w-7 text-gray-600" />
-              </div>
+            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Vote className="h-7 w-7 text-gray-600" /></div>
               <span className="text-xs text-gray-500">Vote</span>
             </div>
           </div>
         </div>
       </div>
-
+      {/* 密钥管理弹窗 */}
       <KeyManagementModal
         isOpen={showKeyModal}
         onClose={() => setShowKeyModal(false)}
