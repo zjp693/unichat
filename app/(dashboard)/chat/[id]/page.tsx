@@ -64,7 +64,7 @@ export default function ChatPage() {
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
   const [isClient, setIsClient] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(250);
+  const [panelHeight, setPanelHeight] = useState(0); // 初始值为0
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLInputElement>(null);
@@ -176,17 +176,60 @@ export default function ChatPage() {
   // 动态"学习"软键盘高度
   useEffect(() => {
     if (!isClient) return;
-    const listener = () => {
-      const currentKeyboardHeight =
-        window.innerHeight -
-        (window.visualViewport?.height ?? window.innerHeight);
-      if (currentKeyboardHeight > 100) {
-        setPanelHeight(currentKeyboardHeight);
+    
+    let timeoutId: NodeJS.Timeout;
+    
+    const updateKeyboardHeight = () => {
+      // 使用 visualViewport API 获取更准确的高度信息
+      if (window.visualViewport) {
+        const keyboardHeight = window.innerHeight - window.visualViewport.height;
+        
+        // 只有当键盘高度足够大时才更新（避免误判）
+        if (keyboardHeight > 100) {
+          setPanelHeight(keyboardHeight);
+          // 当键盘弹起时，确保滚动到底部
+          timeoutId = setTimeout(() => scrollToBottom('smooth'), 100);
+        } else if (keyboardHeight <= 100 && panelHeight > 250) {
+          // 键盘收起时也滚动到底部
+          timeoutId = setTimeout(() => scrollToBottom('smooth'), 100);
+          // 重置面板高度为默认值
+          setPanelHeight(250);
+        } else if (keyboardHeight <= 100 && panelHeight > 0 && panelHeight <= 250) {
+          // 如果面板高度在0到250之间，重置为0
+          setPanelHeight(0);
+        }
       }
     };
-    window.visualViewport?.addEventListener('resize', listener);
-    return () => window.visualViewport?.removeEventListener('resize', listener);
-  }, [isClient]);
+
+    // 同时监听 resize 和 scroll 事件以提高兼容性
+    window.visualViewport?.addEventListener('resize', updateKeyboardHeight);
+    window.visualViewport?.addEventListener('scroll', updateKeyboardHeight);
+    
+    // 添加 focusin 事件监听器，当输入框获得焦点时确保滚动到底部
+    const handleFocusIn = (e: FocusEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        // 确保输入框可见
+        setTimeout(() => {
+          if (window.visualViewport) {
+            const keyboardHeight = window.innerHeight - window.visualViewport.height;
+            if (keyboardHeight > 100) {
+              setPanelHeight(keyboardHeight);
+            }
+          }
+          scrollToBottom('smooth');
+        }, 300); // 增加延迟确保键盘完全弹出
+      }
+    };
+    
+    document.addEventListener('focusin', handleFocusIn);
+    
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateKeyboardHeight);
+      window.visualViewport?.removeEventListener('scroll', updateKeyboardHeight);
+      document.removeEventListener('focusin', handleFocusIn);
+      clearTimeout(timeoutId);
+    };
+  }, [isClient, panelHeight]);
 
   // 滚动到底部的辅助函数
   const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
@@ -195,6 +238,13 @@ export default function ChatPage() {
       '[data-radix-scroll-area-viewport]'
     );
     if (viewport) {
+      // 在iOS上确保输入框可见
+      if (window.visualViewport) {
+        const keyboardHeight = window.innerHeight - window.visualViewport.height;
+        if (keyboardHeight > 100) {
+          setPanelHeight(keyboardHeight);
+        }
+      }
       viewport.scrollTo({ top: viewport.scrollHeight, behavior });
     }
   };
@@ -207,17 +257,21 @@ export default function ChatPage() {
   // 核心交互钩子：处理滚动和聚焦
   useEffect(() => {
     if (isClient) {
-      setTimeout(() => scrollToBottom('smooth'), 50);
-      if (messages.length > prevMessagesLengthRef.current && !isActionsOpen) {
-        const focusTimeout = setTimeout(() => inputRef.current?.focus(), 300);
-        return () => clearTimeout(focusTimeout);
-      }
+      // 延迟滚动以确保DOM已更新
+      const scrollTimeout = setTimeout(() => scrollToBottom('smooth'), 0);
+      
       prevMessagesLengthRef.current = messages.length;
+      
+      return () => clearTimeout(scrollTimeout);
     }
   }, [messages, isActionsOpen, isClient]);
 
   // 打开底部功能面板
   const handleOpenActions = () => {
+    // 如果panelHeight为0（表示软键盘从未打开过），则使用默认高度250
+    if (panelHeight === 0) {
+      setPanelHeight(250);
+    }
     setIsActionsOpen(true);
   };
 
@@ -273,7 +327,7 @@ export default function ChatPage() {
 
   return (
     // 根容器
-    <div className="bg-gray-100 w-full h-full">
+    <div className="bg-gray-100 w-full h-full relative">
       {/* 固定的头部区域 */}
       <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
         {/* 顶部钱包栏 */}
@@ -333,12 +387,15 @@ export default function ChatPage() {
       </div>
 
       {/* 滚动的内容区域 */}
-      <div
-        className="h-screen w-full"
-        // 动态内边距：为固定的头部和底部留出空间
+      <div 
+        className="fixed w-full overflow-hidden"
         style={{
-          paddingTop: `${TOTAL_HEADER_HEIGHT}px`,
-          paddingBottom: `${FOOTER_HEIGHT + (isActionsOpen ? panelHeight : 0)}px`,
+          top: `${TOTAL_HEADER_HEIGHT}px`,
+          bottom: `${FOOTER_HEIGHT + (isActionsOpen ? panelHeight : 0)}px`,
+          left: 0,
+          right: 0,
+          // 添加过渡动画使布局变化更平滑
+          transition: 'bottom 0.3s ease-in-out'
         }}
       >
         <ScrollArea className="h-full w-full" ref={scrollAreaRef}>
@@ -449,12 +506,22 @@ export default function ChatPage() {
       {/* 固定的底部区域 */}
       <div
         className="fixed bottom-0 left-0 right-0 z-20"
-        style={{ paddingBottom: `env(safe-area-inset-bottom)` }}
+        style={{ 
+          paddingBottom: `env(safe-area-inset-bottom, 0px)`,
+          transform: isActionsOpen ? `translateY(-0px)` : 'translateY(0)',
+          transition: 'transform 0.3s ease-in-out',
+          // 添加背景色以确保输入框区域可见
+          backgroundColor: 'white'
+        }}
       >
         {/* 输入框栏 */}
         <div
           className="p-2 flex items-center bg-gray-100 border-t"
-          style={{ height: `${FOOTER_HEIGHT}px` }}
+          style={{ 
+            height: `${FOOTER_HEIGHT}px`,
+            // 添加过渡动画使布局变化更平滑
+            transition: 'all 0.3s ease-in-out'
+          }}
         >
           <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
             <Image
@@ -471,7 +538,20 @@ export default function ChatPage() {
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder=""
-            onFocus={() => setIsActionsOpen(false)}
+            onFocus={() => {
+              setIsActionsOpen(false);
+              // 焦点聚焦时滚动到底部并确保输入框可见
+              setTimeout(() => {
+                scrollToBottom('smooth');
+                // 检查键盘高度并更新面板高度
+                if (window.visualViewport) {
+                  const keyboardHeight = window.innerHeight - window.visualViewport.height;
+                  if (keyboardHeight > 100) {
+                    setPanelHeight(keyboardHeight);
+                  }
+                }
+              }, 300);
+            }}
             className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-1 focus-visible:ring-transparent"
             autoComplete="off"
           />
@@ -501,9 +581,12 @@ export default function ChatPage() {
         {/* 功能面板 */}
         <div
           className={cn(
-            'bg-gray-100 overflow-hidden transition-all duration-300 ease-in-out'
+            'bg-gray-100 overflow-hidden'
           )}
-          style={{ height: isActionsOpen ? `${panelHeight}px` : '0px' }}
+          style={{ 
+            height: isActionsOpen ? `${panelHeight}px` : '0px',
+            transition: 'height 0.3s ease-in-out'
+          }}
         >
           <div className="p-4 pt-6 grid grid-cols-4 gap-y-6 gap-x-4 text-center">
             <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
