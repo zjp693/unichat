@@ -18,7 +18,7 @@ import {
   Gift,
   Plus,
   Smile,
-  AudioLines,
+  AudioLines
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
@@ -54,7 +54,8 @@ export default function ChatPage() {
   // --- 基础钩子 ---
   const params = useParams();
   const router = useRouter();
-  const { decryptMessage, encryptMessage, keys } = useKeyManagement();
+  const { decryptMessage, encryptMessage, keys, decryptMessages } =
+    useKeyManagement();
 
   // --- State 管理 ---
   const [messages, setMessages] = useState<Message[]>([]);
@@ -91,13 +92,13 @@ export default function ChatPage() {
         // 调用我们自己的后端API来获取完整的历史记录
         const response = await fetch(`/api/chat/history?cid=${latestCid}`);
         if (!response.ok) throw new Error('API request failed');
-        
+
         const data = await response.json();
         if (data.history) {
           // 将从后端获取的字符串时间戳转换为Date对象，以便格式化
           const formattedMessages = data.history.map((msg: any) => ({
             ...msg,
-            timestamp: new Date(msg.timestamp),
+            timestamp: new Date(msg.timestamp)
           }));
           setMessages(formattedMessages);
         }
@@ -135,7 +136,7 @@ export default function ChatPage() {
       timestamp: new Date(),
       type: 'text',
       isEncrypted: true,
-      originalContent: originalMessageText,
+      originalContent: originalMessageText
     };
 
     // 2. 乐观更新UI：立即在界面上显示新消息，让用户感觉流畅
@@ -152,10 +153,10 @@ export default function ChatPage() {
         body: JSON.stringify({
           newMessageObject: {
             ...newMessageObject,
-            timestamp: (newMessageObject.timestamp as Date).toISOString(),
+            timestamp: (newMessageObject.timestamp as Date).toISOString()
           },
-          previousCid: previousCid,
-        }),
+          previousCid: previousCid
+        })
       });
 
       const result = await response.json();
@@ -176,14 +177,15 @@ export default function ChatPage() {
   // 动态"学习"软键盘高度
   useEffect(() => {
     if (!isClient) return;
-    
+
     let timeoutId: NodeJS.Timeout;
-    
+
     const updateKeyboardHeight = () => {
       // 使用 visualViewport API 获取更准确的高度信息
       if (window.visualViewport) {
-        const keyboardHeight = window.innerHeight - window.visualViewport.height;
-        
+        const keyboardHeight =
+          window.innerHeight - window.visualViewport.height;
+
         // 只有当键盘高度足够大时才更新（避免误判）
         if (keyboardHeight > 100) {
           setPanelHeight(keyboardHeight);
@@ -194,7 +196,11 @@ export default function ChatPage() {
           timeoutId = setTimeout(() => scrollToBottom('smooth'), 100);
           // 重置面板高度为默认值
           setPanelHeight(250);
-        } else if (keyboardHeight <= 100 && panelHeight > 0 && panelHeight <= 250) {
+        } else if (
+          keyboardHeight <= 100 &&
+          panelHeight > 0 &&
+          panelHeight <= 250
+        ) {
           // 如果面板高度在0到250之间，重置为0
           setPanelHeight(0);
         }
@@ -204,14 +210,18 @@ export default function ChatPage() {
     // 同时监听 resize 和 scroll 事件以提高兼容性
     window.visualViewport?.addEventListener('resize', updateKeyboardHeight);
     window.visualViewport?.addEventListener('scroll', updateKeyboardHeight);
-    
+
     // 添加 focusin 事件监听器，当输入框获得焦点时确保滚动到底部
     const handleFocusIn = (e: FocusEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
         // 确保输入框可见
         setTimeout(() => {
           if (window.visualViewport) {
-            const keyboardHeight = window.innerHeight - window.visualViewport.height;
+            const keyboardHeight =
+              window.innerHeight - window.visualViewport.height;
             if (keyboardHeight > 100) {
               setPanelHeight(keyboardHeight);
             }
@@ -220,12 +230,18 @@ export default function ChatPage() {
         }, 300); // 增加延迟确保键盘完全弹出
       }
     };
-    
+
     document.addEventListener('focusin', handleFocusIn);
-    
+
     return () => {
-      window.visualViewport?.removeEventListener('resize', updateKeyboardHeight);
-      window.visualViewport?.removeEventListener('scroll', updateKeyboardHeight);
+      window.visualViewport?.removeEventListener(
+        'resize',
+        updateKeyboardHeight
+      );
+      window.visualViewport?.removeEventListener(
+        'scroll',
+        updateKeyboardHeight
+      );
       document.removeEventListener('focusin', handleFocusIn);
       clearTimeout(timeoutId);
     };
@@ -240,7 +256,8 @@ export default function ChatPage() {
     if (viewport) {
       // 在iOS上确保输入框可见
       if (window.visualViewport) {
-        const keyboardHeight = window.innerHeight - window.visualViewport.height;
+        const keyboardHeight =
+          window.innerHeight - window.visualViewport.height;
         if (keyboardHeight > 100) {
           setPanelHeight(keyboardHeight);
         }
@@ -259,9 +276,9 @@ export default function ChatPage() {
     if (isClient) {
       // 延迟滚动以确保DOM已更新
       const scrollTimeout = setTimeout(() => scrollToBottom('smooth'), 0);
-      
+
       prevMessagesLengthRef.current = messages.length;
-      
+
       return () => clearTimeout(scrollTimeout);
     }
   }, [messages, isActionsOpen, isClient]);
@@ -287,32 +304,57 @@ export default function ChatPage() {
   const handleDecryptClick = (messageId: string) => {
     const message = messages.find((msg) => msg.id === messageId);
     if (!message || !message.isEncrypted) return;
-    setSelectedMessageId(messageId);
+    // 单击消息解密按钮也执行批量解密
     setShowKeyModal(true);
+    setSelectedMessageId(''); // 清空选中的单条消息ID，表示执行批量解密
   };
 
   // 在弹窗中选择密钥后进行解密
   const handleKeySelect = (key: KeyPair) => {
-    if (!selectedMessageId) return;
-    const message = messages.find((msg) => msg.id === selectedMessageId);
-    if (!message) return;
-    try {
-      const decryptedContent = decryptMessage(message.content, key.privateKey);
-      if (decryptedContent) {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === selectedMessageId
-              ? { ...msg, content: decryptedContent, isEncrypted: false }
-              : msg
-          )
-        );
-      } else {
-        alert('解密返回null，可能是密钥不匹配或消息格式错误');
-      }
-    } catch (error) {
-      alert('解密失败，可能是密钥不匹配或消息格式错误');
+    // 所有解密操作都使用批量解密功能
+    handleBatchDecrypt(key);
+  };
+
+  // 批量解密功能
+  const handleBatchDecrypt = (key: KeyPair) => {
+    // 获取所有加密的消息
+    const encryptedMessages = messages
+      .filter((msg) => msg.isEncrypted)
+      .map((msg) => msg.content);
+
+    if (encryptedMessages.length === 0) {
+      alert('没有需要解密的消息');
+      return;
     }
-    setSelectedMessageId('');
+
+    try {
+      // 使用批量解密功能
+      const results = decryptMessages(encryptedMessages, key.privateKey);
+
+      // 更新所有消息的状态
+      setMessages((prev) => {
+        return prev.map((msg) => {
+          if (!msg.isEncrypted) return msg;
+
+          const index = encryptedMessages.indexOf(msg.content);
+          if (index !== -1 && results[index].success) {
+            return {
+              ...msg,
+              content: results[index].decrypted,
+              isEncrypted: false
+            };
+          }
+          return msg;
+        });
+      });
+
+      // alert(`成功解密 ${results.filter(r => r.success).length} 条消息`);
+      console.log(`成功解密 ${results.filter((r) => r.success).length} 条消息`);
+    } catch (error: any) {
+      console.error('批量解密失败:', error);
+      alert(`批量解密失败: ${error.message || '未知错误'}`);
+    }
+
     setShowKeyModal(false);
   };
 
@@ -387,7 +429,7 @@ export default function ChatPage() {
       </div>
 
       {/* 滚动的内容区域 */}
-      <div 
+      <div
         className="fixed w-full overflow-hidden"
         style={{
           top: `${TOTAL_HEADER_HEIGHT}px`,
@@ -436,7 +478,11 @@ export default function ChatPage() {
                       <div className="flex items-center gap-2">
                         {/* 解密按钮 */}
                         <button
-                          onClick={() => handleDecryptClick(message.id)}
+                          onClick={() => {
+                            // 单击解密按钮也执行批量解密
+                            setShowKeyModal(true);
+                            setSelectedMessageId(''); // 清空选中的单条消息ID，表示执行批量解密
+                          }}
                           disabled={!message.isEncrypted}
                           className={cn(
                             'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
@@ -506,7 +552,7 @@ export default function ChatPage() {
       {/* 固定的底部区域 */}
       <div
         className="fixed bottom-0 left-0 right-0 z-20"
-        style={{ 
+        style={{
           paddingBottom: `env(safe-area-inset-bottom, 0px)`,
           transform: isActionsOpen ? `translateY(-0px)` : 'translateY(0)',
           transition: 'transform 0.3s ease-in-out',
@@ -517,10 +563,12 @@ export default function ChatPage() {
         {/* 输入框栏 */}
         <div
           className="p-2 flex items-center bg-gray-100 border-t"
-          style={{ 
+          style={{
             height: `${FOOTER_HEIGHT}px`,
             // 添加过渡动画使布局变化更平滑
-            transition: 'all 0.3s ease-in-out'
+            transition: 'all 0.3s ease-in-out',
+            // 确保输入框区域考虑到底部安全区域
+            paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 0.6rem)`
           }}
         >
           <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
@@ -545,7 +593,8 @@ export default function ChatPage() {
                 scrollToBottom('smooth');
                 // 检查键盘高度并更新面板高度
                 if (window.visualViewport) {
-                  const keyboardHeight = window.innerHeight - window.visualViewport.height;
+                  const keyboardHeight =
+                    window.innerHeight - window.visualViewport.height;
                   if (keyboardHeight > 100) {
                     setPanelHeight(keyboardHeight);
                   }
@@ -580,45 +629,83 @@ export default function ChatPage() {
         </div>
         {/* 功能面板 */}
         <div
-          className={cn(
-            'bg-gray-100 overflow-hidden'
-          )}
-          style={{ 
+          className={cn('bg-gray-100 overflow-hidden')}
+          style={{
             height: isActionsOpen ? `${panelHeight}px` : '0px',
             transition: 'height 0.3s ease-in-out'
           }}
         >
           <div className="p-4 pt-6 grid grid-cols-4 gap-y-6 gap-x-4 text-center">
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><ImageIcon className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <ImageIcon className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">Album</span>
             </div>
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Camera className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <Camera className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">Photography</span>
             </div>
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Phone className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <Phone className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">Voice call</span>
             </div>
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Bot className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <Bot className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">AI</span>
             </div>
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Gift className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <Gift className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">Red envelope</span>
             </div>
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Redo className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <Redo className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">Transfer</span>
             </div>
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><ShoppingCart className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <ShoppingCart className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">Send goods</span>
             </div>
-            <div onClick={() => setIsActionsOpen(false)} className="flex flex-col items-center gap-1">
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center"><Vote className="h-7 w-7 text-gray-600" /></div>
+            <div
+              onClick={() => setIsActionsOpen(false)}
+              className="flex flex-col items-center gap-1"
+            >
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                <Vote className="h-7 w-7 text-gray-600" />
+              </div>
               <span className="text-xs text-gray-500">Vote</span>
             </div>
           </div>
@@ -629,6 +716,7 @@ export default function ChatPage() {
         isOpen={showKeyModal}
         onClose={() => setShowKeyModal(false)}
         onKeySelect={handleKeySelect}
+        onBatchDecrypt={handleBatchDecrypt}
       />
     </div>
   );

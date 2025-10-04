@@ -4,21 +4,22 @@ import { Analytics } from '@vercel/analytics/react';
 import { headers } from 'next/headers';
 import ContextProvider from 'context/AppKitProvider';
 import { Toaster } from '@/components/ui/toaster';
+import type { Viewport } from 'next';
 
 export const metadata = {
   title: 'UniChat - Web3 社交平台',
   description: '现代化 Web3 社交平台',
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
   icons: {
-    icon: [
-      { url: '/discover/unishop.png' },
-    ],
+    icon: [{ url: '/discover/unishop.png' }]
   }
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  minimumScale: 1,
+  userScalable: false
 };
 
 // RootLayout 必须是异步函数以使用 headers()

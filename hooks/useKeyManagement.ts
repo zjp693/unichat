@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { KeyPair, chatEncryption } from "@/lib/encryption";
+import { useState, useEffect } from 'react';
+import { KeyPair, chatEncryption } from '@/lib/encryption';
 
 export const useKeyManagement = () => {
   const [keys, setKeys] = useState<KeyPair[]>([]);
@@ -7,19 +7,19 @@ export const useKeyManagement = () => {
 
   // 从本地存储加载密钥
   useEffect(() => {
-    const savedKeys = localStorage.getItem("chat_keys");
+    const savedKeys = localStorage.getItem('chat_keys');
     if (savedKeys) {
       try {
         setKeys(JSON.parse(savedKeys));
       } catch (error) {
-        console.error("加载密钥失败:", error);
+        console.error('加载密钥失败:', error);
       }
     }
   }, []);
 
   // 保存密钥到本地存储
   const saveKeys = (newKeys: KeyPair[]) => {
-    localStorage.setItem("chat_keys", JSON.stringify(newKeys));
+    localStorage.setItem('chat_keys', JSON.stringify(newKeys));
     setKeys(newKeys);
   };
 
@@ -28,7 +28,7 @@ export const useKeyManagement = () => {
     setLoading(true);
     try {
       const { publicKey, privateKey } = chatEncryption.generateKeyPair();
-      
+
       const newKey: KeyPair = {
         id: Date.now().toString(),
         name,
@@ -39,7 +39,7 @@ export const useKeyManagement = () => {
 
       const updatedKeys = [...keys, newKey];
       saveKeys(updatedKeys);
-      
+
       return newKey;
     } finally {
       setLoading(false);
@@ -48,7 +48,7 @@ export const useKeyManagement = () => {
 
   // 删除密钥
   const deleteKey = (keyId: string) => {
-    const updatedKeys = keys.filter(key => key.id !== keyId);
+    const updatedKeys = keys.filter((key) => key.id !== keyId);
     saveKeys(updatedKeys);
   };
 
@@ -58,8 +58,27 @@ export const useKeyManagement = () => {
   };
 
   // 解密消息
-  const decryptMessage = (encryptedMessage: string, privateKey: string): string => {
+  const decryptMessage = (
+    encryptedMessage: string,
+    privateKey: string
+  ): string => {
+    if (!encryptedMessage) {
+      throw new Error('加密消息不能为空');
+    }
+    if (!privateKey) {
+      throw new Error('私钥不能为空');
+    }
     return chatEncryption.decryptMessage(encryptedMessage, privateKey);
+  };
+
+  // 批量解密消息
+  const decryptMessages = (
+    encryptedMessages: string[],
+    privateKey: string
+  ): Array<
+    { success: true; decrypted: string } | { success: false; error: string }
+  > => {
+    return chatEncryption.decryptMessages(encryptedMessages, privateKey);
   };
 
   return {
@@ -68,6 +87,7 @@ export const useKeyManagement = () => {
     generateKeyPair,
     deleteKey,
     encryptMessage,
-    decryptMessage
+    decryptMessage,
+    decryptMessages
   };
 };

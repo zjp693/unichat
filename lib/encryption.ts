@@ -1,4 +1,4 @@
-import JSEncrypt from "jsencrypt";
+import JSEncrypt from 'jsencrypt';
 
 // 默认密钥对（1024位，用于没有用户密钥时的备用）
 // 注意：这是一个有效的RSA密钥对，长期有效
@@ -43,23 +43,26 @@ export class ChatEncryption {
   }
 
   // 修改默认密钥位数为1024位
-  generateKeyPair(keySize: number = 1024): { publicKey: string; privateKey: string } {
+  generateKeyPair(keySize: number = 1024): {
+    publicKey: string;
+    privateKey: string;
+  } {
     try {
       // 直接使用JSEncrypt生成密钥对，确保兼容性
       const jsEncrypt = new JSEncrypt({ default_key_size: keySize.toString() });
       jsEncrypt.getKey();
-      
+
       const publicKey = jsEncrypt.getPublicKey();
       const privateKey = jsEncrypt.getPrivateKey();
-      
+
       if (!publicKey || !privateKey) {
-        throw new Error("密钥生成失败");
+        throw new Error('密钥生成失败');
       }
-      
+
       return { publicKey, privateKey };
     } catch (error) {
-      console.error("密钥生成失败:", error);
-      throw new Error("密钥生成失败");
+      console.error('密钥生成失败:', error);
+      throw new Error('密钥生成失败');
     }
   }
 
@@ -67,53 +70,104 @@ export class ChatEncryption {
     try {
       // 验证输入参数
       if (!message || typeof message !== 'string') {
-        throw new Error("消息内容无效");
+        throw new Error('消息内容无效');
       }
       if (!publicKey || typeof publicKey !== 'string') {
-        throw new Error("公钥无效");
+        throw new Error('公钥无效');
       }
 
       const jsEncrypt = new JSEncrypt();
-      
+
       // 验证公钥格式
       if (!this.validatePublicKey(publicKey)) {
-        console.warn("公钥格式可能无效，尝试使用默认密钥");
+        console.warn('公钥格式可能无效，尝试使用默认密钥');
         // 如果当前公钥无效，尝试使用默认公钥
         if (!this.validatePublicKey(DEFAULT_KEY_PAIR.publicKey)) {
-          throw new Error("默认公钥也无效，需要重新生成密钥");
+          throw new Error('默认公钥也无效，需要重新生成密钥');
         }
         jsEncrypt.setPublicKey(DEFAULT_KEY_PAIR.publicKey);
       } else {
         jsEncrypt.setPublicKey(publicKey);
       }
-      
+
       const encrypted = jsEncrypt.encrypt(message);
       if (!encrypted) {
-        throw new Error("JSEncrypt返回null，加密操作失败");
+        throw new Error('JSEncrypt返回null，加密操作失败');
       }
       return encrypted;
     } catch (error) {
-      console.error("加密错误详情:", error);
-      console.error("消息长度:", message?.length);
-      console.error("公钥长度:", publicKey?.length);
-      throw new Error(`消息加密失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('加密错误详情:', error);
+      console.error('消息长度:', message?.length);
+      console.error('公钥长度:', publicKey?.length);
+      throw new Error(
+        `消息加密失败: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
   decryptMessage(encryptedMessage: string, privateKey: string): string {
     try {
+      if (!encryptedMessage) {
+        throw new Error('加密消息不能为空');
+      }
+      if (!privateKey) {
+        throw new Error('私钥不能为空');
+      }
+
       const jsEncrypt = new JSEncrypt();
       jsEncrypt.setPrivateKey(privateKey);
       const decrypted = jsEncrypt.decrypt(encryptedMessage);
-      if (!decrypted) {
-        console.error("解密返回null，可能是密钥不匹配或消息格式错误");
-        throw new Error("解密失败");
+
+      // 如果使用提供的私钥解密失败，尝试使用默认私钥解密
+      if (
+        decrypted === false ||
+        decrypted === null ||
+        decrypted === undefined
+      ) {
+        console.warn('使用提供的私钥解密失败，尝试使用默认私钥解密');
+        const defaultJsEncrypt = new JSEncrypt();
+        defaultJsEncrypt.setPrivateKey(DEFAULT_KEY_PAIR.privateKey);
+        const defaultDecrypted = defaultJsEncrypt.decrypt(encryptedMessage);
+
+        if (
+          defaultDecrypted === false ||
+          defaultDecrypted === null ||
+          defaultDecrypted === undefined
+        ) {
+          console.error('使用默认私钥解密也失败，可能是消息格式错误');
+          throw new Error('解密失败，可能是密钥不匹配或消息格式错误');
+        }
+
+        return defaultDecrypted;
       }
+
       return decrypted;
-    } catch (error) {
-      console.error("解密错误:", error);
-      throw new Error("消息解密失败");
+    } catch (error: any) {
+      console.error('解密错误:', error);
+      throw new Error(`消息解密失败: ${error.message || error}`);
     }
+  }
+
+  /**
+   * 批量解密消息
+   * @param encryptedMessages 加密消息数组
+   * @param privateKey 私钥
+   * @returns 解密结果数组，包含成功解密的消息和解密失败的错误信息
+   */
+  decryptMessages(
+    encryptedMessages: string[],
+    privateKey: string
+  ): Array<
+    { success: true; decrypted: string } | { success: false; error: string }
+  > {
+    return encryptedMessages.map((encryptedMessage) => {
+      try {
+        const decrypted = this.decryptMessage(encryptedMessage, privateKey);
+        return { success: true, decrypted };
+      } catch (error: any) {
+        return { success: false, error: error.message || '未知错误' };
+      }
+    });
   }
 
   // 获取默认密钥对
@@ -133,7 +187,7 @@ export class ChatEncryption {
       const jsEncrypt = new JSEncrypt();
       jsEncrypt.setPrivateKey(privateKey);
       // 尝试使用私钥进行测试操作来验证
-      const testMessage = "test";
+      const testMessage = 'test';
       const encrypted = jsEncrypt.encrypt(testMessage);
       return encrypted !== false;
     } catch (error) {
@@ -147,7 +201,7 @@ export class ChatEncryption {
       const jsEncrypt = new JSEncrypt();
       jsEncrypt.setPublicKey(publicKey);
       // 尝试使用公钥进行测试操作来验证
-      const testMessage = "test";
+      const testMessage = 'test';
       const encrypted = jsEncrypt.encrypt(testMessage);
       return encrypted !== false;
     } catch (error) {
