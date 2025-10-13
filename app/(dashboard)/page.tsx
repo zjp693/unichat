@@ -2,10 +2,22 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Search, CirclePlus, Copy, Wallet } from 'lucide-react';
+import {
+  Search,
+  CirclePlus,
+  Copy,
+  Wallet,
+  Users,
+  Globe,
+  QrCode,
+  CreditCard,
+  Gift
+} from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface ChatItem {
   id: string;
@@ -81,7 +93,7 @@ export default function ChatPage() {
     <div className="flex flex-col h-full">
       {/* 顶部导航栏 */}
       <div className="flex justify-between items-center py-4 px-1 bg-white">
-        {/* <Button variant="outline" className="px-4 py-1 text-xs">
+        {/* <Button variant="outline" className="px-3 py-1 text-xs">
           <Image
             src="/top/bnb.png"
             alt="usa"
@@ -108,13 +120,11 @@ export default function ChatPage() {
       </div>
 
       {/* 搜索栏和操作按钮 */}
-      <div className="pr-3 pb-3 bg-white border-b border-gray-200 text-right">
+      <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right">
         <button className="p-2 rounded-full mr-2">
           <Search size={18} />
         </button>
-        <button className="p-2 rounded-full">
-          <CirclePlus size={18} />
-        </button>
+        <DropdownMenu />
       </div>
 
       {/* 聊天列表 */}
@@ -164,7 +174,7 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
               <p className="text-xs text-gray-500 truncate max-w-[94%] inline-block align-middle">
                 {chat.lastMessage}
               </p>
-              {!chat.copy && <Copy className="h-3 w-3 inline-block ml-1" />}
+              {!chat.copy && <Copy className="h-4 w-4 inline-block ml-1" />}
             </div>
           </div>
           {/* 下边框 */}
@@ -172,5 +182,88 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
         </div>
       </div>
     </a>
+  );
+}
+
+function DropdownMenu() {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleGroupChatClick = () => {
+    setIsOpen(false);
+    router.push('/chat/create-group');
+    console.log('✅ 创建群聊...');
+  };
+
+  const handleItemClick = () => {
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative inline-block" ref={dropdownRef}>
+      <button className="p-2 rounded-full" onClick={() => setIsOpen(!isOpen)}>
+        <CirclePlus size={18} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-32 bg-[#424242] text-xs text-white shadow-lg rounded-md z-50">
+          {/* 添加向上箭头 */}
+          <div className="absolute -top-3 right-2 w-0 h-0 border-l-8 border-r-8 border-b-[16px] border-l-transparent border-r-transparent border-b-[#424242]"></div>
+          <div className="pt-2 px-2 flex" onClick={handleGroupChatClick}>
+            <Users className="mr-2 h-4 w-4" />
+            <div className="w-full text-left">
+              <div className="w-full pb-2  border-b border-[#585858]">
+                Group chat
+              </div>
+            </div>
+          </div>
+          <div className="py-2 px-2 flex" onClick={handleItemClick}>
+            <Users className="mr-2 h-4 w-4" />
+            <div className="w-full text-left">
+              <div className="w-full pb-2  border-b border-[#585858]">
+                Global Contacts
+              </div>
+            </div>
+          </div>
+          <div className="py-2 px-2 flex" onClick={handleItemClick}>
+            <Users className="mr-2 h-4 w-4" />
+            <div className="w-full text-left">
+              <div className="w-full pb-2  border-b border-[#585858]">Scan</div>
+            </div>
+          </div>
+          <div className="py-2 px-2 flex" onClick={handleItemClick}>
+            <Users className="mr-2 h-4 w-4" />
+            <div className="w-full text-left">
+              <div className="w-full pb-2  border-b border-[#585858]">
+                Payment
+              </div>
+            </div>
+          </div>
+          <div className="py-2 px-2 flex" onClick={handleItemClick}>
+            <Users className="mr-2 h-4 w-4" />
+            <div className="w-full text-left">
+              <div className="w-full">Airdrop</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
