@@ -2,25 +2,11 @@
 'use client'; // Required for using React Hooks (useState) in Next.js App Router
 
 import React, { useState } from 'react';
+import ArrowLeftImage from '../../../../public/chats/arrow_left.png';
 
 // --- Icon Imports ---
 // In a real project, you would install lucide-react: npm install lucide-react
-const ArrowLeft = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="19" y1="12" x2="5" y2="12"></line>
-    <polyline points="12 19 5 12 12 5"></polyline>
-  </svg>
-);
+
 const Search = ({ className }: { className?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -164,8 +150,10 @@ export default function InvitePage() {
 
       {/* Page Title */}
       <div className="flex-shrink-0 flex items-center p-4">
-        <ArrowLeft />
-        <h1 className="text-base font-semibold">成员邀请</h1>
+        <button className="p-2 -ml-2">
+          <img src={ArrowLeftImage.src} className="h-4" alt="Back" />
+        </button>
+        <h1 className="text-base font-semibold m-auto">成员邀请</h1>
       </div>
 
       {/* Search Bar */}
@@ -190,7 +178,7 @@ export default function InvitePage() {
               key={contact.id}
               src={contact.imageUrl}
               alt={contact.name}
-              className="h-12 w-12 rounded-full flex-shrink-0 object-cover"
+              className="h-10 w-10 rounded-full flex-shrink-0 object-cover"
             />
           ))}
         </div>
@@ -202,15 +190,15 @@ export default function InvitePage() {
           {contacts.map((contact) => (
             <div
               key={contact.id}
-              className="flex items-center py-2 cursor-pointer"
-              onClick={() => handleContactToggle(contact.id)}
+              className="flex items-center py-1.5 relative"
+              onClick={(e) => { if ((e.target as HTMLInputElement).type !== 'checkbox') handleContactToggle(contact.id); }}
             >
               <div className="w-8 flex items-center justify-center">
                 <input
                   type="checkbox"
                   checked={contact.status === 'checked'}
                   onChange={() => handleContactToggle(contact.id)}
-                  className="h-6 w-6 rounded-full appearance-none border-2 border-gray-300 checked:bg-indigo-600 checked:border-indigo-600 focus:outline-none"
+                  className="h-5 w-5 rounded-full appearance-none border-2 border-gray-300 checked:bg-indigo-600 checked:border-indigo-600 focus:outline-none"
                   style={{
                     backgroundImage:
                       contact.status === 'checked'
@@ -222,9 +210,9 @@ export default function InvitePage() {
               <img
                 src={contact.imageUrl}
                 alt={contact.name}
-                className="h-12 w-12 rounded-lg mx-3 object-cover"
+                className="h-10 w-10 rounded-lg mx-3 object-cover"
               />
-              <span className="font-medium text-base">{contact.name}</span>
+              <div className="font-medium text-base flex-1 relative after:content-[''] after:absolute after:-bottom-3 after:left-0 after:w-full after:h-px after:bg-gray-200">{contact.name}</div>
             </div>
           ))}
         </div>
@@ -233,17 +221,23 @@ export default function InvitePage() {
       {/* Footer */}
       <footer className="flex-shrink-0 p-4 border-t border-gray-200 mt-auto bg-white">
         <div className="flex items-center justify-between">
-          <label className="flex items-center space-x-2 cursor-pointer">
+          <label className="flex items-center space-x-2">
             <input
               type="checkbox"
               checked={includeHistory}
               onChange={(e) => setIncludeHistory(e.target.checked)}
-              className="h-5 w-5 rounded-full appearance-none border-2 border-gray-300 checked:bg-indigo-600 checked:border-indigo-600"
+              className="h-5 w-5 rounded-full appearance-none border-2 border-gray-300 checked:bg-indigo-600 checked:border-indigo-600 focus:outline-none"
+              style={{
+                backgroundImage:
+                  includeHistory
+                    ? `url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e")`
+                    : 'none'
+              }}
             />
-            <span className="text-gray-600">附带聊天记录</span>
+            <span className="text-gray-600 text-sm">附带聊天记录</span>
           </label>
           <button
-            className="bg-indigo-600 text-white rounded-full px-8 py-3 font-semibold disabled:bg-indigo-400 disabled:cursor-not-allowed"
+            className="bg-indigo-600 text-white rounded-full px-4 py-2 font-semibold text-sm disabled:bg-indigo-400 disabled:cursor-not-allowed"
             disabled={selectedCount === 0}
           >
             立即邀请({selectedCount})
