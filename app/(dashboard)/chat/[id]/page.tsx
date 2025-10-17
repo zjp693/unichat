@@ -1,7 +1,7 @@
 'use client';
 
 // 导入React的核心钩子函数
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 // 导入UI组件库和工具
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,17 +29,47 @@ import { useKeyManagement } from '@/hooks/useKeyManagement';
 import { KeyPair, chatEncryption, DEFAULT_KEY_PAIR } from '@/lib/encryption';
 // 导入dayjs用于格式化时间
 import dayjs from 'dayjs';
+import {
+  useAccount,
+  useConnect,
+  useDisconnect,
+  useSwitchChain,
+  useChainId,
+  useChains,
+  usePublicClient
+} from 'wagmi';
+import { useAppKit } from '@reown/appkit/react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem
+} from '@/components/ui/dropdown-menu';
+import { ChevronDown } from 'lucide-react';
+import { keccak256, encodePacked, getAddress } from 'viem';
+import {
+  DirectMessageAbi,
+  useGetMessageCount,
+  useGetMessages,
+  useSendMessage,
+  useListenMessageSent,
+  DMMessage
+} from '@/lib/DirectMessageAbi';
+import { computeConvoId, Address, isValidEthereumAddress } from '@/lib/utils';
+import { useWaitForTransactionReceipt } from 'wagmi';
 
 // 定义消息对象的数据结构
 interface Message {
   id: string;
-  content: string;
   sender: 'user' | 'other';
   timestamp: Date | string; // 允许字符串以便从API接收
   type: 'text' | 'image';
   isEncrypted?: boolean;
-  originalContent?: string;
+  originalContent: string | null; // 修正为 string 或 null
   status?: 'sending' | 'failed'; // 用于UI反馈发送状态
+  // 从 DMMessage 手动复制的属性
+  recipient: Address;
+  content: string; // 确保 content 属性存在
 }
 
 // 定义布局常量
@@ -47,8 +77,11 @@ const TOP_BAR_HEIGHT = 56;
 const NAV_BAR_HEIGHT = 56;
 const FOOTER_HEIGHT = 58;
 const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
-// 定义用于在浏览器本地存储中保存最新CID的Key
-const LOCAL_STORAGE_KEY = 'chat_latest_cid';
+// const LOCAL_STORAGE_KEY = 'chat_latest_cid'; // 暂时保留，后续会移除
+
+// DirectMessage 合约地址从环境变量中获取
+const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
+  '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
 export default function ChatPage() {
   // --- 基础钩子 ---
@@ -57,15 +90,135 @@ export default function ChatPage() {
   const { decryptMessage, encryptMessage, keys, decryptMessages } =
     useKeyManagement();
 
+  // --- Wagmi 钩子 --- //
+  const { address: currentAddress, isConnected } = useAccount(); // 直接解构获取 address
+  const { connect, connectors } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { switchChain } = useSwitchChain();
+  const chainId = useChainId();
+  const chains = useChains();
+  // 移除 openConnectModal 和 openChainModal 的解构
+  // const { openConnectModal, openChainModal } = useAppKit();
+  const currentChain = chains.find((chain) => chain.id === chainId);
+  // const recipientAddress = params.id as Address; // 从 URL 获取接收者地址
+  const recipientAddress: Address =
+    '0x1234567890123456789012345678901234567890'; // 临时固定接收者地址，请替换为您要聊天的实际地址
+
+  // 确保 recipientAddress 是一个有效的以太坊地址
+  // if (!isValidEthereumAddress(recipientAddress)) {
+  //   console.error("Invalid recipient address in URL params:", params.id);
+  //   // 可以重定向到聊天列表或显示错误信息
+  //   // 例如：router.push('/chat');
+  //   // 为了演示，我们暂时返回一个空页面或错误提示
+  //   return <div className="flex items-center justify-center min-h-screen text-red-500">无效的聊天地址。</div>;
+  // }
+  const publicClient = usePublicClient();
+
+  // --- 新增：使用封装的钩子获取消息总数和消息列表 ---
+  const { data: totalMessagesBigInt } = useGetMessageCount(
+    currentAddress as Address,
+    recipientAddress
+  );
+  const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
+
+  const pageSize = 10; // 获取最近 10 条消息
+  const start = totalMessages > pageSize ? totalMessages - pageSize : 0;
+  const count = totalMessages > pageSize ? pageSize : totalMessages;
+
+  const { data: rawMessages } = useGetMessages(
+    currentAddress as Address,
+    recipientAddress,
+    BigInt(start),
+    BigInt(count)
+  );
+
+  const {
+    writeContract,
+    data: writeHash,
+    isPending: isSendingMessage,
+    isError: sendError,
+    error: sendErrorMessage
+  } = useSendMessage();
+  const {
+    isLoading: isConfirming,
+    isSuccess: isConfirmed,
+    isError: isReceiptError
+  } = useWaitForTransactionReceipt({
+    hash: writeHash
+  });
+
+  // 计算 convoId
+  const currentConvoId = useMemo(() => {
+    if (!currentAddress || !recipientAddress) return undefined;
+    return computeConvoId(currentAddress, recipientAddress);
+  }, [currentAddress, recipientAddress]);
+
+  // 实时消息监听
+  useListenMessageSent(
+    (logs) => {
+      logs.forEach((log) => {
+        const { from, to, timestamp, content: rawContent } = log.args;
+        const content = rawContent as string;
+
+        // 避免重复添加自己发送的乐观更新消息
+        if (from?.toLowerCase() === currentAddress?.toLowerCase()) {
+          // 尝试找到乐观更新的消息并更新其状态
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.originalContent === content
+                ? { ...msg, status: undefined }
+                : msg
+            )
+          );
+          return;
+        }
+
+        let decryptedContent: string | undefined;
+        let isMessageEncrypted = true;
+
+        try {
+          const userPrivateKey =
+            keys.length > 0 ? keys[0].privateKey : DEFAULT_KEY_PAIR.privateKey;
+          decryptedContent = decryptMessage(content, userPrivateKey);
+          isMessageEncrypted = false;
+        } catch (error) {
+          console.warn('接收到的消息解密失败:', error);
+          decryptedContent = content;
+          isMessageEncrypted = true;
+        }
+
+        const newMessage: Message = {
+          id: `${timestamp?.toString()}-${from?.toLowerCase()}`,
+          content: decryptedContent || content,
+          sender:
+            from?.toLowerCase() === currentAddress?.toLowerCase()
+              ? 'user'
+              : 'other',
+          timestamp: new Date(Number(timestamp) * 1000),
+          type: 'text',
+          isEncrypted: isMessageEncrypted,
+          originalContent: isMessageEncrypted ? content : null,
+          recipient: to as Address
+        };
+
+        setMessages((prev) => [...prev, newMessage]);
+        // 滚动到底部
+        setTimeout(() => scrollToBottom('smooth'), 100);
+      });
+    },
+    !!currentConvoId, // 只有当 convoId 存在时才启用监听
+    { convoId: currentConvoId }
+  );
+
   // --- State 管理 ---
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // 用于在获取历史记录时显示加载动画
+  const [isLoading, setIsLoading] = useState(true);
   const [inputMessage, setInputMessage] = useState('');
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
   const [isClient, setIsClient] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(0); // 初始值为0
+  const [panelHeight, setPanelHeight] = useState(0);
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,44 +229,108 @@ export default function ChatPage() {
 
   // 页面加载时，从localStorage读取指针，调用API获取历史记录
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchAndProcessMessages = async () => {
       setIsLoading(true);
-      // 从浏览器本地存储中获取最新消息的CID
-      const latestCid = localStorage.getItem(LOCAL_STORAGE_KEY);
 
-      // 如果没有CID，说明是新对话，无需加载
-      if (!latestCid) {
+      if (
+        !isConnected ||
+        !currentAddress ||
+        !recipientAddress ||
+        totalMessagesBigInt === undefined ||
+        rawMessages === undefined ||
+        rawMessages === null ||
+        rawMessages.length === 0
+      ) {
+        setMessages([]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (totalMessages === 0) {
         setMessages([]);
         setIsLoading(false);
         return;
       }
 
       try {
-        // 调用我们自己的后端API来获取完整的历史记录
-        const response = await fetch(`/api/chat/history?cid=${latestCid}`);
-        if (!response.ok) throw new Error('API request failed');
+        // 3. 格式化并解密消息
+        const formattedAndDecryptedMessages: Message[] = (
+          rawMessages as DMMessage[]
+        ).map((msg: DMMessage) => {
+          let decryptedContent: string | undefined;
+          let isMessageEncrypted = true;
 
-        const data = await response.json();
-        if (data.history) {
-          // 将从后端获取的字符串时间戳转换为Date对象，以便格式化
-          const formattedMessages = data.history.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }));
-          setMessages(formattedMessages);
-        }
+          try {
+            const userPrivateKey =
+              keys.length > 0
+                ? keys[0].privateKey
+                : DEFAULT_KEY_PAIR.privateKey;
+            decryptedContent = decryptMessage(
+              msg.content as string,
+              userPrivateKey
+            );
+            isMessageEncrypted = false;
+          } catch (error) {
+            console.warn(
+              '消息解密失败，可能使用了不同的密钥或消息未加密:',
+              error
+            );
+            decryptedContent = msg.content as string;
+            isMessageEncrypted = true;
+          }
+
+          return {
+            id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}`,
+            content: decryptedContent || (msg.content as string),
+            sender:
+              msg.sender.toLowerCase() === currentAddress?.toLowerCase()
+                ? 'user'
+                : 'other',
+            timestamp: new Date(Number(msg.timestamp) * 1000),
+            type: 'text',
+            isEncrypted: isMessageEncrypted,
+            originalContent: isMessageEncrypted
+              ? (msg.content as string)
+              : null,
+            recipient: msg.recipient as Address
+          };
+        });
+
+        setMessages(formattedAndDecryptedMessages);
       } catch (error) {
         console.error('获取聊天记录失败:', error);
       }
       setIsLoading(false);
     };
 
-    fetchHistory();
-  }, []);
+    fetchAndProcessMessages();
+  }, [
+    isConnected,
+    currentAddress,
+    recipientAddress,
+    publicClient,
+    keys,
+    decryptMessage,
+    totalMessagesBigInt,
+    rawMessages
+  ]);
 
-  // 发送新消息（加密 -> 乐观更新UI -> 调用API上传）
+  // 发送新消息（加密 -> 乐观更新UI -> 调用合约上传）
   const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+    if (!inputMessage.trim()) {
+      return;
+    }
+
+    if (!isConnected || !currentAddress) {
+      alert('请先连接您的钱包以发送消息。');
+      connect({ connector: connectors[0] });
+      return;
+    }
+
+    if (!recipientAddress) {
+      alert('聊天对象地址无效，无法发送消息。');
+      return;
+    }
 
     const originalMessageText = inputMessage;
     setInputMessage('');
@@ -131,46 +348,72 @@ export default function ChatPage() {
 
     const newMessageObject: Message = {
       id: Date.now().toString(),
-      content: encryptedContent, // 保存的是密文
+      content: encryptedContent,
       sender: 'user',
       timestamp: new Date(),
       type: 'text',
       isEncrypted: true,
-      originalContent: originalMessageText
+      originalContent: originalMessageText,
+      status: 'sending',
+      recipient: recipientAddress // 确保 recipient 属性正确设置
     };
 
     // 2. 乐观更新UI：立即在界面上显示新消息，让用户感觉流畅
     setMessages((prev) => [...prev, newMessageObject]);
 
     try {
-      // 从localStorage获取前一个CID
-      const previousCid = localStorage.getItem(LOCAL_STORAGE_KEY);
-
-      // 3. 调用后端API，在后台进行上传并更新指针
-      const response = await fetch('/api/chat/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          newMessageObject: {
-            ...newMessageObject,
-            timestamp: (newMessageObject.timestamp as Date).toISOString()
-          },
-          previousCid: previousCid
-        })
+      // 3. 调用合约发送消息
+      if (!currentAddress || !recipientAddress || !writeContract) {
+        alert('钱包未连接或接收地址无效。');
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === newMessageObject.id ? { ...msg, status: 'failed' } : msg
+          )
+        );
+        return;
+      }
+      writeContract({
+        address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+        abi: DirectMessageAbi,
+        functionName: 'sendMessage',
+        args: [recipientAddress, encryptedContent],
+        account: currentAddress
       });
 
-      const result = await response.json();
-      if (result.success && result.newCid) {
-        // 4. **关键一步**: 将后端返回的最新CID保存回localStorage
-        localStorage.setItem(LOCAL_STORAGE_KEY, result.newCid);
-      } else {
-        throw new Error(result.error || '未知的API错误');
-      }
-    } catch (error) {
+      // 交易发送成功后，等待确认。这里的状态更新会通过 useWaitForTransactionReceipt 间接触发。
+    } catch (error: any) {
       console.error('发送消息失败:', error);
-      // 可以在此更新UI显示发送失败
+      // 更新 UI 显示发送失败
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === newMessageObject.id ? { ...msg, status: 'failed' } : msg
+        )
+      );
+      alert(`发送消息失败: ${error.message || '未知错误'}`);
     }
   };
+
+  // 处理交易确认后的状态更新
+  useEffect(() => {
+    if (isConfirmed && writeHash) {
+      // 消息已上链，更新UI状态
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === writeHash ? { ...msg, status: undefined } : msg
+        )
+      ); // 假设id是hash，实际需要更精确匹配
+      // TODO: 考虑如何精确匹配乐观更新的消息和链上确认的消息。
+      // 可以考虑在乐观更新时使用临时ID，然后通过事件监听匹配链上实际ID。
+    }
+    if (isReceiptError && writeHash) {
+      // 交易失败
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === writeHash ? { ...msg, status: 'failed' } : msg
+        )
+      );
+    }
+  }, [isConfirmed, isReceiptError, writeHash]);
 
   // --- 其他交互逻辑 (useEffect, handlers) ---
 
@@ -191,18 +434,16 @@ export default function ChatPage() {
           setPanelHeight(keyboardHeight);
           // 当键盘弹起时，确保滚动到底部
           timeoutId = setTimeout(() => scrollToBottom('smooth'), 100);
-        } else if (keyboardHeight <= 100 && panelHeight > 250) {
-          // 键盘收起时也滚动到底部
-          timeoutId = setTimeout(() => scrollToBottom('smooth'), 100);
-          // 重置面板高度为默认值
-          setPanelHeight(250);
         } else if (
           keyboardHeight <= 100 &&
           panelHeight > 0 &&
-          panelHeight <= 250
+          isActionsOpen === false
         ) {
-          // 如果面板高度在0到250之间，重置为0
+          // 键盘收起时，并且功能面板是关闭状态，重置面板高度为0
+          // 注意：此处不应将 panelHeight 重置为 250，因为 250 是功能面板的默认高度
+          // 如果功能面板是打开状态，则 panelHeight 会保持为功能面板的高度 (250)
           setPanelHeight(0);
+          timeoutId = setTimeout(() => scrollToBottom('smooth'), 100);
         }
       }
     };
@@ -227,7 +468,7 @@ export default function ChatPage() {
             }
           }
           scrollToBottom('smooth');
-        }, 300); // 增加延迟确保键盘完全弹出
+        }, 300);
       }
     };
 
@@ -245,7 +486,7 @@ export default function ChatPage() {
       document.removeEventListener('focusin', handleFocusIn);
       clearTimeout(timeoutId);
     };
-  }, [isClient, panelHeight]);
+  }, [isClient, panelHeight, isActionsOpen]);
 
   // 滚动到底部的辅助函数
   const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
@@ -285,11 +526,17 @@ export default function ChatPage() {
 
   // 打开底部功能面板
   const handleOpenActions = () => {
-    // 如果panelHeight为0（表示软键盘从未打开过），则使用默认高度250
+    setIsActionsOpen(true);
+    // 如果panelHeight为0（表示软键盘从未打开过或已完全收起），则使用默认高度250
     if (panelHeight === 0) {
       setPanelHeight(250);
     }
-    setIsActionsOpen(true);
+  };
+
+  // 关闭底部功能面板
+  const handleCloseActions = () => {
+    setIsActionsOpen(false);
+    setPanelHeight(0);
   };
 
   // 处理回车键发送
@@ -378,12 +625,7 @@ export default function ChatPage() {
           style={{ height: `${TOP_BAR_HEIGHT}px` }}
         >
           <div className="flex items-center gap-2">
-            <Button variant="outline" className="rounded-full">
-              BNB Chain
-            </Button>
-            <Button variant="outline" className="rounded-full">
-              Connect wallet
-            </Button>
+            <appkit-button />
           </div>
           <Button
             variant="outline"
@@ -433,7 +675,8 @@ export default function ChatPage() {
         className="fixed w-full overflow-hidden"
         style={{
           top: `${TOTAL_HEADER_HEIGHT}px`,
-          bottom: `${FOOTER_HEIGHT + (isActionsOpen ? panelHeight : 0)}px`,
+          // 重新计算底部偏移，包含 FOOTER_HEIGHT、安全区域和功能面板高度
+          bottom: `calc(${FOOTER_HEIGHT}px + env(safe-area-inset-bottom, 0px) + ${isActionsOpen ? panelHeight : 0}px)`,
           left: 0,
           right: 0,
           // 添加过渡动画使布局变化更平滑
@@ -551,12 +794,13 @@ export default function ChatPage() {
 
       {/* 固定的底部区域 */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-20"
+        className="fixed bottom-0 left-0 right-0"
         style={{
-          paddingBottom: `env(safe-area-inset-bottom, 0px)`,
-          transform: isActionsOpen ? `translateY(-0px)` : 'translateY(0)',
+          // 移除 paddingBottom，改为由内部的输入框栏处理安全区
+          transform: isActionsOpen
+            ? `translateY(-${panelHeight}px)`
+            : 'translateY(0)',
           transition: 'transform 0.3s ease-in-out',
-          // 添加背景色以确保输入框区域可见
           backgroundColor: 'white'
         }}
       >
@@ -565,10 +809,8 @@ export default function ChatPage() {
           className="p-2 flex items-center bg-gray-100 border-t"
           style={{
             height: `${FOOTER_HEIGHT}px`,
-            // 添加过渡动画使布局变化更平滑
-            transition: 'all 0.3s ease-in-out',
-            // 确保输入框区域考虑到底部安全区域
-            paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 0.6rem)`
+            paddingBottom: `env(safe-area-inset-bottom, 0px)`,
+            transition: 'all 0.3s ease-in-out'
           }}
         >
           <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
@@ -587,11 +829,9 @@ export default function ChatPage() {
             onKeyPress={handleKeyPress}
             placeholder=""
             onFocus={() => {
-              setIsActionsOpen(false);
+              handleCloseActions();
               // 焦点聚焦时滚动到底部并确保输入框可见
               setTimeout(() => {
-                scrollToBottom('smooth');
-                // 检查键盘高度并更新面板高度
                 if (window.visualViewport) {
                   const keyboardHeight =
                     window.innerHeight - window.visualViewport.height;
@@ -599,6 +839,7 @@ export default function ChatPage() {
                     setPanelHeight(keyboardHeight);
                   }
                 }
+                scrollToBottom('smooth');
               }, 300);
             }}
             className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-1 focus-visible:ring-transparent"

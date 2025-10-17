@@ -1,13 +1,14 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import { keccak256, encodePacked, getAddress } from 'viem';
 
 // 配置 day.js 插件
-dayjs.extend(relativeTime)
+dayjs.extend(relativeTime);
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 // ===== 日期相关工具函数 =====
@@ -68,8 +69,8 @@ export function getCurrentTimestamp(): number {
  * @returns 格式化后的地址
  */
 export function formatAddress(
-  address: string, 
-  prefixLength: number = 6, 
+  address: string,
+  prefixLength: number = 6,
   suffixLength: number = 4
 ): string {
   if (!address || address.length <= prefixLength + suffixLength) return address;
@@ -86,6 +87,23 @@ export function isValidEthereumAddress(address: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
+// 定义 Address 类型，用于与 viem 交互
+export type Address = `0x${string}`;
+
+/**
+ * 计算 DirectMessage 合约中的会话 ID (convoId)
+ * @param a 地址 A
+ * @param b 地址 B
+ * @returns 会话 ID (bytes32 字符串)
+ */
+export function computeConvoId(a: Address, b: Address): `0x${string}` {
+  const A = getAddress(a);
+  const B = getAddress(b);
+  // 与 Solidity 中 address 的 < 比较等价：固定 20 字节十六进制，按数值大小排序
+  const [x, y] = A.toLowerCase() < B.toLowerCase() ? [A, B] : [B, A];
+  return keccak256(encodePacked(['address', 'address'], [x, y]));
+}
+
 // ===== 数字相关工具函数 =====
 /**
  * 格式化数字显示
@@ -94,7 +112,9 @@ export function isValidEthereumAddress(address: string): boolean {
  * @returns 格式化后的数字字符串
  */
 export function formatNumber(n: number, maxFractionDigits: number = 6): string {
-  return n.toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits });
+  return n.toLocaleString(undefined, {
+    maximumFractionDigits: maxFractionDigits
+  });
 }
 
 /**
@@ -105,8 +125,8 @@ export function formatNumber(n: number, maxFractionDigits: number = 6): string {
  * @returns 格式化后的货币字符串
  */
 export function formatCurrency(
-  amount: number, 
-  currency: string = 'USD', 
+  amount: number,
+  currency: string = 'USD',
   locale: string = 'en-US'
 ): string {
   return new Intl.NumberFormat(locale, {

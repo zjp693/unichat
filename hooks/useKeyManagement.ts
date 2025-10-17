@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { KeyPair, chatEncryption } from '@/lib/encryption';
 
 export const useKeyManagement = () => {
@@ -53,33 +53,39 @@ export const useKeyManagement = () => {
   };
 
   // 加密消息
-  const encryptMessage = (message: string, publicKey: string): string => {
-    return chatEncryption.encryptMessage(message, publicKey);
-  };
+  const encryptMessage = useCallback(
+    (message: string, publicKey: string): string => {
+      return chatEncryption.encryptMessage(message, publicKey);
+    },
+    []
+  ); // 没有外部依赖，所以依赖数组为空
 
   // 解密消息
-  const decryptMessage = (
-    encryptedMessage: string,
-    privateKey: string
-  ): string => {
-    if (!encryptedMessage) {
-      throw new Error('加密消息不能为空');
-    }
-    if (!privateKey) {
-      throw new Error('私钥不能为空');
-    }
-    return chatEncryption.decryptMessage(encryptedMessage, privateKey);
-  };
+  const decryptMessage = useCallback(
+    (encryptedMessage: string, privateKey: string): string => {
+      if (!encryptedMessage) {
+        throw new Error('加密消息不能为空');
+      }
+      if (!privateKey) {
+        throw new Error('私钥不能为空');
+      }
+      return chatEncryption.decryptMessage(encryptedMessage, privateKey);
+    },
+    []
+  ); // 没有外部依赖，所以依赖数组为空
 
   // 批量解密消息
-  const decryptMessages = (
-    encryptedMessages: string[],
-    privateKey: string
-  ): Array<
-    { success: true; decrypted: string } | { success: false; error: string }
-  > => {
-    return chatEncryption.decryptMessages(encryptedMessages, privateKey);
-  };
+  const decryptMessages = useCallback(
+    (
+      encryptedMessages: string[],
+      privateKey: string
+    ): Array<
+      { success: true; decrypted: string } | { success: false; error: string }
+    > => {
+      return chatEncryption.decryptMessages(encryptedMessages, privateKey);
+    },
+    []
+  ); // 没有外部依赖，所以依赖数组为空
 
   return {
     keys,
