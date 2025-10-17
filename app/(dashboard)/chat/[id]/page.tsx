@@ -6,20 +6,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  MoreHorizontal,
-  Image as ImageIcon,
-  Camera,
-  Phone,
-  Bot,
-  Redo,
-  ShoppingCart,
-  Vote,
-  Gift,
-  Plus,
-  Smile,
-  AudioLines
-} from 'lucide-react';
+import { MoreHorizontal, Plus, Smile, AudioLines } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -75,7 +62,8 @@ interface Message {
 // 定义布局常量
 const TOP_BAR_HEIGHT = 56;
 const NAV_BAR_HEIGHT = 56;
-const FOOTER_HEIGHT = 58;
+const FOOTER_HEIGHT = 58; // 输入框内容区域的基础高度
+const DEFAULT_BOTTOM_INSET_PADDING = 8; // 默认底部填充，例如 8px
 const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
 // const LOCAL_STORAGE_KEY = 'chat_latest_cid'; // 暂时保留，后续会移除
 
@@ -119,6 +107,7 @@ export default function ChatPage() {
     currentAddress as Address,
     recipientAddress
   );
+
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
 
   const pageSize = 10; // 获取最近 10 条消息
@@ -176,28 +165,29 @@ export default function ChatPage() {
         let decryptedContent: string | undefined;
         let isMessageEncrypted = true;
 
-        try {
-          const userPrivateKey =
-            keys.length > 0 ? keys[0].privateKey : DEFAULT_KEY_PAIR.privateKey;
-          decryptedContent = decryptMessage(content, userPrivateKey);
-          isMessageEncrypted = false;
-        } catch (error) {
-          console.warn('接收到的消息解密失败:', error);
-          decryptedContent = content;
-          isMessageEncrypted = true;
-        }
+        // 移除自动解密逻辑，默认显示密文
+        // try {
+        //   const userPrivateKey =
+        //     keys.length > 0 ? keys[0].privateKey : DEFAULT_KEY_PAIR.privateKey;
+        //   decryptedContent = decryptMessage(content, userPrivateKey);
+        //   isMessageEncrypted = false;
+        // } catch (error) {
+        //   console.warn('接收到的消息解密失败:', error);
+        //   decryptedContent = content;
+        //   isMessageEncrypted = true;
+        // }
 
         const newMessage: Message = {
           id: `${timestamp?.toString()}-${from?.toLowerCase()}`,
-          content: decryptedContent || content,
+          content: content, // 直接使用原始密文
           sender:
             from?.toLowerCase() === currentAddress?.toLowerCase()
               ? 'user'
               : 'other',
           timestamp: new Date(Number(timestamp) * 1000),
           type: 'text',
-          isEncrypted: isMessageEncrypted,
-          originalContent: isMessageEncrypted ? content : null,
+          isEncrypted: true, // 始终标记为加密
+          originalContent: content, // 存储原始密文
           recipient: to as Address
         };
 
@@ -237,8 +227,8 @@ export default function ChatPage() {
         !currentAddress ||
         !recipientAddress ||
         totalMessagesBigInt === undefined ||
-        rawMessages === undefined ||
-        rawMessages === null ||
+        !rawMessages || // 检查 rawMessages 是否为 null 或 undefined
+        !Array.isArray(rawMessages) || // 确保 rawMessages 是一个数组
         rawMessages.length === 0
       ) {
         setMessages([]);
@@ -260,38 +250,37 @@ export default function ChatPage() {
           let decryptedContent: string | undefined;
           let isMessageEncrypted = true;
 
-          try {
-            const userPrivateKey =
-              keys.length > 0
-                ? keys[0].privateKey
-                : DEFAULT_KEY_PAIR.privateKey;
-            decryptedContent = decryptMessage(
-              msg.content as string,
-              userPrivateKey
-            );
-            isMessageEncrypted = false;
-          } catch (error) {
-            console.warn(
-              '消息解密失败，可能使用了不同的密钥或消息未加密:',
-              error
-            );
-            decryptedContent = msg.content as string;
-            isMessageEncrypted = true;
-          }
+          // 移除自动解密逻辑，默认显示密文
+          // try {
+          //   const userPrivateKey =
+          //     keys.length > 0
+          //       ? keys[0].privateKey
+          //       : DEFAULT_KEY_PAIR.privateKey;
+          //   decryptedContent = decryptMessage(
+          //     msg.content as string,
+          //     userPrivateKey
+          //   );
+          //   isMessageEncrypted = false;
+          // } catch (error) {
+          //   console.warn(
+          //     '消息解密失败，可能使用了不同的密钥或消息未加密:',
+          //     error
+          //   );
+          //   decryptedContent = msg.content as string;
+          //   isMessageEncrypted = true;
+          // }
 
           return {
             id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}`,
-            content: decryptedContent || (msg.content as string),
+            content: msg.content as string, // 直接使用原始密文
             sender:
               msg.sender.toLowerCase() === currentAddress?.toLowerCase()
                 ? 'user'
                 : 'other',
             timestamp: new Date(Number(msg.timestamp) * 1000),
             type: 'text',
-            isEncrypted: isMessageEncrypted,
-            originalContent: isMessageEncrypted
-              ? (msg.content as string)
-              : null,
+            isEncrypted: true, // 始终标记为加密
+            originalContent: msg.content as string, // 存储原始密文
             recipient: msg.recipient as Address
           };
         });
@@ -372,6 +361,15 @@ export default function ChatPage() {
         );
         return;
       }
+      // console.log('发送消息请求参数：', {
+      //   address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+      //   abi: DirectMessageAbi,
+      //   functionName: 'sendMessage',
+      //   args: [recipientAddress, encryptedContent],
+      //   account: currentAddress,
+      //   recipientAddressLength: recipientAddress.length,
+      //   encryptedContentLength: encryptedContent.length
+      // });
       writeContract({
         address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
         abi: DirectMessageAbi,
@@ -529,7 +527,7 @@ export default function ChatPage() {
     setIsActionsOpen(true);
     // 如果panelHeight为0（表示软键盘从未打开过或已完全收起），则使用默认高度250
     if (panelHeight === 0) {
-      setPanelHeight(250);
+      setPanelHeight(200); // 将默认高度调整为 150px
     }
   };
 
@@ -675,8 +673,8 @@ export default function ChatPage() {
         className="fixed w-full overflow-hidden"
         style={{
           top: `${TOTAL_HEADER_HEIGHT}px`,
-          // 重新计算底部偏移，包含 FOOTER_HEIGHT、安全区域和功能面板高度
-          bottom: `calc(${FOOTER_HEIGHT}px + env(safe-area-inset-bottom, 0px) + ${isActionsOpen ? panelHeight : 0}px)`,
+          // 重新计算底部偏移，包含 FOOTER_HEIGHT、默认底部填充、安全区域和功能面板高度
+          bottom: `calc(${FOOTER_HEIGHT}px + ${DEFAULT_BOTTOM_INSET_PADDING}px + env(safe-area-inset-bottom, 0px) + ${isActionsOpen ? panelHeight : 0}px)`,
           left: 0,
           right: 0,
           // 添加过渡动画使布局变化更平滑
@@ -754,21 +752,13 @@ export default function ChatPage() {
                               : 'bg-[#e9f9ee]'
                           )}
                         >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
+                          <Image
+                            src="/chats/news.png"
+                            alt="计数"
+                            width={14}
+                            height={14}
                             className="mr-1"
-                          >
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                          </svg>
+                          />
                           156
                         </div>
                       </div>
@@ -809,7 +799,7 @@ export default function ChatPage() {
           className="p-2 flex items-center bg-gray-100 border-t"
           style={{
             height: `${FOOTER_HEIGHT}px`,
-            paddingBottom: `env(safe-area-inset-bottom, 0px)`,
+            paddingBottom: `calc(${DEFAULT_BOTTOM_INSET_PADDING}px + env(safe-area-inset-bottom, 0px))`,
             transition: 'all 0.3s ease-in-out'
           }}
         >
@@ -881,8 +871,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <ImageIcon className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/Album.png"
+                  alt="Album"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">Album</span>
             </div>
@@ -890,8 +885,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Camera className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/Photography.png"
+                  alt="Photography"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">Photography</span>
             </div>
@@ -899,8 +899,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Phone className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/Voicecall.png"
+                  alt="Voice call"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">Voice call</span>
             </div>
@@ -908,8 +913,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Bot className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/AI.png"
+                  alt="AI"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">AI</span>
             </div>
@@ -917,8 +927,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Gift className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/Redenvelope.png"
+                  alt="Red envelope"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">Red envelope</span>
             </div>
@@ -926,8 +941,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Redo className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/Transfer.png"
+                  alt="Transfer"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">Transfer</span>
             </div>
@@ -935,8 +955,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <ShoppingCart className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/Sendgoods.png"
+                  alt="Send goods"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">Send goods</span>
             </div>
@@ -944,8 +969,13 @@ export default function ChatPage() {
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
             >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
-                <Vote className="h-7 w-7 text-gray-600" />
+              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                <Image
+                  src="/chats/Vote.png"
+                  alt="Vote"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-xs text-gray-500">Vote</span>
             </div>
