@@ -3,6 +3,7 @@
 
 import React, { useState } from 'react';
 import ArrowLeftImage from '../../../../public/chats/arrow_left.png';
+import { useRouter } from 'next/navigation'; // <-- 添加这一行
 
 // --- Icon Imports ---
 // In a real project, you would install lucide-react: npm install lucide-react
@@ -33,63 +34,63 @@ const allContactsData = [
     name: 'keyle',
     imageUrl:
       'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&q=80&fit=crop',
-    status: 'checked'
+    status: 'checked' as ContactStatus
   },
   {
     id: 'ktrt',
     name: 'ktrt',
     imageUrl:
       'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&q=80&fit=crop',
-    status: 'checked'
+    status: 'checked' as ContactStatus
   },
   {
     id: 'kelno',
     name: 'kelno',
     imageUrl:
       'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=100&h=100&q=80&fit=crop',
-    status: 'checked'
+    status: 'checked' as ContactStatus
   },
   {
     id: 'ktty',
     name: 'ktty',
     imageUrl:
       'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&q=80&fit=crop',
-    status: 'checked'
+    status: 'checked' as ContactStatus
   },
   {
     id: 'Linger',
     name: 'Linger',
     imageUrl:
       'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=100&h=100&q=80&fit=crop',
-    status: 'available'
+    status: 'available' as ContactStatus
   },
   {
     id: 'Lom',
     name: 'Lom',
     imageUrl:
       'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&q=80&fit=crop',
-    status: 'available'
+    status: 'available' as ContactStatus
   },
   {
     id: 'Musha',
     name: 'Musha',
     imageUrl:
       'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&q=80&fit=crop',
-    status: 'available'
+    status: 'available' as ContactStatus
   },
   {
     id: 'extra1',
     name: 'Extra 1',
     imageUrl:
       'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&q=80&fit=crop',
-    status: 'available'
+    status: 'available' as ContactStatus
   },
   {
     id: 'extra2',
     name: 'Extra 2',
     imageUrl:
       'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&q=80&fit=crop',
-    status: 'available'
+    status: 'available' as ContactStatus
   }
 ];
 
@@ -126,6 +127,8 @@ export default function InvitePage() {
     (contact) => contact.status === 'checked'
   );
   const selectedCount = selectedContacts.length;
+
+  const router = useRouter(); // <-- 添加这一行
 
   return (
     <div
@@ -178,7 +181,7 @@ export default function InvitePage() {
               key={contact.id}
               src={contact.imageUrl}
               alt={contact.name}
-              className="h-10 w-10 rounded-full flex-shrink-0 object-cover"
+              className="h-10 w-10 rounded-lg flex-shrink-0 object-cover"
             />
           ))}
         </div>
@@ -239,6 +242,18 @@ export default function InvitePage() {
           <button
             className="bg-indigo-600 text-white rounded-full px-4 py-2 font-semibold text-sm disabled:bg-indigo-400 disabled:cursor-not-allowed"
             disabled={selectedCount === 0}
+            onClick={() => {
+              const selectedContactsNames = selectedContacts.map(c => c.name).join('、');
+              const invitedMessage = `你邀请了${selectedContactsNames}加入了群聊`;
+              const groupId = `g_${Date.now()}`; // 模拟生成群组ID
+
+              const queryParams = new URLSearchParams();
+              queryParams.set('type', 'group');
+              queryParams.set('invitedMembers', invitedMessage);
+              queryParams.set('memberCount', (selectedCount + 1).toString()); // 修正：添加成员数量参数时包含当前用户
+
+              router.push(`/chat/${groupId}?${queryParams.toString()}`);
+            }}
           >
             立即邀请({selectedCount})
           </button>

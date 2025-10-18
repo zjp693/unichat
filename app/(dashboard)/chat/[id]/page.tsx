@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MoreHorizontal, Plus, Smile, AudioLines } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 // 导入加密功能相关的模块
 import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
@@ -44,13 +44,14 @@ import {
 } from '@/lib/DirectMessageAbi';
 import { computeConvoId, Address, isValidEthereumAddress } from '@/lib/utils';
 import { useWaitForTransactionReceipt } from 'wagmi';
+import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel'; // <-- 导入 GroupChatInfoPanel 组件
 
 // 定义消息对象的数据结构
 interface Message {
   id: string;
   sender: 'user' | 'other';
   timestamp: Date | string; // 允许字符串以便从API接收
-  type: 'text' | 'image';
+  type: 'text' | 'image' | 'system' | 'system-time'; // <-- 添加 'system-time' 类型
   isEncrypted?: boolean;
   originalContent: string | null; // 修正为 string 或 null
   status?: 'sending' | 'failed'; // 用于UI反馈发送状态
@@ -71,26 +72,36 @@ const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
 const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
   '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
+const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
+  '0x1234567890123456789012345678901234567890'; // <-- 固定接收者地址
+
 export default function ChatPage() {
   // --- 基础钩子 ---
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams(); // <-- 添加这一行
   const { decryptMessage, encryptMessage, keys, decryptMessages } =
     useKeyManagement();
 
   // --- Wagmi 钩子 --- //
-  const { address: currentAddress, isConnected } = useAccount(); // 直接解构获取 address
+  const { address: currentAddress, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
   const chains = useChains();
+
   // 移除 openConnectModal 和 openChainModal 的解构
   // const { openConnectModal, openChainModal } = useAppKit();
   const currentChain = chains.find((chain) => chain.id === chainId);
-  // const recipientAddress = params.id as Address; // 从 URL 获取接收者地址
-  const recipientAddress: Address =
-    '0x1234567890123456789012345678901234567890'; // 临时固定接收者地址，请替换为您要聊天的实际地址
+
+  // 从 URL 解析 conversationId, chatType, invitedMembersMessage, memberCount
+  const conversationId = params.id as string; // <-- 将 Address 改为 string
+  const chatType = searchParams.get('type') === 'group' ? 'group' : 'private';
+  const invitedMembersMessage = searchParams.get('invitedMembers')
+    ? decodeURIComponent(searchParams.get('invitedMembers') as string)
+    : null;
+  const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
 
   // 确保 recipientAddress 是一个有效的以太坊地址
   // if (!isValidEthereumAddress(recipientAddress)) {
@@ -105,7 +116,7 @@ export default function ChatPage() {
   // --- 新增：使用封装的钩子获取消息总数和消息列表 ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
     currentAddress as Address,
-    recipientAddress
+    CONTRACT_RECIPIENT_FOR_WAGMI // <-- 使用固定地址
   );
 
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
@@ -116,7 +127,7 @@ export default function ChatPage() {
 
   const { data: rawMessages } = useGetMessages(
     currentAddress as Address,
-    recipientAddress,
+    CONTRACT_RECIPIENT_FOR_WAGMI, // <-- 使用固定地址
     BigInt(start),
     BigInt(count)
   );
@@ -138,9 +149,9 @@ export default function ChatPage() {
 
   // 计算 convoId
   const currentConvoId = useMemo(() => {
-    if (!currentAddress || !recipientAddress) return undefined;
-    return computeConvoId(currentAddress, recipientAddress);
-  }, [currentAddress, recipientAddress]);
+    if (!currentAddress || !CONTRACT_RECIPIENT_FOR_WAGMI) return undefined;
+    return computeConvoId(currentAddress, CONTRACT_RECIPIENT_FOR_WAGMI);
+  }, [currentAddress, CONTRACT_RECIPIENT_FOR_WAGMI]);
 
   // 实时消息监听
   useListenMessageSent(
@@ -209,10 +220,12 @@ export default function ChatPage() {
   const [isClient, setIsClient] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(0);
+  const [showGroupInfoPanel, setShowGroupInfoPanel] = useState(false); // <-- 新增状态变量
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const actionsPanelContentRef = useRef<HTMLDivElement>(null); // 新增 ref
   const prevMessagesLengthRef = useRef(messages.length);
 
   // --- 数据获取与同步 ---
@@ -225,87 +238,114 @@ export default function ChatPage() {
       if (
         !isConnected ||
         !currentAddress ||
-        !recipientAddress ||
+        !conversationId || // 使用 conversationId 替代 recipientAddress
         totalMessagesBigInt === undefined ||
-        !rawMessages || // 检查 rawMessages 是否为 null 或 undefined
-        !Array.isArray(rawMessages) || // 确保 rawMessages 是一个数组
-        rawMessages.length === 0
+        // rawMessages 目前用于 Wagmi 钩子，但我们不再依赖其内容来初始化消息
+        // !rawMessages || // 检查 rawMessages 是否为 null 或 undefined
+        // !Array.isArray(rawMessages) || // 确保 rawMessages 是一个数组
+        // rawMessages.length === 0
+        // 上述检查不再需要，因为我们现在硬编码消息
+        false // 简化条件，始终允许加载硬编码消息
       ) {
-        setMessages([]);
-        setIsLoading(false);
-        return;
+        // 仅在关键依赖缺失时才清空消息并停止加载
+        if (!isConnected || !currentAddress || !conversationId) {
+          setMessages([]);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      if (totalMessages === 0) {
-        setMessages([]);
-        setIsLoading(false);
-        return;
+      // totalMessages === 0 的检查现在可以移除或调整，因为我们硬编码消息
+      // if (totalMessages === 0) {
+      //   setMessages([]);
+      //   setIsLoading(false);
+      //   return;
+      // }
+
+      let initialMessages: Message[] = [];
+
+      if (chatType === 'private') {
+        // 单聊：加载硬编码的私聊历史消息
+        initialMessages = [];
+        // 实际应用中，如果 useGetMessages 返回数据，这里会处理 rawMessages
+        // 但在 demo 中，我们假设 rawMessages 也是硬编码的私聊消息
+      } else if (chatType === 'group') {
+        // 群聊：不加载历史记录，只显示邀请成功消息
+        if (invitedMembersMessage) {
+          initialMessages.push({
+            id: `system-time-${Date.now()}`,
+            sender: 'other',
+            content: dayjs().format('A h:mm'), // 例如：下午 1:49
+            timestamp: new Date(),
+            type: 'system-time',
+            isEncrypted: false,
+            originalContent: dayjs().format('A h:mm'),
+            recipient: CONTRACT_RECIPIENT_FOR_WAGMI
+          });
+
+          initialMessages.push({
+            id: `system-${Date.now()}`,
+            sender: 'other', // 系统消息
+            content: invitedMembersMessage,
+            timestamp: new Date(),
+            type: 'system', // <-- 将类型设置为 'system'
+            isEncrypted: false,
+            originalContent: invitedMembersMessage,
+            recipient: CONTRACT_RECIPIENT_FOR_WAGMI
+          });
+        }
       }
 
-      try {
-        // 3. 格式化并解密消息
-        const formattedAndDecryptedMessages: Message[] = (
-          rawMessages as DMMessage[]
-        ).map((msg: DMMessage) => {
+      // 3. 格式化并解密消息 (此部分现在对硬编码消息执行)
+      // 保持原有逻辑，但要注意它会处理 initialMessages
+      const formattedAndMaybeDecryptedMessages: Message[] = initialMessages.map(
+        (msg: Message) => {
           let decryptedContent: string | undefined;
           let isMessageEncrypted = true;
 
-          // 移除自动解密逻辑，默认显示密文
-          // try {
-          //   const userPrivateKey =
-          //     keys.length > 0
-          //       ? keys[0].privateKey
-          //       : DEFAULT_KEY_PAIR.privateKey;
-          //   decryptedContent = decryptMessage(
-          //     msg.content as string,
-          //     userPrivateKey
-          //   );
-          //   isMessageEncrypted = false;
-          // } catch (error) {
-          //   console.warn(
-          //     '消息解密失败，可能使用了不同的密钥或消息未加密:',
-          //     error
-          //   );
-          //   decryptedContent = msg.content as string;
-          //   isMessageEncrypted = true;
-          // }
+          // 移除自动解密逻辑，默认显示密文 (保持 demo 现状)
+          decryptedContent = msg.content as string;
+          isMessageEncrypted = false; // 在 demo 中，假设硬编码消息默认是非加密的
 
           return {
-            id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}`,
-            content: msg.content as string, // 直接使用原始密文
-            sender:
-              msg.sender.toLowerCase() === currentAddress?.toLowerCase()
-                ? 'user'
-                : 'other',
-            timestamp: new Date(Number(msg.timestamp) * 1000),
-            type: 'text',
-            isEncrypted: true, // 始终标记为加密
-            originalContent: msg.content as string, // 存储原始密文
-            recipient: msg.recipient as Address
+            id: msg.id,
+            content: decryptedContent as string, // 使用解密后的内容，或原始内容
+            sender: msg.sender,
+            timestamp: msg.timestamp,
+            type: msg.type, // <-- 修正：保留原始消息的类型
+            isEncrypted: isMessageEncrypted,
+            originalContent: msg.originalContent,
+            recipient: msg.recipient
           };
-        });
+        }
+      );
 
-        setMessages(formattedAndDecryptedMessages);
-      } catch (error) {
-        console.error('获取聊天记录失败:', error);
-      }
+      setMessages(formattedAndMaybeDecryptedMessages);
       setIsLoading(false);
     };
 
     fetchAndProcessMessages();
+    // 确保依赖项包含所有影响初始消息加载的变量
   }, [
+    chatType,
+    invitedMembersMessage,
     isConnected,
     currentAddress,
-    recipientAddress,
+    conversationId,
+    totalMessagesBigInt,
+    rawMessages,
     publicClient,
     keys,
-    decryptMessage,
-    totalMessagesBigInt,
-    rawMessages
+    decryptMessage
   ]);
 
   // 发送新消息（加密 -> 乐观更新UI -> 调用合约上传）
   const handleSendMessage = async () => {
+    if (chatType === 'group') {
+      alert('此群聊功能暂不支持发送消息。因群聊需要另一个合约。'); // <-- 群聊拦截提示
+      return;
+    }
+
     if (!inputMessage.trim()) {
       return;
     }
@@ -316,7 +356,7 @@ export default function ChatPage() {
       return;
     }
 
-    if (!recipientAddress) {
+    if (!conversationId) {
       alert('聊天对象地址无效，无法发送消息。');
       return;
     }
@@ -344,15 +384,15 @@ export default function ChatPage() {
       isEncrypted: true,
       originalContent: originalMessageText,
       status: 'sending',
-      recipient: recipientAddress // 确保 recipient 属性正确设置
+      recipient: CONTRACT_RECIPIENT_FOR_WAGMI // <-- 总是使用固定地址作为 recipient
     };
 
     // 2. 乐观更新UI：立即在界面上显示新消息，让用户感觉流畅
     setMessages((prev) => [...prev, newMessageObject]);
 
     try {
-      // 3. 调用合约发送消息
-      if (!currentAddress || !recipientAddress || !writeContract) {
+      // 私聊：调用合约发送到固定地址
+      if (!currentAddress || !writeContract) {
         alert('钱包未连接或接收地址无效。');
         setMessages((prev) =>
           prev.map((msg) =>
@@ -365,16 +405,16 @@ export default function ChatPage() {
       //   address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
       //   abi: DirectMessageAbi,
       //   functionName: 'sendMessage',
-      //   args: [recipientAddress, encryptedContent],
+      //   args: [CONTRACT_RECIPIENT_FOR_WAGMI, encryptedContent],
       //   account: currentAddress,
-      //   recipientAddressLength: recipientAddress.length,
+      //   recipientAddressLength: CONTRACT_RECIPIENT_FOR_WAGMI.length,
       //   encryptedContentLength: encryptedContent.length
       // });
       writeContract({
         address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
         abi: DirectMessageAbi,
         functionName: 'sendMessage',
-        args: [recipientAddress, encryptedContent],
+        args: [CONTRACT_RECIPIENT_FOR_WAGMI, encryptedContent],
         account: currentAddress
       });
 
@@ -525,9 +565,12 @@ export default function ChatPage() {
   // 打开底部功能面板
   const handleOpenActions = () => {
     setIsActionsOpen(true);
-    // 如果panelHeight为0（表示软键盘从未打开过或已完全收起），则使用默认高度250
-    if (panelHeight === 0) {
-      setPanelHeight(200); // 将默认高度调整为 150px
+    // 动态获取功能面板内容的实际高度
+    if (actionsPanelContentRef.current) {
+      setPanelHeight(actionsPanelContentRef.current.scrollHeight);
+    } else if (panelHeight === 0) {
+      // 作为备用，如果ref在初始渲染时尚未准备好，提供一个默认值
+      setPanelHeight(200); // 你可以根据需要调整这个备用值
     }
   };
 
@@ -585,7 +628,8 @@ export default function ChatPage() {
           if (index !== -1 && results[index].success) {
             return {
               ...msg,
-              content: results[index].decrypted,
+              content: (results[index] as { success: true; decrypted: string })
+                .decrypted, // <-- 明确类型断言
               isEncrypted: false
             };
           }
@@ -661,8 +705,23 @@ export default function ChatPage() {
               />
             </svg>
           </Button>
-          <h1 className="text-base font-medium text-black">张三</h1>
-          <Button variant="ghost">
+          <h1 className="text-base font-medium text-black">
+            {chatType === 'private'
+              ? // 硬编码私聊对象名称，可以根据 conversationId 映射
+                conversationId === CONTRACT_RECIPIENT_FOR_WAGMI
+                ? '固定私聊好友'
+                : '未知私聊对象'
+              : // 群聊名称，现在包含动态成员数量
+                `${conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊'} (${memberCount})`}
+          </h1>
+          <Button
+            variant="ghost"
+            onClick={() => { // 修改 onClick 事件
+              if (chatType === 'group') {
+                setShowGroupInfoPanel(true);
+              }
+            }}
+          >
             <MoreHorizontal className="h-6 w-6 text-black" />
           </Button>
         </div>
@@ -683,101 +742,128 @@ export default function ChatPage() {
       >
         <ScrollArea className="h-full w-full" ref={scrollAreaRef}>
           <div className="p-4 space-y-5">
-            {messages.map((message) => (
-              // 消息行
-              <div
-                key={message.id}
-                className={cn(
-                  'flex w-full items-start gap-3',
-                  message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
-                )}
-              >
-                <Image
-                  src={
-                    message.sender === 'user'
-                      ? '/placeholder-user.jpg'
-                      : '/placeholder-user.jpg'
-                  }
-                  alt="Avatar"
-                  width={40}
-                  height={40}
-                  className="rounded-md flex-shrink-0"
-                />
-                <div
-                  className={cn(
-                    'max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm',
-                    message.sender === 'user'
-                      ? 'bg-[#5637f5] text-white'
-                      : 'bg-white text-black'
-                  )}
-                >
-                  <p className="whitespace-pre-wrap break-all">
-                    {message.content}
-                  </p>
-                  {(message.isEncrypted || message.originalContent) && (
-                    <div className="flex items-center justify-between mt-2 min-w-[12rem]">
-                      <div className="flex items-center gap-2">
-                        {/* 解密按钮 */}
-                        <button
-                          onClick={() => {
-                            // 单击解密按钮也执行批量解密
-                            setShowKeyModal(true);
-                            setSelectedMessageId(''); // 清空选中的单条消息ID，表示执行批量解密
-                          }}
-                          disabled={!message.isEncrypted}
-                          className={cn(
-                            'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
-                            message.sender === 'user'
-                              ? 'bg-[#785ff7]'
-                              : 'bg-[#fef0ee]',
-                            message.isEncrypted && 'hover:bg-black/20',
-                            'disabled:opacity-80 disabled:cursor-not-allowed'
-                          )}
-                        >
-                          <Image
-                            src="/chats/keyIcon.png"
-                            alt="解密"
-                            width={14}
-                            height={14}
-                            className="mr-1"
-                          />
-                          {message.isEncrypted ? '解密' : '已解密'}
-                        </button>
-                        {/* 计数器按钮 */}
-                        <div
-                          className={cn(
-                            'flex items-center rounded-md px-2 py-1 text-xs font-medium',
-                            message.sender === 'user'
-                              ? 'bg-[#785ff7]'
-                              : 'bg-[#e9f9ee]'
-                          )}
-                        >
-                          <Image
-                            src="/chats/news.png"
-                            alt="计数"
-                            width={14}
-                            height={14}
-                            className="mr-1"
-                          />
-                          156
+            {messages.map((message) => {
+              if (message.type === 'system-time') {
+                return (
+                  <div
+                    key={message.id}
+                    className="flex justify-center text-gray-500 text-xs my-2"
+                  >
+                    <span className="bg-gray-200 px-3 py-1 rounded-lg">
+                      {message.content}
+                    </span>
+                  </div>
+                );
+              } else if (message.type === 'system') {
+                return (
+                  <div
+                    key={message.id}
+                    className="flex justify-center text-gray-500 text-sm my-2"
+                  >
+                    <span className="bg-gray-200 px-3 py-1 rounded-lg">
+                      {message.content}
+                    </span>
+                  </div>
+                );
+              } else {
+                // 普通消息行 (type === 'text' || type === 'image')
+                return (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      'flex w-full items-start gap-3',
+                      message.sender === 'user'
+                        ? 'flex-row-reverse'
+                        : 'flex-row'
+                    )}
+                  >
+                    <Image
+                      src={
+                        message.sender === 'user'
+                          ? '/placeholder-user.jpg'
+                          : '/placeholder-user.jpg'
+                      }
+                      alt="Avatar"
+                      width={40}
+                      height={40}
+                      className="rounded-md flex-shrink-0"
+                    />
+                    <div
+                      className={cn(
+                        'max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm',
+                        message.sender === 'user'
+                          ? 'bg-[#5637f5] text-white'
+                          : 'bg-white text-black'
+                      )}
+                    >
+                      <p className="whitespace-pre-wrap break-all">
+                        {message.content}
+                      </p>
+                      {(message.isEncrypted || message.originalContent) && (
+                        <div className="flex items-center justify-between mt-2 min-w-[12rem]">
+                          <div className="flex items-center gap-2">
+                            {/* 解密按钮 */}
+                            <button
+                              onClick={() => {
+                                setShowKeyModal(true);
+                                setSelectedMessageId('');
+                              }}
+                              disabled={!message.isEncrypted}
+                              className={cn(
+                                'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                                message.sender === 'user'
+                                  ? 'bg-[#785ff7]'
+                                  : 'bg-[#fef0ee]',
+                                message.isEncrypted && 'hover:bg-black/20',
+                                'disabled:opacity-80 disabled:cursor-not-allowed'
+                              )}
+                            >
+                              <Image
+                                src="/chats/keyIcon.png"
+                                alt="解密"
+                                width={14}
+                                height={14}
+                                className="mr-1"
+                              />
+                              {message.isEncrypted ? '解密' : '已解密'}
+                            </button>
+                            {/* 计数器按钮 */}
+                            <div
+                              className={cn(
+                                'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                                message.sender === 'user'
+                                  ? 'bg-[#785ff7]'
+                                  : 'bg-[#e9f9ee]'
+                              )}
+                            >
+                              <Image
+                                src="/chats/news.png"
+                                alt="计数"
+                                width={14}
+                                height={14}
+                                className="mr-1"
+                              />
+                              156
+                            </div>
+                          </div>
+                          {/* 时间戳 */}
+                          <span
+                            className={cn(
+                              'text-xs pl-2',
+                              message.sender === 'user'
+                                ? 'text-purple-200'
+                                : 'text-gray-400'
+                            )}
+                          >
+                            {dayjs(message.timestamp).format('MM/DD HH:mm:ss')}
+                          </span>
                         </div>
-                      </div>
-                      {/* 时间戳 */}
-                      <span
-                        className={cn(
-                          'text-xs pl-2',
-                          message.sender === 'user'
-                            ? 'text-purple-200'
-                            : 'text-gray-400'
-                        )}
-                      >
-                        {dayjs(message.timestamp).format('MM/DD HH:mm:ss')}
-                      </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            ))}
+                  </div>
+                );
+              }
+            })}
           </div>
         </ScrollArea>
       </div>
@@ -817,21 +903,8 @@ export default function ChatPage() {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder=""
-            onFocus={() => {
-              handleCloseActions();
-              // 焦点聚焦时滚动到底部并确保输入框可见
-              setTimeout(() => {
-                if (window.visualViewport) {
-                  const keyboardHeight =
-                    window.innerHeight - window.visualViewport.height;
-                  if (keyboardHeight > 100) {
-                    setPanelHeight(keyboardHeight);
-                  }
-                }
-                scrollToBottom('smooth');
-              }, 300);
-            }}
+            placeholder={chatType === 'group' ? '群聊暂不支持发送消息' : ''} // <-- 动态 placeholder
+            disabled={chatType === 'group'} // <-- 群聊禁用输入框
             className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-1 focus-visible:ring-transparent"
             autoComplete="off"
           />
@@ -866,7 +939,10 @@ export default function ChatPage() {
             transition: 'height 0.3s ease-in-out'
           }}
         >
-          <div className="p-4 pt-6 grid grid-cols-4 gap-y-6 gap-x-4 text-center">
+          <div
+            ref={actionsPanelContentRef}
+            className="p-2 pt-4 grid grid-cols-4 gap-y-6 gap-x-4 text-center"
+          >
             <div
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
@@ -876,6 +952,7 @@ export default function ChatPage() {
                   src="/chats/Album.png"
                   alt="Album"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -890,6 +967,7 @@ export default function ChatPage() {
                   src="/chats/Photography.png"
                   alt="Photography"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -904,6 +982,7 @@ export default function ChatPage() {
                   src="/chats/Voicecall.png"
                   alt="Voice call"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -918,6 +997,7 @@ export default function ChatPage() {
                   src="/chats/AI.png"
                   alt="AI"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -932,6 +1012,7 @@ export default function ChatPage() {
                   src="/chats/Redenvelope.png"
                   alt="Red envelope"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -946,6 +1027,7 @@ export default function ChatPage() {
                   src="/chats/Transfer.png"
                   alt="Transfer"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -960,6 +1042,7 @@ export default function ChatPage() {
                   src="/chats/Sendgoods.png"
                   alt="Send goods"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -974,6 +1057,7 @@ export default function ChatPage() {
                   src="/chats/Vote.png"
                   alt="Vote"
                   fill
+                  sizes="56px"
                   className="object-cover"
                 />
               </div>
@@ -989,6 +1073,16 @@ export default function ChatPage() {
         onKeySelect={handleKeySelect}
         onBatchDecrypt={handleBatchDecrypt}
       />
+
+      {/* 条件性渲染 GroupChatInfoPanel */}
+      {showGroupInfoPanel && chatType === 'group' && (
+        <GroupChatInfoPanel
+          conversationId={conversationId}
+          chatType={chatType}
+          memberCount={memberCount}
+          onClose={() => setShowGroupInfoPanel(false)}
+        />
+      )}
     </div>
   );
 }
