@@ -265,10 +265,25 @@ export default function ChatPage() {
       let initialMessages: Message[] = [];
 
       if (chatType === 'private') {
-        // 单聊：加载硬编码的私聊历史消息
-        initialMessages = [];
-        // 实际应用中，如果 useGetMessages 返回数据，这里会处理 rawMessages
-        // 但在 demo 中，我们假设 rawMessages 也是硬编码的私聊消息
+        // 单聊：处理从链上获取的原始消息
+        if (rawMessages && Array.isArray(rawMessages) && rawMessages.length > 0) {
+          initialMessages = rawMessages.map((msg: DMMessage) => {
+            // 假设从链上获取的消息是加密的
+            return {
+              id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}`,
+              sender:
+                msg.sender.toLowerCase() === currentAddress?.toLowerCase()
+                  ? 'user'
+                  : 'other',
+              content: msg.content,
+              timestamp: new Date(Number(msg.timestamp) * 1000),
+              type: 'text',
+              isEncrypted: true,
+              originalContent: msg.content,
+              recipient: msg.recipient
+            };
+          });
+        }
       } else if (chatType === 'group') {
         // 群聊：不加载历史记录，只显示邀请成功消息
         if (invitedMembersMessage) {

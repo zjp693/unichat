@@ -89,6 +89,7 @@ const mockChats: ChatItem[] = [
 ];
 const address = '0xE0438Eb3703bF871E31Ce639bd351109c88666ea';
 export default function ChatPage() {
+  const router = useRouter(); // <-- 添加 useRouter 钩子
   return (
     <div className="flex flex-col h-full">
       {/* 顶部导航栏 */}
@@ -138,9 +139,23 @@ export default function ChatPage() {
 }
 
 function ChatListItem({ chat }: { chat: ChatItem }) {
+  const router = useRouter(); // <-- 添加 useRouter 钩子
+
+  const handleChatClick = () => {
+    // 根据 chat.isGroup 动态构建 URL
+    if (chat.isGroup) {
+      // 对于群聊，如果需要，可以添加不同的参数
+      router.push(`/chat/${chat.id}?type=group`);
+    } else {
+      // 对于单对单聊天，显式添加 type=private
+      router.push(`/chat/${chat.id}?type=private`);
+    }
+  };
+
   return (
-    <a href={`/chat/${chat.id}`} className="block">
-      <div className="relative flex items-center p-3 hover:bg-gray-100/50 cursor-pointer bg-white">
+    // 将 <a> 标签替换为 div，并添加 onClick 事件
+    <div onClick={handleChatClick} className="block cursor-pointer">
+      <div className="relative flex items-center p-3 hover:bg-gray-100/50 bg-white">
         <div className="relative">
           <div className="h-12 w-12 rounded overflow-hidden border border-gray-200">
             {chat.unreadCount && (
@@ -181,7 +196,7 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
           <div className="border-t w-[calc(100%-5rem)] border-border absolute bottom-0"></div>
         </div>
       </div>
-    </a>
+    </div>
   );
 }
 
