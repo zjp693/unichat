@@ -19,7 +19,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   minimumScale: 1,
-  userScalable: false
+  userScalable: false,
+  viewportFit: 'cover' // 添加此行以启用 env(safe-area-inset-*)
 };
 
 // RootLayout 必须是异步函数以使用 headers()
