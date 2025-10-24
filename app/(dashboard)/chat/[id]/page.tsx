@@ -1000,7 +1000,7 @@ export default function ChatPage() {
             onKeyPress={handleKeyPress}
             placeholder={chatType === 'group' ? '群聊暂不支持发送消息' : ''} // <-- 动态 placeholder
             disabled={chatType === 'group'} // <-- 群聊禁用输入框
-            className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-1 focus-visible:ring-transparent"
+            className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-0 focus-visible:ring-offset-0" // 修改这里
             autoComplete="off"
           />
           <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
@@ -1012,10 +1012,26 @@ export default function ChatPage() {
               className="text-gray-500"
             />
           </Button>
+          {/* 发送按钮 */}
+          <Button
+            onClick={handleSendMessage}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
+            style={{
+              backgroundColor: '#5436f1',
+              color: 'white',
+              fontSize: '14px'
+            }} // 应用发送按钮样式
+          >
+            发送
+          </Button>
+
+          {/* 加号按钮 */}
           <Button
             variant="ghost"
             onClick={handleOpenActions}
-            className="flex-shrink-0 rounded-full pl-0 pr-2 py-0"
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
           >
             <Image
               src="/chats/plus.png"
