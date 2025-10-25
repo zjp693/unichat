@@ -6,13 +6,14 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MoreHorizontal, Plus, Smile, AudioLines } from 'lucide-react';
+import { MoreHorizontal, Plus, Smile, AudioLines, X } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 // 导入加密功能相关的模块
-import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
-import { useKeyManagement } from '@/hooks/useKeyManagement';
+import { KeyGenerationModal } from '@/components/chat/KeyGenerationModal';
+import { DecryptionModal } from '@/components/chat/DecryptionModal';
+import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
 import { KeyPair, chatEncryption, DEFAULT_KEY_PAIR } from '@/lib/encryption';
 // 导入dayjs用于格式化时间
 import dayjs from 'dayjs';
@@ -45,6 +46,7 @@ import {
 import { computeConvoId, Address, isValidEthereumAddress } from '@/lib/utils';
 import { useWaitForTransactionReceipt } from 'wagmi';
 import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel'; // <-- 导入 GroupChatInfoPanel 组件
+import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel'; // <-- 导入 PrivateChatSettingsPanel 组件
 
 // 定义消息对象的数据结构
 interface Message {
@@ -67,21 +69,33 @@ const FOOTER_HEIGHT = 58; // 输入框内容区域的基础高度
 const DEFAULT_BOTTOM_INSET_PADDING = 8; // 默认底部填充，例如 8px
 const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
 // const LOCAL_STORAGE_KEY = 'chat_latest_cid'; // 暂时保留，后续会移除
+const MESSAGES_PER_LOAD = 15; // 每次加载15条消息
 
 // DirectMessage 合约地址从环境变量中获取
 const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
   '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
 const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
-  '0x1234567890123456789012345678901234567890'; // <-- 固定接收者地址
+  '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678'; // <-- 固定接收者地址
 
 export default function ChatPage() {
   // --- 基础钩子 ---
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams(); // <-- 添加这一行
-  const { decryptMessage, encryptMessage, keys, decryptMessages } =
-    useKeyManagement();
+  const {
+    keys,
+    loading,
+    loadKeysFromStorage,
+    generateNewKeyPair,
+    saveKeyToStorage,
+    decryptMessage,
+    encryptMessage,
+    decryptMessages
+  } = useKeyManagementRedux();
+  const [loadedMessageCount, setLoadedMessageCount] =
+    useState(MESSAGES_PER_LOAD); // 新增：跟踪已加载的消息数量
+  const [isFetchingMore, setIsFetchingMore] = useState(false); // 新增：防止重复加载
 
   // --- Wagmi 钩子 --- //
   const { address: currentAddress, isConnected } = useAccount();
@@ -121,14 +135,15 @@ export default function ChatPage() {
 
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
 
-  const pageSize = 10; // 获取最近 10 条消息
-  const start = totalMessages > pageSize ? totalMessages - pageSize : 0;
-  const count = totalMessages > pageSize ? pageSize : totalMessages;
+  // 计算要加载的消息的起始索引和数量
+  const messagesToLoad = Math.min(loadedMessageCount, totalMessages);
+  const start = totalMessages - messagesToLoad;
+  const count = messagesToLoad;
 
-  const { data: rawMessages } = useGetMessages(
+  const { data: rawMessages, refetch: refetchMessages } = useGetMessages(
     currentAddress as Address,
     CONTRACT_RECIPIENT_FOR_WAGMI, // <-- 使用固定地址
-    BigInt(start),
+    BigInt(start < 0 ? 0 : start), // 确保 start 不小于 0
     BigInt(count)
   );
 
@@ -216,11 +231,15 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [inputMessage, setInputMessage] = useState('');
   const [showKeyModal, setShowKeyModal] = useState(false);
+  const [showDecryptModal, setShowDecryptModal] = useState(false);
+  const [showGenerationModal, setShowGenerationModal] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string>('');
   const [isClient, setIsClient] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(0);
   const [showGroupInfoPanel, setShowGroupInfoPanel] = useState(false); // <-- 新增状态变量
+  const [showPrivateChatSettingsPanel, setShowPrivateChatSettingsPanel] =
+    useState(false); // <-- 新增状态变量
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLInputElement>(null);
@@ -229,44 +248,42 @@ export default function ChatPage() {
   const prevMessagesLengthRef = useRef(messages.length);
 
   // --- 数据获取与同步 ---
-
   // 页面加载时，从localStorage读取指针，调用API获取历史记录
   useEffect(() => {
     const fetchAndProcessMessages = async () => {
       setIsLoading(true);
+      loadKeysFromStorage(); // 加载密钥
+
+      // 从本地存储中查找并获取聊天记录CID
+      const savedCID = localStorage.getItem('chat_latest_cid');
+      console.log('Saved CID:', savedCID);
 
       if (
         !isConnected ||
         !currentAddress ||
         !conversationId || // 使用 conversationId 替代 recipientAddress
         totalMessagesBigInt === undefined ||
-        // rawMessages 目前用于 Wagmi 钩子，但我们不再依赖其内容来初始化消息
-        // !rawMessages || // 检查 rawMessages 是否为 null 或 undefined
-        // !Array.isArray(rawMessages) || // 确保 rawMessages 是一个数组
-        // rawMessages.length === 0
-        // 上述检查不再需要，因为我们现在硬编码消息
         false // 简化条件，始终允许加载硬编码消息
       ) {
         // 仅在关键依赖缺失时才清空消息并停止加载
         if (!isConnected || !currentAddress || !conversationId) {
           setMessages([]);
           setIsLoading(false);
+          setIsFetchingMore(false); // 重置加载状态
           return;
         }
       }
 
       // totalMessages === 0 的检查现在可以移除或调整，因为我们硬编码消息
-      // if (totalMessages === 0) {
-      //   setMessages([]);
-      //   setIsLoading(false);
-      //   return;
-      // }
-
       let initialMessages: Message[] = [];
 
       if (chatType === 'private') {
         // 单聊：处理从链上获取的原始消息
-        if (rawMessages && Array.isArray(rawMessages) && rawMessages.length > 0) {
+        if (
+          rawMessages &&
+          Array.isArray(rawMessages) &&
+          rawMessages.length > 0
+        ) {
           initialMessages = rawMessages.map((msg: DMMessage) => {
             // 假设从链上获取的消息是加密的
             return {
@@ -315,28 +332,25 @@ export default function ChatPage() {
       // 保持原有逻辑，但要注意它会处理 initialMessages
       const formattedAndMaybeDecryptedMessages: Message[] = initialMessages.map(
         (msg: Message) => {
-          let decryptedContent: string | undefined;
-          let isMessageEncrypted = true;
-
-          // 移除自动解密逻辑，默认显示密文 (保持 demo 现状)
-          decryptedContent = msg.content as string;
-          isMessageEncrypted = false; // 在 demo 中，假设硬编码消息默认是非加密的
-
+          // 对于从链上获取的消息，保持加密状态
+          // 不再进行自动解密，保持 isEncrypted 状态不变
           return {
-            id: msg.id,
-            content: decryptedContent as string, // 使用解密后的内容，或原始内容
-            sender: msg.sender,
-            timestamp: msg.timestamp,
-            type: msg.type, // <-- 修正：保留原始消息的类型
-            isEncrypted: isMessageEncrypted,
-            originalContent: msg.originalContent,
-            recipient: msg.recipient
+            ...msg,
+            content: msg.content, // 保持原始内容（密文）
+            isEncrypted: msg.isEncrypted, // 保持加密状态
+            originalContent: msg.originalContent // 保持原始内容
           };
         }
       );
 
-      setMessages(formattedAndMaybeDecryptedMessages);
+      // 如果是加载更多消息，则将新消息添加到旧消息的头部
+      if (isFetchingMore) {
+        setMessages((prev) => [...formattedAndMaybeDecryptedMessages, ...prev]);
+      } else {
+        setMessages(formattedAndMaybeDecryptedMessages);
+      }
       setIsLoading(false);
+      setIsFetchingMore(false);
     };
 
     fetchAndProcessMessages();
@@ -350,8 +364,9 @@ export default function ChatPage() {
     totalMessagesBigInt,
     rawMessages,
     publicClient,
-    keys,
-    decryptMessage
+    loadKeysFromStorage,
+    loadedMessageCount, // 新增：将 loadedMessageCount 添加到依赖项
+    isFetchingMore
   ]);
 
   // 发送新消息（加密 -> 乐观更新UI -> 调用合约上传）
@@ -362,6 +377,13 @@ export default function ChatPage() {
     }
 
     if (!inputMessage.trim()) {
+      return;
+    }
+
+    // 检查用户是否拥有密钥
+    if (keys.length === 0) {
+      // 直接打开密钥生成弹窗，而不是让用户选择操作
+      setShowGenerationModal(true);
       return;
     }
 
@@ -603,13 +625,16 @@ export default function ChatPage() {
     }
   };
 
-  // 点击"解密"按钮
-  const handleDecryptClick = (messageId: string) => {
-    const message = messages.find((msg) => msg.id === messageId);
-    if (!message || !message.isEncrypted) return;
-    // 单击消息解密按钮也执行批量解密
-    setShowKeyModal(true);
-    setSelectedMessageId(''); // 清空选中的单条消息ID，表示执行批量解密
+  // 打开密钥生成弹窗
+  const handleOpenKeyGeneration = () => {
+    setShowKeyModal(false);
+    setShowGenerationModal(true);
+  };
+
+  // 打开解密弹窗
+  const handleOpenDecryption = () => {
+    setShowKeyModal(false);
+    setShowDecryptModal(true);
   };
 
   // 在弹窗中选择密钥后进行解密
@@ -618,33 +643,63 @@ export default function ChatPage() {
     handleBatchDecrypt(key);
   };
 
+  // 点击"解密"按钮
+  const handleDecryptClick = (messageId: string) => {
+    const message = messages.find((msg) => msg.id === messageId);
+    if (!message || !message.isEncrypted) return;
+    setSelectedMessageId(messageId); // <-- 新增：设置被点击的消息ID
+    // 直接打开解密弹窗
+    setShowDecryptModal(true);
+  };
+
   // 批量解密功能
   const handleBatchDecrypt = (key: KeyPair) => {
-    // 获取所有加密的消息
-    const encryptedMessages = messages
-      .filter((msg) => msg.isEncrypted)
-      .map((msg) => msg.content);
+    let messagesToDecrypt: Message[] = [];
 
-    if (encryptedMessages.length === 0) {
+    if (selectedMessageId) {
+      // 如果有选中消息ID，则以其为中心选择前后25条，总共最多50条
+      const messageIndex = messages.findIndex(
+        (msg) => msg.id === selectedMessageId
+      );
+      if (messageIndex !== -1) {
+        const start = Math.max(0, messageIndex - 25);
+        const end = Math.min(messages.length, messageIndex + 25 + 1); // +1 是因为 slice 的 end 是非包含的
+        messagesToDecrypt = messages
+          .slice(start, end)
+          .filter((msg) => msg.isEncrypted);
+      } else {
+        // 如果找不到选中消息，则解密所有已加载的加密消息
+        messagesToDecrypt = messages.filter((msg) => msg.isEncrypted);
+      }
+    } else {
+      // 如果没有选中消息ID，则解密所有已加载的加密消息
+      messagesToDecrypt = messages.filter((msg) => msg.isEncrypted);
+    }
+
+    const encryptedContents = messagesToDecrypt.map((msg) => msg.content);
+
+    if (encryptedContents.length === 0) {
       alert('没有需要解密的消息');
       return;
     }
 
     try {
-      // 使用批量解密功能
-      const results = decryptMessages(encryptedMessages, key.privateKey);
+      const results = decryptMessages(encryptedContents, key.privateKey);
 
-      // 更新所有消息的状态
       setMessages((prev) => {
         return prev.map((msg) => {
-          if (!msg.isEncrypted) return msg;
+          // 只处理需要解密的消息
+          const targetMessage = messagesToDecrypt.find(
+            (m) => m.id === msg.id && m.isEncrypted
+          );
+          if (!targetMessage) return msg; // 如果不是目标消息或未加密，则跳过
 
-          const index = encryptedMessages.indexOf(msg.content);
+          const index = encryptedContents.indexOf(msg.content);
           if (index !== -1 && results[index].success) {
             return {
               ...msg,
               content: (results[index] as { success: true; decrypted: string })
-                .decrypted, // <-- 明确类型断言
+                .decrypted,
               isEncrypted: false
             };
           }
@@ -652,14 +707,38 @@ export default function ChatPage() {
         });
       });
 
-      // alert(`成功解密 ${results.filter(r => r.success).length} 条消息`);
       console.log(`成功解密 ${results.filter((r) => r.success).length} 条消息`);
     } catch (error: any) {
       console.error('批量解密失败:', error);
       alert(`批量解密失败: ${error.message || '未知错误'}`);
     }
 
-    setShowKeyModal(false);
+    setShowDecryptModal(false);
+    setSelectedMessageId(''); // <-- 新增：解密完成后清除选中消息ID
+  };
+
+  // 处理密钥生成完成
+  const handleKeyGenerated = (key: KeyPair) => {
+    // 仅保存密钥，不触发解密操作
+    setShowGenerationModal(false);
+  };
+
+  // 处理滚动事件
+  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop } = event.currentTarget;
+
+    // 检查是否滚动到顶部并且不在加载更多消息的状态
+    if (
+      scrollTop === 0 &&
+      !isFetchingMore &&
+      loadedMessageCount < totalMessages
+    ) {
+      setIsFetchingMore(true);
+      // 延迟加载，给用户一个“加载中”的感觉
+      setTimeout(() => {
+        setLoadedMessageCount((prev) => prev + MESSAGES_PER_LOAD);
+      }, 500); // 0.5秒延迟
+    }
   };
 
   // --- JSX 渲染 ---
@@ -686,7 +765,7 @@ export default function ChatPage() {
           </div>
           <Button
             variant="outline"
-            className="rounded-full flex items-center gap-2"
+            className="rounded-lg flex items-center gap-2"
           >
             <Image
               src="/top/usa.png"
@@ -700,25 +779,17 @@ export default function ChatPage() {
         </div>
         {/* 聊天导航栏 */}
         <div
-          className="flex items-center justify-between px-4"
+          className="flex items-center justify-between px-3"
           style={{ height: `${NAV_BAR_HEIGHT}px` }}
         >
           <Button variant="ghost" onClick={() => router.back()}>
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M15 18L9 12L15 6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <Image
+              src="/chats/arrow_left.png"
+              alt="返回"
+              width={10}
+              height={10}
+              className="text-black"
+            />
           </Button>
           <h1 className="text-base font-medium text-black">
             {chatType === 'private'
@@ -731,9 +802,11 @@ export default function ChatPage() {
           </h1>
           <Button
             variant="ghost"
-            onClick={() => { // 修改 onClick 事件
+            onClick={() => {
               if (chatType === 'group') {
                 setShowGroupInfoPanel(true);
+              } else if (chatType === 'private') {
+                setShowPrivateChatSettingsPanel(true);
               }
             }}
           >
@@ -755,7 +828,11 @@ export default function ChatPage() {
           transition: 'bottom 0.3s ease-in-out'
         }}
       >
-        <ScrollArea className="h-full w-full" ref={scrollAreaRef}>
+        <ScrollArea
+          className="h-full w-full"
+          ref={scrollAreaRef}
+          onScroll={handleScroll}
+        >
           <div className="p-4 space-y-5">
             {messages.map((message) => {
               if (message.type === 'system-time') {
@@ -820,8 +897,7 @@ export default function ChatPage() {
                             {/* 解密按钮 */}
                             <button
                               onClick={() => {
-                                setShowKeyModal(true);
-                                setSelectedMessageId('');
+                                handleDecryptClick(message.id);
                               }}
                               disabled={!message.isEncrypted}
                               className={cn(
@@ -920,7 +996,7 @@ export default function ChatPage() {
             onKeyPress={handleKeyPress}
             placeholder={chatType === 'group' ? '群聊暂不支持发送消息' : ''} // <-- 动态 placeholder
             disabled={chatType === 'group'} // <-- 群聊禁用输入框
-            className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-1 focus-visible:ring-transparent"
+            className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-0 focus-visible:ring-offset-0" // 修改这里
             autoComplete="off"
           />
           <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
@@ -932,10 +1008,26 @@ export default function ChatPage() {
               className="text-gray-500"
             />
           </Button>
+          {/* 发送按钮 */}
+          <Button
+            onClick={handleSendMessage}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
+            style={{
+              backgroundColor: '#5436f1',
+              color: 'white',
+              fontSize: '14px'
+            }} // 应用发送按钮样式
+          >
+            发送
+          </Button>
+
+          {/* 加号按钮 */}
           <Button
             variant="ghost"
             onClick={handleOpenActions}
-            className="flex-shrink-0 rounded-full pl-0 pr-2 py-0"
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
           >
             <Image
               src="/chats/plus.png"
@@ -1082,13 +1174,54 @@ export default function ChatPage() {
         </div>
       </div>
       {/* 密钥管理弹窗 */}
-      <KeyManagementModal
-        isOpen={showKeyModal}
-        onClose={() => setShowKeyModal(false)}
+      {/* {showKeyModal && (
+        <div className="fixed bottom-14 w-full z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg w-full max-w-md max-h-[80vh] overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-base font-normal text-black">
+                  选择操作
+                </h3>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowKeyModal(false)}
+                  className="h-6 w-6 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              
+              <div className="space-y-4">
+                <Button
+                  onClick={handleOpenKeyGeneration}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white rounded-md h-12 text-sm font-normal"
+                >
+                  生成新密钥
+                </Button>
+                
+                <Button
+                  onClick={handleOpenDecryption}
+                  className="w-full bg-green-500 hover:bg-green-600 text-white rounded-md h-12 text-sm font-normal"
+                >
+                  解密消息
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )} */}
+
+      <KeyGenerationModal
+        isOpen={showGenerationModal}
+        onClose={() => setShowGenerationModal(false)}
+        onKeyGenerated={handleKeyGenerated}
+      />
+
+      <DecryptionModal
+        isOpen={showDecryptModal}
+        onClose={() => setShowDecryptModal(false)}
         onKeySelect={handleKeySelect}
         onBatchDecrypt={handleBatchDecrypt}
       />
-
       {/* 条件性渲染 GroupChatInfoPanel */}
       {showGroupInfoPanel && chatType === 'group' && (
         <GroupChatInfoPanel
@@ -1096,6 +1229,15 @@ export default function ChatPage() {
           chatType={chatType}
           memberCount={memberCount}
           onClose={() => setShowGroupInfoPanel(false)}
+        />
+      )}
+      {/* 新增：条件性渲染 PrivateChatSettingsPanel */}
+      {showPrivateChatSettingsPanel && chatType === 'private' && (
+        <PrivateChatSettingsPanel
+          isOpen={showPrivateChatSettingsPanel}
+          onClose={() => setShowPrivateChatSettingsPanel(false)}
+          conversationId={conversationId} // 传递当前的 conversationId
+          // topOffset={TOP_BAR_HEIGHT} // 移除此行
         />
       )}
     </div>

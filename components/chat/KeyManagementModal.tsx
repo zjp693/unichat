@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, Copy, Key, ChevronDown } from 'lucide-react';
-import { useKeyManagement } from '@/hooks/useKeyManagement';
+import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
 import { KeyPair, chatEncryption } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
 
@@ -22,8 +22,8 @@ export const KeyManagementModal = ({
   onKeySelect,
   onBatchDecrypt
 }: KeyManagementModalProps) => {
-  const { keys, loading, generateKeyPair, decryptMessages } =
-    useKeyManagement();
+  const { keys, loading, generateNewKeyPair, saveKeyToStorage } =
+    useKeyManagementRedux();
 
   // 根据是否有密钥来决定初始步骤
   const initialStep = keys.length > 0 ? 'select' : 'generate';
@@ -118,32 +118,24 @@ export const KeyManagementModal = ({
     }
 
     try {
-      // 保存密钥到本地存储
+      // 保存密钥到 Redux 和本地存储
       const keyData = {
         ...generatedKey,
-        password: passwordInput, // 保存密码
+        password: passwordInput,
         savedAt: new Date().toISOString()
       };
 
-      // 获取现有密钥列表
-      const existingKeys = JSON.parse(
-        localStorage.getItem('chat_keys') || '[]'
-      );
-      const updatedKeys = [...existingKeys, keyData];
-
-      // 保存到本地存储
-      localStorage.setItem('chat_keys', JSON.stringify(updatedKeys));
+      saveKeyToStorage(keyData);
 
       alert('密钥保存成功！');
 
-      // 重置状态
+      // 仅保存密钥，不触发解密操作
+      onKeySelect(keyData); // 通知父组件使用新密钥
       setGeneratedKey(null);
       setPasswordInput('');
       setPrivateKeyInput('');
       setKeyName('');
-
-      // 刷新页面以重新加载密钥列表
-      window.location.reload();
+      onClose(); // 关闭模态框
     } catch (error) {
       console.error('保存密钥失败:', error);
       alert('保存密钥失败，请重试');
