@@ -46,6 +46,7 @@ import {
 import { computeConvoId, Address, isValidEthereumAddress } from '@/lib/utils';
 import { useWaitForTransactionReceipt } from 'wagmi';
 import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel'; // <-- 导入 GroupChatInfoPanel 组件
+import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel'; // <-- 导入 PrivateChatSettingsPanel 组件
 
 // 定义消息对象的数据结构
 interface Message {
@@ -237,6 +238,8 @@ export default function ChatPage() {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const [panelHeight, setPanelHeight] = useState(0);
   const [showGroupInfoPanel, setShowGroupInfoPanel] = useState(false); // <-- 新增状态变量
+  const [showPrivateChatSettingsPanel, setShowPrivateChatSettingsPanel] =
+    useState(false); // <-- 新增状态变量
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLInputElement>(null);
@@ -762,7 +765,7 @@ export default function ChatPage() {
           </div>
           <Button
             variant="outline"
-            className="rounded-full flex items-center gap-2"
+            className="rounded-lg flex items-center gap-2"
           >
             <Image
               src="/top/usa.png"
@@ -776,25 +779,17 @@ export default function ChatPage() {
         </div>
         {/* 聊天导航栏 */}
         <div
-          className="flex items-center justify-between px-4"
+          className="flex items-center justify-between px-3"
           style={{ height: `${NAV_BAR_HEIGHT}px` }}
         >
           <Button variant="ghost" onClick={() => router.back()}>
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M15 18L9 12L15 6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <Image
+              src="/chats/arrow_left.png"
+              alt="返回"
+              width={10}
+              height={10}
+              className="text-black"
+            />
           </Button>
           <h1 className="text-base font-medium text-black">
             {chatType === 'private'
@@ -808,9 +803,10 @@ export default function ChatPage() {
           <Button
             variant="ghost"
             onClick={() => {
-              // 修改 onClick 事件
               if (chatType === 'group') {
                 setShowGroupInfoPanel(true);
+              } else if (chatType === 'private') {
+                setShowPrivateChatSettingsPanel(true);
               }
             }}
           >
@@ -1233,6 +1229,15 @@ export default function ChatPage() {
           chatType={chatType}
           memberCount={memberCount}
           onClose={() => setShowGroupInfoPanel(false)}
+        />
+      )}
+      {/* 新增：条件性渲染 PrivateChatSettingsPanel */}
+      {showPrivateChatSettingsPanel && chatType === 'private' && (
+        <PrivateChatSettingsPanel
+          isOpen={showPrivateChatSettingsPanel}
+          onClose={() => setShowPrivateChatSettingsPanel(false)}
+          conversationId={conversationId} // 传递当前的 conversationId
+          // topOffset={TOP_BAR_HEIGHT} // 移除此行
         />
       )}
     </div>
