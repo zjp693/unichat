@@ -1,12 +1,26 @@
 'use client';
 
 // 导入React的核心钩子函数
-import { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+  useLayoutEffect
+} from 'react';
 // 导入UI组件库和工具
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MoreHorizontal, Plus, Smile, AudioLines, X } from 'lucide-react';
+import {
+  MoreHorizontal,
+  Plus,
+  Smile,
+  AudioLines,
+  X,
+  Loader2
+} from 'lucide-react';
 import Image from 'next/image';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -96,6 +110,13 @@ export default function ChatPage() {
   const [loadedMessageCount, setLoadedMessageCount] =
     useState(MESSAGES_PER_LOAD); // 新增：跟踪已加载的消息数量
   const [isFetchingMore, setIsFetchingMore] = useState(false); // 新增：防止重复加载
+  const [oldestLoadedIndex, setOldestLoadedIndex] = useState<number | null>(
+    null
+  ); // 新增：跟踪最早加载的消息索引
+  const pendingScrollAdjustmentRef = useRef<{
+    previousHeight: number;
+    previousTop: number;
+  } | null>(null); // 用于保存待调整的滚动信息
 
   // --- Wagmi 钩子 --- //
   const { address: currentAddress, isConnected } = useAccount();
@@ -135,15 +156,45 @@ export default function ChatPage() {
 
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
 
+  // --- 用于加载范围计算的 Ref ---
+  const currentLoadRangeRef = useRef<{ start: number; count: number } | null>(
+    null
+  ); // 当前应该加载的范围
+
   // 计算要加载的消息的起始索引和数量
-  const messagesToLoad = Math.min(loadedMessageCount, totalMessages);
-  const start = totalMessages - messagesToLoad;
-  const count = messagesToLoad;
+  // 使用 useMemo 来稳定计算结果，避免不必要的重新计算
+  const { start, count } = useMemo(() => {
+    // 如果 oldestLoadedIndex 不为 null 且正在加载更多，计算增量范围
+    if (oldestLoadedIndex !== null && isFetchingMore) {
+      const newStart = Math.max(0, oldestLoadedIndex - MESSAGES_PER_LOAD);
+      const newCount = oldestLoadedIndex - newStart;
+      const range = { start: newStart, count: newCount };
+      currentLoadRangeRef.current = range;
+      return range;
+    }
+
+    // 初始加载：获取最新的 15 条
+    if (oldestLoadedIndex === null && totalMessages > 0) {
+      const messagesToLoad = Math.min(MESSAGES_PER_LOAD, totalMessages);
+      const start = Math.max(0, totalMessages - messagesToLoad);
+      const range = { start, count: messagesToLoad };
+      currentLoadRangeRef.current = range;
+      return range;
+    }
+
+    // 如果有缓存的加载范围，使用缓存（适用于 totalMessages 还未加载或已完成加载后的情况）
+    if (currentLoadRangeRef.current) {
+      return currentLoadRangeRef.current;
+    }
+
+    // 默认返回空范围（totalMessages 还未加载时）
+    return { start: 0, count: 0 };
+  }, [oldestLoadedIndex, isFetchingMore, totalMessages]);
 
   const { data: rawMessages, refetch: refetchMessages } = useGetMessages(
     currentAddress as Address,
     CONTRACT_RECIPIENT_FOR_WAGMI, // <-- 使用固定地址
-    BigInt(start < 0 ? 0 : start), // 确保 start 不小于 0
+    BigInt(start),
     BigInt(count)
   );
 
@@ -204,7 +255,7 @@ export default function ChatPage() {
         // }
 
         const newMessage: Message = {
-          id: `${timestamp?.toString()}-${from?.toLowerCase()}`,
+          id: `${timestamp?.toString()}-${from?.toLowerCase()}-${Date.now()}`, // 添加时间戳避免 key 重复
           content: content, // 直接使用原始密文
           sender:
             from?.toLowerCase() === currentAddress?.toLowerCase()
@@ -240,134 +291,212 @@ export default function ChatPage() {
   const [showGroupInfoPanel, setShowGroupInfoPanel] = useState(false); // <-- 新增状态变量
   const [showPrivateChatSettingsPanel, setShowPrivateChatSettingsPanel] =
     useState(false); // <-- 新增状态变量
+  const [isInitialLoad, setIsInitialLoad] = useState(true); // <-- 新增状态变量
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const actionsPanelContentRef = useRef<HTMLDivElement>(null); // 新增 ref
-  const prevMessagesLengthRef = useRef(messages.length);
+  const lastProcessedRangeRef = useRef<{ start: number; count: number } | null>(
+    null
+  ); // 跟踪上次处理的范围
+
+  // --- 辅助函数 ---
+  // 滚动到底部的辅助函数
+  const scrollToBottom = useCallback(
+    (behavior: 'smooth' | 'auto' = 'smooth') => {
+      if (!scrollAreaRef.current) return;
+      const viewport = scrollAreaRef.current.querySelector(
+        '[data-radix-scroll-area-viewport]'
+      );
+      if (viewport) {
+        // 在iOS上确保输入框可见
+        if (window.visualViewport) {
+          const keyboardHeight =
+            window.innerHeight - window.visualViewport.height;
+          if (keyboardHeight > 100) {
+            setPanelHeight(keyboardHeight);
+          }
+        }
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior });
+      }
+    },
+    []
+  ); // setPanelHeight 是稳定的，不需要在依赖项中
 
   // --- 数据获取与同步 ---
-  // 页面加载时，从localStorage读取指针，调用API获取历史记录
+
+  // 1️⃣ 初始化：仅在组件挂载时加载密钥和设置客户端标记
   useEffect(() => {
-    const fetchAndProcessMessages = async () => {
-      setIsLoading(true);
-      loadKeysFromStorage(); // 加载密钥
+    loadKeysFromStorage();
+    setIsClient(true);
+  }, []); // 空依赖数组，只运行一次
 
-      // 从本地存储中查找并获取聊天记录CID
-      const savedCID = localStorage.getItem('chat_latest_cid');
-      console.log('Saved CID:', savedCID);
+  // 2️⃣ 连接状态检查：钱包未连接时清空消息
+  useEffect(() => {
+    if (!isConnected || !currentAddress || !conversationId) {
+      setMessages([]);
+      setIsLoading(false);
+      setIsFetchingMore(false);
+      setIsInitialLoad(true);
+    }
+  }, [isConnected, currentAddress, conversationId]);
 
-      if (
-        !isConnected ||
-        !currentAddress ||
-        !conversationId || // 使用 conversationId 替代 recipientAddress
-        totalMessagesBigInt === undefined ||
-        false // 简化条件，始终允许加载硬编码消息
-      ) {
-        // 仅在关键依赖缺失时才清空消息并停止加载
-        if (!isConnected || !currentAddress || !conversationId) {
-          setMessages([]);
-          setIsLoading(false);
-          setIsFetchingMore(false); // 重置加载状态
-          return;
-        }
+  // 3️⃣ 处理 rawMessages 更新（从链上获取的消息）
+  useEffect(() => {
+    if (!isConnected || !currentAddress || !conversationId) return;
+    if (
+      !rawMessages ||
+      !Array.isArray(rawMessages) ||
+      rawMessages.length === 0
+    ) {
+      // 如果没有消息，重置状态
+      if (chatType !== 'group') {
+        setIsLoading(false);
+        setIsFetchingMore(false);
       }
+      return;
+    }
 
-      // totalMessages === 0 的检查现在可以移除或调整，因为我们硬编码消息
-      let initialMessages: Message[] = [];
+    // 检查是否是新的数据范围（避免重复处理）
+    const currentRange = { start, count };
+    const lastRange = lastProcessedRangeRef.current;
+
+    if (
+      lastRange &&
+      lastRange.start === currentRange.start &&
+      lastRange.count === currentRange.count
+    ) {
+      return;
+    }
+
+    const processMessages = () => {
+      let newMessages: Message[] = [];
 
       if (chatType === 'private') {
         // 单聊：处理从链上获取的原始消息
-        if (
-          rawMessages &&
-          Array.isArray(rawMessages) &&
-          rawMessages.length > 0
-        ) {
-          initialMessages = rawMessages.map((msg: DMMessage) => {
-            // 假设从链上获取的消息是加密的
-            return {
-              id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}`,
-              sender:
-                msg.sender.toLowerCase() === currentAddress?.toLowerCase()
-                  ? 'user'
-                  : 'other',
-              content: msg.content,
-              timestamp: new Date(Number(msg.timestamp) * 1000),
-              type: 'text',
-              isEncrypted: true,
-              originalContent: msg.content,
-              recipient: msg.recipient
-            };
-          });
-        }
-      } else if (chatType === 'group') {
-        // 群聊：不加载历史记录，只显示邀请成功消息
-        if (invitedMembersMessage) {
-          initialMessages.push({
+        // 使用全局索引来生成唯一 ID，避免 key 重复
+        newMessages = rawMessages.map((msg: DMMessage, index: number) => ({
+          id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}-${start + index}`, // 使用全局索引
+          sender:
+            msg.sender.toLowerCase() === currentAddress?.toLowerCase()
+              ? 'user'
+              : 'other',
+          content: msg.content,
+          timestamp: new Date(Number(msg.timestamp) * 1000),
+          type: 'text' as const,
+          isEncrypted: true, // 新加载的消息始终是加密状态
+          originalContent: msg.content,
+          recipient: msg.recipient
+        }));
+      } else if (chatType === 'group' && invitedMembersMessage) {
+        // 群聊：显示邀请成功消息
+        newMessages = [
+          {
             id: `system-time-${Date.now()}`,
-            sender: 'other',
-            content: dayjs().format('A h:mm'), // 例如：下午 1:49
+            sender: 'other' as const,
+            content: dayjs().format('A h:mm'),
             timestamp: new Date(),
-            type: 'system-time',
+            type: 'system-time' as const,
             isEncrypted: false,
             originalContent: dayjs().format('A h:mm'),
             recipient: CONTRACT_RECIPIENT_FOR_WAGMI
-          });
-
-          initialMessages.push({
+          },
+          {
             id: `system-${Date.now()}`,
-            sender: 'other', // 系统消息
+            sender: 'other' as const,
             content: invitedMembersMessage,
             timestamp: new Date(),
-            type: 'system', // <-- 将类型设置为 'system'
+            type: 'system' as const,
             isEncrypted: false,
             originalContent: invitedMembersMessage,
             recipient: CONTRACT_RECIPIENT_FOR_WAGMI
-          });
-        }
+          }
+        ];
       }
 
-      // 3. 格式化并解密消息 (此部分现在对硬编码消息执行)
-      // 保持原有逻辑，但要注意它会处理 initialMessages
-      const formattedAndMaybeDecryptedMessages: Message[] = initialMessages.map(
-        (msg: Message) => {
-          // 对于从链上获取的消息，保持加密状态
-          // 不再进行自动解密，保持 isEncrypted 状态不变
-          return {
-            ...msg,
-            content: msg.content, // 保持原始内容（密文）
-            isEncrypted: msg.isEncrypted, // 保持加密状态
-            originalContent: msg.originalContent // 保持原始内容
+      // 判断是初始加载还是增量加载
+      const isIncrementalLoad = lastRange !== null && start < lastRange.start;
+
+      if (isIncrementalLoad && newMessages.length > 0) {
+        // 增量加载（下拉加载更多）
+        // 保存当前滚动位置到 ref，供 useLayoutEffect 使用
+        const viewport = scrollAreaRef.current?.querySelector(
+          '[data-radix-scroll-area-viewport]'
+        ) as HTMLElement;
+        if (viewport) {
+          pendingScrollAdjustmentRef.current = {
+            previousHeight: viewport.scrollHeight,
+            previousTop: viewport.scrollTop
           };
         }
-      );
 
-      // 如果是加载更多消息，则将新消息添加到旧消息的头部
-      if (isFetchingMore) {
-        setMessages((prev) => [...formattedAndMaybeDecryptedMessages, ...prev]);
+        // 将新消息添加到头部（保持旧消息状态不变，包括解密状态）
+        setMessages((prev) => [...newMessages, ...prev]);
+
+        // 更新最早加载的消息索引
+        setOldestLoadedIndex(start);
+      } else if (newMessages.length > 0) {
+        // 首次加载
+        setMessages(newMessages);
+        setOldestLoadedIndex(start); // 记录最早加载的消息索引
+        setIsLoading(false);
+        setIsFetchingMore(false);
+        // 首次加载后滚动到底部会由另一个 useEffect 处理
       } else {
-        setMessages(formattedAndMaybeDecryptedMessages);
+        setIsLoading(false);
+        setIsFetchingMore(false);
       }
-      setIsLoading(false);
-      setIsFetchingMore(false);
+
+      // 记录已处理的数据范围
+      lastProcessedRangeRef.current = currentRange;
     };
 
-    fetchAndProcessMessages();
-    // 确保依赖项包含所有影响初始消息加载的变量
+    processMessages();
+    // 只依赖真正需要的数据，移除 isFetchingMore
   }, [
+    rawMessages,
     chatType,
     invitedMembersMessage,
     isConnected,
     currentAddress,
     conversationId,
-    totalMessagesBigInt,
-    rawMessages,
-    publicClient,
-    loadKeysFromStorage,
-    loadedMessageCount, // 新增：将 loadedMessageCount 添加到依赖项
-    isFetchingMore
+    start,
+    count
   ]);
+
+  // 4️⃣ 首次加载后滚动到底部
+  useEffect(() => {
+    if (isClient && isInitialLoad && messages.length > 0 && !isLoading) {
+      setTimeout(() => {
+        scrollToBottom('auto');
+        setIsInitialLoad(false);
+      }, 100);
+    }
+  }, [isClient, isInitialLoad, messages.length, isLoading, scrollToBottom]);
+
+  // 5️⃣ 下拉加载后调整滚动位置（使用 useLayoutEffect 在 DOM 更新后、浏览器绘制前立即执行）
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustmentRef.current) {
+      const viewport = scrollAreaRef.current?.querySelector(
+        '[data-radix-scroll-area-viewport]'
+      ) as HTMLElement;
+      if (viewport) {
+        const { previousHeight, previousTop } =
+          pendingScrollAdjustmentRef.current;
+        const newScrollHeight = viewport.scrollHeight;
+        const scrollOffset = newScrollHeight - previousHeight;
+        const newScrollTop = previousTop + scrollOffset;
+
+        // 直接设置 scrollTop，保持用户查看的消息位置不变
+        viewport.scrollTop = newScrollTop;
+
+        // 清除待调整标记
+        pendingScrollAdjustmentRef.current = null;
+        setIsFetchingMore(false);
+      }
+    }
+  }, [messages]); // 当 messages 更新时触发
 
   // 发送新消息（加密 -> 乐观更新UI -> 调用合约上传）
   const handleSendMessage = async () => {
@@ -426,6 +555,8 @@ export default function ChatPage() {
 
     // 2. 乐观更新UI：立即在界面上显示新消息，让用户感觉流畅
     setMessages((prev) => [...prev, newMessageObject]);
+    // 发送消息后滚动到底部
+    setTimeout(() => scrollToBottom('smooth'), 100);
 
     try {
       // 私聊：调用合约发送到固定地址
@@ -527,12 +658,10 @@ export default function ChatPage() {
     window.visualViewport?.addEventListener('resize', updateKeyboardHeight);
     window.visualViewport?.addEventListener('scroll', updateKeyboardHeight);
 
-    // 添加 focusin 事件监听器，当输入框获得焦点时确保滚动到底部
+    // 添加 focusin 事件监听器，当聊天输入框获得焦点时确保滚动到底部
     const handleFocusIn = (e: FocusEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
+      // 只有当聚焦的元素是聊天输入框时才滚动到底部
+      if (e.target === inputRef.current) {
         // 确保输入框可见
         setTimeout(() => {
           if (window.visualViewport) {
@@ -561,43 +690,7 @@ export default function ChatPage() {
       document.removeEventListener('focusin', handleFocusIn);
       clearTimeout(timeoutId);
     };
-  }, [isClient, panelHeight, isActionsOpen]);
-
-  // 滚动到底部的辅助函数
-  const scrollToBottom = (behavior: 'smooth' | 'auto' = 'smooth') => {
-    if (!scrollAreaRef.current) return;
-    const viewport = scrollAreaRef.current.querySelector(
-      '[data-radix-scroll-area-viewport]'
-    );
-    if (viewport) {
-      // 在iOS上确保输入框可见
-      if (window.visualViewport) {
-        const keyboardHeight =
-          window.innerHeight - window.visualViewport.height;
-        if (keyboardHeight > 100) {
-          setPanelHeight(keyboardHeight);
-        }
-      }
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior });
-    }
-  };
-
-  // 客户端挂载标记
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  // 核心交互钩子：处理滚动和聚焦
-  useEffect(() => {
-    if (isClient) {
-      // 延迟滚动以确保DOM已更新
-      const scrollTimeout = setTimeout(() => scrollToBottom('smooth'), 0);
-
-      prevMessagesLengthRef.current = messages.length;
-
-      return () => clearTimeout(scrollTimeout);
-    }
-  }, [messages, isActionsOpen, isClient]);
+  }, [isClient, panelHeight, isActionsOpen, scrollToBottom]);
 
   // 打开底部功能面板
   const handleOpenActions = () => {
@@ -686,20 +779,25 @@ export default function ChatPage() {
     try {
       const results = decryptMessages(encryptedContents, key.privateKey);
 
+      // 创建 ID 到解密结果的映射（使用消息 ID 而不是 content 来匹配）
+      const decryptedMap = new Map<string, string>();
+      messagesToDecrypt.forEach((msg, index) => {
+        if (results[index].success) {
+          decryptedMap.set(
+            msg.id,
+            (results[index] as { success: true; decrypted: string }).decrypted
+          );
+        }
+      });
+
       setMessages((prev) => {
         return prev.map((msg) => {
-          // 只处理需要解密的消息
-          const targetMessage = messagesToDecrypt.find(
-            (m) => m.id === msg.id && m.isEncrypted
-          );
-          if (!targetMessage) return msg; // 如果不是目标消息或未加密，则跳过
-
-          const index = encryptedContents.indexOf(msg.content);
-          if (index !== -1 && results[index].success) {
+          // 使用 ID 来查找解密结果，而不是 content
+          const decryptedContent = decryptedMap.get(msg.id);
+          if (decryptedContent) {
             return {
               ...msg,
-              content: (results[index] as { success: true; decrypted: string })
-                .decrypted,
+              content: decryptedContent,
               isEncrypted: false
             };
           }
@@ -707,7 +805,9 @@ export default function ChatPage() {
         });
       });
 
-      console.log(`成功解密 ${results.filter((r) => r.success).length} 条消息`);
+      console.log(
+        `✅ 成功解密 ${results.filter((r) => r.success).length} 条消息`
+      );
     } catch (error: any) {
       console.error('批量解密失败:', error);
       alert(`批量解密失败: ${error.message || '未知错误'}`);
@@ -727,17 +827,13 @@ export default function ChatPage() {
   const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop } = event.currentTarget;
 
-    // 检查是否滚动到顶部并且不在加载更多消息的状态
-    if (
-      scrollTop === 0 &&
-      !isFetchingMore &&
-      loadedMessageCount < totalMessages
-    ) {
+    // 检查是否接近顶部（距离顶部小于30px）并且不在加载更多消息的状态
+    // 只有当还有更早的消息时才允许加载
+    const hasMoreMessages = oldestLoadedIndex !== null && oldestLoadedIndex > 0;
+    const LOAD_MORE_THRESHOLD = 30; // 距离顶部30px时就开始加载
+
+    if (scrollTop < LOAD_MORE_THRESHOLD && !isFetchingMore && hasMoreMessages) {
       setIsFetchingMore(true);
-      // 延迟加载，给用户一个“加载中”的感觉
-      setTimeout(() => {
-        setLoadedMessageCount((prev) => prev + MESSAGES_PER_LOAD);
-      }, 500); // 0.5秒延迟
     }
   };
 
@@ -820,8 +916,8 @@ export default function ChatPage() {
         className="fixed w-full overflow-hidden"
         style={{
           top: `${TOTAL_HEADER_HEIGHT}px`,
-          // 重新计算底部偏移，包含 FOOTER_HEIGHT、默认底部填充、安全区域和功能面板高度
-          bottom: `calc(${FOOTER_HEIGHT}px + ${DEFAULT_BOTTOM_INSET_PADDING}px + env(safe-area-inset-bottom, 0px) + ${isActionsOpen ? panelHeight : 0}px)`,
+          // 计算底部偏移：输入框高度 + 安全区域 + 功能面板高度（如果打开）
+          bottom: `calc(${FOOTER_HEIGHT}px + env(safe-area-inset-bottom, 0px) + ${isActionsOpen ? panelHeight : 0}px)`,
           left: 0,
           right: 0,
           // 添加过渡动画使布局变化更平滑
@@ -834,6 +930,18 @@ export default function ChatPage() {
           onScroll={handleScroll}
         >
           <div className="p-4 space-y-5">
+            {/* 加载更多消息的指示器 - 现代渐变效果 */}
+            {isFetchingMore && (
+              <div className="flex justify-center items-center py-4">
+                <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg px-4 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <span className="text-sm font-medium bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    加载中...
+                  </span>
+                </div>
+              </div>
+            )}
+
             {messages.map((message) => {
               if (message.type === 'system-time') {
                 return (
@@ -959,85 +1067,15 @@ export default function ChatPage() {
         </ScrollArea>
       </div>
 
-      {/* 固定的底部区域 */}
+      {/* 固定的底部区域 - 类似微信的布局 */}
       <div
-        className="fixed bottom-0 left-0 right-0"
+        className="fixed left-0 right-0 bg-gray-100"
         style={{
-          // 移除 paddingBottom，改为由内部的输入框栏处理安全区
-          transform: isActionsOpen
-            ? `translateY(-${panelHeight}px)`
-            : 'translateY(0)',
-          transition: 'transform 0.3s ease-in-out',
-          backgroundColor: 'white'
+          bottom: 0,
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          transition: 'all 0.3s ease-in-out'
         }}
       >
-        {/* 输入框栏 */}
-        <div
-          className="p-2 flex items-center bg-gray-100 border-t"
-          style={{
-            height: `${FOOTER_HEIGHT}px`,
-            paddingBottom: `calc(${DEFAULT_BOTTOM_INSET_PADDING}px + env(safe-area-inset-bottom, 0px))`,
-            transition: 'all 0.3s ease-in-out'
-          }}
-        >
-          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
-            <Image
-              src="/chats/voice.png"
-              alt="Voice"
-              width={24}
-              height={24}
-              className="text-gray-500"
-            />
-          </Button>
-          <Input
-            ref={inputRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={chatType === 'group' ? '群聊暂不支持发送消息' : ''} // <-- 动态 placeholder
-            disabled={chatType === 'group'} // <-- 群聊禁用输入框
-            className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-0 focus-visible:ring-offset-0" // 修改这里
-            autoComplete="off"
-          />
-          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
-            <Image
-              src="/chats/face.png"
-              alt="Face"
-              width={24}
-              height={24}
-              className="text-gray-500"
-            />
-          </Button>
-          {/* 发送按钮 */}
-          <Button
-            onClick={handleSendMessage}
-            className={`rounded-lg transition-all duration-300 ease-in-out
-              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
-            style={{
-              backgroundColor: '#5436f1',
-              color: 'white',
-              fontSize: '14px'
-            }} // 应用发送按钮样式
-          >
-            发送
-          </Button>
-
-          {/* 加号按钮 */}
-          <Button
-            variant="ghost"
-            onClick={handleOpenActions}
-            className={`rounded-lg transition-all duration-300 ease-in-out
-              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
-          >
-            <Image
-              src="/chats/plus.png"
-              alt="Plus"
-              width={24}
-              height={24}
-              className="text-gray-600"
-            />
-          </Button>
-        </div>
         {/* 功能面板 */}
         <div
           className={cn('bg-gray-100 overflow-hidden')}
@@ -1172,7 +1210,74 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
+
+        {/* 输入框栏 */}
+        <div
+          className="p-2 flex items-center bg-gray-100 border-t border-gray-300"
+          style={{
+            minHeight: `${FOOTER_HEIGHT}px`
+          }}
+        >
+          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
+            <Image
+              src="/chats/voice.png"
+              alt="Voice"
+              width={24}
+              height={24}
+              className="text-gray-500"
+            />
+          </Button>
+          <Input
+            ref={inputRef}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder={chatType === 'group' ? '群聊暂不支持发送消息' : ''} // <-- 动态 placeholder
+            disabled={chatType === 'group'} // <-- 群聊禁用输入框
+            className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-0 focus-visible:ring-offset-0" // 修改这里
+            autoComplete="off"
+          />
+          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
+            <Image
+              src="/chats/face.png"
+              alt="Face"
+              width={24}
+              height={24}
+              className="text-gray-500"
+            />
+          </Button>
+          {/* 发送按钮 */}
+          <Button
+            onClick={handleSendMessage}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
+            style={{
+              backgroundColor: '#5436f1',
+              color: 'white',
+              fontSize: '14px'
+            }} // 应用发送按钮样式
+          >
+            发送
+          </Button>
+
+          {/* 加号按钮 */}
+          <Button
+            variant="ghost"
+            onClick={handleOpenActions}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
+          >
+            <Image
+              src="/chats/plus.png"
+              alt="Plus"
+              width={24}
+              height={24}
+              className="text-gray-600"
+            />
+          </Button>
+        </div>
       </div>
+
       {/* 密钥管理弹窗 */}
       {/* {showKeyModal && (
         <div className="fixed bottom-14 w-full z-50 flex items-center justify-center">
