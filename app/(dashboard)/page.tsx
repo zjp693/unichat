@@ -122,7 +122,10 @@ export default function ChatPage() {
 
       {/* 搜索栏和操作按钮 */}
       <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right">
-        <button className="p-2 rounded-full mr-2">
+        <button
+          className="p-2 rounded-full mr-2 hover:bg-gray-100 transition-colors"
+          onClick={() => router.push('/search')}
+        >
           <Search size={18} />
         </button>
         <DropdownMenu />
