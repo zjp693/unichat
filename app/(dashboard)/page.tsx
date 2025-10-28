@@ -160,7 +160,7 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
     <div onClick={handleChatClick} className="block cursor-pointer">
       <div className="relative flex items-center p-3 hover:bg-gray-100/50 bg-white">
         <div className="relative">
-          <div className="h-12 w-12 rounded overflow-hidden border border-gray-200">
+          <div className="h-12 w-12 rounded-sm overflow-hidden border border-gray-200">
             {chat.unreadCount && (
               <Badge
                 variant="destructive"

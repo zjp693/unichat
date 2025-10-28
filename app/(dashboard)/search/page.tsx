@@ -2,15 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  Search,
-  X,
-  Trash2,
-  ChevronDown,
-  ChevronUp,
-  Clock
-} from 'lucide-react';
+import { Search, X, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,6 +14,7 @@ import type { SearchHistoryItem } from '@/lib/searchHistorySlice';
 export default function SearchPage() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
+  const [validationError, setValidationError] = useState('');
   const {
     displayedHistory,
     isExpanded,
@@ -39,13 +32,28 @@ export default function SearchPage() {
     avatar: string;
   } | null>(null);
 
+  // 校验钱包地址格式
+  const isValidAddress = (address: string): boolean => {
+    // 以太坊地址格式：0x开头 + 40位十六进制字符
+    const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+    return ethAddressRegex.test(address);
+  };
+
   // 模拟搜索（静态阶段）
   useEffect(() => {
     if (searchTerm.trim()) {
+      // 校验地址格式
+      if (!isValidAddress(searchTerm.trim())) {
+        setValidationError('请输入有效的钱包地址（0x开头，42位字符）');
+        setSearchResult(null);
+        return;
+      }
+
+      setValidationError('');
       // 延迟一下模拟搜索效果
       const timer = setTimeout(() => {
         setSearchResult({
-          name: 'James',
+          name: 'test-James',
           address: searchTerm,
           avatar: '/me/me2.png'
         });
@@ -53,6 +61,7 @@ export default function SearchPage() {
       return () => clearTimeout(timer);
     } else {
       setSearchResult(null);
+      setValidationError('');
     }
   }, [searchTerm]);
 
@@ -65,12 +74,19 @@ export default function SearchPage() {
   const handleClearSearch = () => {
     setSearchTerm('');
     setSearchResult(null);
+    setValidationError('');
   };
 
   // 执行搜索（回车或点击）
   const handleSearch = () => {
-    if (searchTerm.trim()) {
-      addSearchRecord(searchTerm);
+    const trimmedTerm = searchTerm.trim();
+    if (trimmedTerm) {
+      if (!isValidAddress(trimmedTerm)) {
+        setValidationError('请输入有效的钱包地址（0x开头，42位字符）');
+        return;
+      }
+      setValidationError('');
+      addSearchRecord(trimmedTerm);
     }
   };
 
@@ -99,15 +115,18 @@ export default function SearchPage() {
       <TopNavbar />
 
       {/* 搜索栏 */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200">
+      <div className="flex items-center  px-2 py-3 bg-white border-gray-200">
         <Button
           variant="ghost"
-          className="h-8 w-8 p-0"
+          className="h-8 w-8 p-0 hover:bg-[transparent]"
           onClick={() => router.back()}
         >
-          <ArrowLeft className="h-5 w-5" />
+          <img
+            src="/contacts/arrow_left.png"
+            alt="返回"
+            className="h-4 object-cover"
+          />
         </Button>
-
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
           <Input
@@ -116,20 +135,20 @@ export default function SearchPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="pl-10 pr-10 bg-gray-100 border-none rounded-full focus-visible:ring-1 focus-visible:ring-gray-300"
+            showClear
+            onClear={handleClearSearch}
+            className="pl-10 bg-gray-100 border-none rounded-lg"
             autoFocus
           />
-          {searchTerm && (
-            <Button
-              variant="ghost"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 rounded-full hover:bg-gray-200"
-              onClick={handleClearSearch}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
         </div>
       </div>
+
+      {/* 错误提示 */}
+      {validationError && (
+        <div className="px-4 py-2 bg-red-50 border-b border-red-100">
+          <p className="text-xs text-red-500">{validationError}</p>
+        </div>
+      )}
 
       {/* 内容区域 */}
       <ScrollArea className="flex-1">
@@ -138,14 +157,14 @@ export default function SearchPage() {
           displayedHistory.length > 0 ? (
             <div className="px-4 py-4">
               {/* 标题栏 */}
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between pb-1.5 mb-3 border-b">
                 <h3 className="text-sm text-gray-500">最近在搜</h3>
                 <div className="flex items-center gap-1">
                   {showExpandButton && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-xs h-7 px-2 hover:bg-gray-100"
+                      className="text-xs h-7 px-2"
                       onClick={toggle}
                     >
                       {isExpanded ? '收起' : '展开'}
@@ -158,7 +177,7 @@ export default function SearchPage() {
                   )}
                   <Button
                     variant="ghost"
-                    className="h-7 w-7 p-0 hover:bg-gray-100"
+                    className="h-7 w-7 p-0 "
                     onClick={clearAll}
                   >
                     <Trash2 className="h-4 w-4 text-gray-400" />
@@ -171,7 +190,7 @@ export default function SearchPage() {
                 {displayedHistory.map((item: SearchHistoryItem) => (
                   <div
                     key={item.id}
-                    className="relative flex items-center gap-2 px-3 py-2.5 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors group"
+                    className="relative flex items-center gap-2 px-2 py-1.5  rounded-lg cursor-pointer transition-colors group"
                     onClick={() => handleHistoryClick(item.content)}
                   >
                     <Clock className="h-4 w-4 text-gray-400 flex-shrink-0" />
@@ -180,13 +199,13 @@ export default function SearchPage() {
                         ? `${item.content.slice(0, 6)}...${item.content.slice(-4)}`
                         : item.content}
                     </span>
-                    <Button
+                    {/* <Button
                       variant="ghost"
                       className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity absolute right-1 hover:bg-gray-200 rounded-full"
                       onClick={(e) => handleDeleteHistory(e, item.id)}
                     >
                       <X className="h-3 w-3" />
-                    </Button>
+                    </Button> */}
                   </div>
                 ))}
               </div>
@@ -203,16 +222,16 @@ export default function SearchPage() {
           searchResult && (
             <div className="px-4 py-4">
               {/* 分类标题 */}
-              <h3 className="text-xs px-4 py-3 font-medium text-gray-600 bg-[#ececec] -mx-4 mb-3">
+              <h3 className="text-sm  py-3 font-medium text-gray-600 mb-2 border-b">
                 联系人
               </h3>
 
               {/* 搜索结果项 */}
               <div
-                className="flex items-center p-3 hover:bg-gray-50 bg-white cursor-pointer rounded-lg transition-colors"
+                className="flex items-center pt-2 bg-white cursor-pointer rounded-lg transition-colors"
                 onClick={handleResultClick}
               >
-                <div className="h-12 w-12 rounded-full overflow-hidden border border-gray-200 flex-shrink-0">
+                <div className="h-12 w-12 rounded-sm overflow-hidden border border-gray-200 flex-shrink-0">
                   <Image
                     src={searchResult.avatar}
                     alt={searchResult.name}

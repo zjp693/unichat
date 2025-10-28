@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 
 interface TopNavbarProps {
@@ -10,17 +9,14 @@ interface TopNavbarProps {
 export function TopNavbar({ className }: TopNavbarProps) {
   return (
     <div
-      className={`flex items-center justify-between py-4 px-4 bg-white border-b border-gray-200 ${className || ''}`}
+      className={`flex items-center justify-between py-4 px-4 bg-white border-gray-200 ${className || ''}`}
     >
       {/* 钱包连接按钮 */}
       <appkit-button />
 
       {/* 国家/地区按钮 */}
-      <Button
-        variant="outline"
-        className="flex items-center space-x-1 px-3 py-1 text-xs"
-      >
-        <div className="inline-block align-middle mr-1 w-4 h-4 rounded-full overflow-hidden">
+      <div className="flex items-center px-2 py-0 text-xs border h-9 border-gray-200 rounded-xl">
+        <div className="inline-block align-middle mr-3 w-4 h-4 rounded-full overflow-hidden">
           <Image
             src="/top/usa.png"
             alt="USA"
@@ -29,8 +25,8 @@ export function TopNavbar({ className }: TopNavbarProps) {
             height={16}
           />
         </div>
-        <span>USA</span>
-      </Button>
+        <span className="font-bold">USA</span>
+      </div>
     </div>
   );
 }

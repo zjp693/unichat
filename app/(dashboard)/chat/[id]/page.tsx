@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { TopNavbar } from '@/components/ui/top-navbar';
 import {
   MoreHorizontal,
   Plus,
@@ -852,27 +853,7 @@ export default function ChatPage() {
       {/* 固定的头部区域 */}
       <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
         {/* 顶部钱包栏 */}
-        <div
-          className="flex items-center justify-between px-4 py-3 border-b"
-          style={{ height: `${TOP_BAR_HEIGHT}px` }}
-        >
-          <div className="flex items-center gap-2">
-            <appkit-button />
-          </div>
-          <Button
-            variant="outline"
-            className="rounded-lg flex items-center gap-2"
-          >
-            <Image
-              src="/top/usa.png"
-              alt="USA Flag"
-              width={20}
-              height={20}
-              className="rounded-full"
-            />
-            USA
-          </Button>
-        </div>
+        <TopNavbar className="" />
         {/* 聊天导航栏 */}
         <div
           className="flex items-center justify-between px-3"
