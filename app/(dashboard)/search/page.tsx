@@ -97,10 +97,11 @@ export default function SearchPage() {
     }
   };
 
-  // 点击搜索结果（后续可以跳转到详情页）
+  // 点击搜索结果，跳转到聊天页
   const handleResultClick = () => {
-    // TODO: 跳转到联系人详情或聊天页
-    console.log('点击了搜索结果:', searchResult);
+    if (!searchResult) return;
+    // 跳转到私聊页面，将钱包地址作为 conversationId 传递
+    router.push(`/chat/${searchResult.address}?type=private`);
   };
 
   // 删除单条历史

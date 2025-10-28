@@ -90,8 +90,9 @@ const MESSAGES_PER_LOAD = 15; // 每次加载15条消息
 const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
   '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
-const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
-  '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678'; // <-- 固定接收者地址
+// 已废弃：改为动态使用 conversationId 作为接收者地址
+// const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
+//   '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
 export default function ChatPage() {
   // --- 基础钩子 ---
@@ -139,20 +140,25 @@ export default function ChatPage() {
     : null;
   const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
 
-  // 确保 recipientAddress 是一个有效的以太坊地址
-  // if (!isValidEthereumAddress(recipientAddress)) {
-  //   console.error("Invalid recipient address in URL params:", params.id);
-  //   // 可以重定向到聊天列表或显示错误信息
-  //   // 例如：router.push('/chat');
-  //   // 为了演示，我们暂时返回一个空页面或错误提示
-  //   return <div className="flex items-center justify-center min-h-screen text-red-500">无效的聊天地址。</div>;
-  // }
+  // 验证并使用 conversationId 作为接收者地址（私聊时）
+  const recipientAddress: Address = conversationId as Address;
+
+  // 验证地址格式（仅在私聊时）
+  if (chatType === 'private' && !isValidEthereumAddress(recipientAddress)) {
+    console.error('Invalid recipient address in URL params:', params.id);
+    return (
+      <div className="flex items-center justify-center min-h-screen text-red-500">
+        无效的聊天地址。请返回重新选择。
+      </div>
+    );
+  }
+
   const publicClient = usePublicClient();
 
   // --- 新增：使用封装的钩子获取消息总数和消息列表 ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
     currentAddress as Address,
-    CONTRACT_RECIPIENT_FOR_WAGMI // <-- 使用固定地址
+    recipientAddress // <-- 使用动态接收者地址
   );
 
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
@@ -194,7 +200,7 @@ export default function ChatPage() {
 
   const { data: rawMessages, refetch: refetchMessages } = useGetMessages(
     currentAddress as Address,
-    CONTRACT_RECIPIENT_FOR_WAGMI, // <-- 使用固定地址
+    recipientAddress, // <-- 使用动态接收者地址
     BigInt(start),
     BigInt(count)
   );
@@ -216,9 +222,9 @@ export default function ChatPage() {
 
   // 计算 convoId
   const currentConvoId = useMemo(() => {
-    if (!currentAddress || !CONTRACT_RECIPIENT_FOR_WAGMI) return undefined;
-    return computeConvoId(currentAddress, CONTRACT_RECIPIENT_FOR_WAGMI);
-  }, [currentAddress, CONTRACT_RECIPIENT_FOR_WAGMI]);
+    if (!currentAddress || !recipientAddress) return undefined;
+    return computeConvoId(currentAddress, recipientAddress);
+  }, [currentAddress, recipientAddress]);
 
   // 实时消息监听
   useListenMessageSent(
@@ -401,7 +407,7 @@ export default function ChatPage() {
             type: 'system-time' as const,
             isEncrypted: false,
             originalContent: dayjs().format('A h:mm'),
-            recipient: CONTRACT_RECIPIENT_FOR_WAGMI
+            recipient: recipientAddress
           },
           {
             id: `system-${Date.now()}`,
@@ -411,7 +417,7 @@ export default function ChatPage() {
             type: 'system' as const,
             isEncrypted: false,
             originalContent: invitedMembersMessage,
-            recipient: CONTRACT_RECIPIENT_FOR_WAGMI
+            recipient: recipientAddress
           }
         ];
       }
@@ -551,7 +557,7 @@ export default function ChatPage() {
       isEncrypted: true,
       originalContent: originalMessageText,
       status: 'sending',
-      recipient: CONTRACT_RECIPIENT_FOR_WAGMI // <-- 总是使用固定地址作为 recipient
+      recipient: recipientAddress // <-- 使用动态接收者地址作为 recipient
     };
 
     // 2. 乐观更新UI：立即在界面上显示新消息，让用户感觉流畅
@@ -574,16 +580,16 @@ export default function ChatPage() {
       //   address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
       //   abi: DirectMessageAbi,
       //   functionName: 'sendMessage',
-      //   args: [CONTRACT_RECIPIENT_FOR_WAGMI, encryptedContent],
+      //   args: [recipientAddress, encryptedContent],
       //   account: currentAddress,
-      //   recipientAddressLength: CONTRACT_RECIPIENT_FOR_WAGMI.length,
+      //   recipientAddressLength: recipientAddress.length,
       //   encryptedContentLength: encryptedContent.length
       // });
       writeContract({
         address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
         abi: DirectMessageAbi,
         functionName: 'sendMessage',
-        args: [CONTRACT_RECIPIENT_FOR_WAGMI, encryptedContent],
+        args: [recipientAddress, encryptedContent],
         account: currentAddress
       });
 
@@ -870,10 +876,8 @@ export default function ChatPage() {
           </Button>
           <h1 className="text-base font-medium text-black">
             {chatType === 'private'
-              ? // 硬编码私聊对象名称，可以根据 conversationId 映射
-                conversationId === CONTRACT_RECIPIENT_FOR_WAGMI
-                ? '固定私聊好友'
-                : '未知私聊对象'
+              ? // 显示钱包地址的缩略形式
+                `${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
               : // 群聊名称，现在包含动态成员数量
                 `${conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊'} (${memberCount})`}
           </h1>
