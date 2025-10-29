@@ -57,7 +57,7 @@ export const KeyManagementModal = ({
       setPasswordInput('');
       setIsDropdownOpen(false);
     }
-  }, [isOpen, keys.length, selectedKeyId]);
+  }, [isOpen, keys, selectedKeyId]);
 
   // 点击外部关闭下拉列表
   useEffect(() => {

@@ -146,16 +146,6 @@ export default function ChatPage() {
     chatType === 'private' ? conversationId : ''
   ) as Address;
 
-  // 验证地址格式（仅在私聊时）
-  if (chatType === 'private' && !isValidEthereumAddress(recipientAddress)) {
-    console.error('Invalid recipient address in URL params:', params.id);
-    return (
-      <div className="flex items-center justify-center min-h-screen text-red-500">
-        无效的聊天地址。请返回重新选择。
-      </div>
-    );
-  }
-
   const publicClient = usePublicClient();
 
   // --- 新增：使用封装的钩子获取消息总数和消息列表（仅私聊） ---
@@ -310,7 +300,7 @@ export default function ChatPage() {
   const [isInitialLoad, setIsInitialLoad] = useState(true); // <-- 新增状态变量
 
   // --- Refs 管理 ---
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const actionsPanelContentRef = useRef<HTMLDivElement>(null); // 新增 ref
   const lastProcessedRangeRef = useRef<{ start: number; count: number } | null>(
@@ -750,12 +740,13 @@ export default function ChatPage() {
     setPanelHeight(0);
   };
 
-  // 处理回车键发送
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  // 处理回车键发送：Enter发送，Shift+Enter换行
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
+    // Shift+Enter 允许换行（默认行为）
   };
 
   // 打开密钥生成弹窗
@@ -878,6 +869,16 @@ export default function ChatPage() {
   };
 
   // --- JSX 渲染 ---
+  // 验证地址格式（仅在私聊时，在所有 Hooks 之后进行验证）
+  if (chatType === 'private' && !isValidEthereumAddress(recipientAddress)) {
+    console.error('Invalid recipient address in URL params:', params.id);
+    return (
+      <div className="flex items-center justify-center min-h-screen text-red-500">
+        无效的聊天地址。请返回重新选择。
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -1257,15 +1258,17 @@ export default function ChatPage() {
               className="text-gray-500"
             />
           </Button>
-          <Input
+          <textarea
             ref={inputRef}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
+            enterKeyHint="send"
             placeholder={chatType === 'group' ? '群聊暂不支持发送消息' : ''} // <-- 动态 placeholder
             disabled={chatType === 'group'} // <-- 群聊禁用输入框
-            className="flex-1 bg-white border-none rounded-sm h-8 px-1 py-0 text-base focus-visible:ring-0 focus-visible:ring-offset-0" // 修改这里
+            className="flex-1 bg-white border-none rounded-sm min-h-[32px] max-h-[120px] px-1 py-2 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none overflow-y-auto" // 改为 textarea 样式
             autoComplete="off"
+            rows={1}
           />
           <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
             <Image

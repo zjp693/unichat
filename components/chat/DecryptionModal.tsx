@@ -33,7 +33,7 @@ export const DecryptionModal = ({
       setPrivateKeyInput('');
       setIsDropdownOpen(false);
     }
-  }, [isOpen, keys.length, selectedKeyId]);
+  }, [isOpen, keys, selectedKeyId]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
