@@ -28,15 +28,24 @@ export type DMMessage = {
  * @param addressB 地址 B
  * @returns 消息总数 (bigint)
  */
-export function useGetMessageCount(addressA: Address, addressB: Address) {
+export function useGetMessageCount(
+  addressA: Address,
+  addressB: Address,
+  options?: { query?: { enabled?: boolean } }
+) {
   return useReadContract({
     address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
     abi: DirectMessageAbi,
     functionName: 'messageCount',
     args: [addressA, addressB],
     query: {
-      // 只有当两个地址都有效时才启用查询
-      enabled: !!addressA && !!addressB
+      // 只有当两个地址都有效且外部条件满足时才启用查询
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!addressA &&
+        !!addressB
     }
   });
 }

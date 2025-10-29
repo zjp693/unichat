@@ -141,7 +141,10 @@ export default function ChatPage() {
   const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
 
   // 验证并使用 conversationId 作为接收者地址（私聊时）
-  const recipientAddress: Address = conversationId as Address;
+  // 群聊时使用空字符串，避免调用合约（空字符串会让钩子的 enabled 条件为 false）
+  const recipientAddress: Address = (
+    chatType === 'private' ? conversationId : ''
+  ) as Address;
 
   // 验证地址格式（仅在私聊时）
   if (chatType === 'private' && !isValidEthereumAddress(recipientAddress)) {
@@ -155,10 +158,15 @@ export default function ChatPage() {
 
   const publicClient = usePublicClient();
 
-  // --- 新增：使用封装的钩子获取消息总数和消息列表 ---
+  // --- 新增：使用封装的钩子获取消息总数和消息列表（仅私聊） ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
     currentAddress as Address,
-    recipientAddress // <-- 使用动态接收者地址
+    recipientAddress, // <-- 使用动态接收者地址
+    {
+      query: {
+        enabled: chatType === 'private' // 仅在私聊时启用
+      }
+    }
   );
 
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
@@ -200,7 +208,7 @@ export default function ChatPage() {
 
   const { data: rawMessages, refetch: refetchMessages } = useGetMessages(
     currentAddress as Address,
-    recipientAddress, // <-- 使用动态接收者地址
+    recipientAddress, // <-- 使用动态接收者地址（群聊时为空字符串，会禁用查询）
     BigInt(start),
     BigInt(count)
   );
@@ -220,11 +228,12 @@ export default function ChatPage() {
     hash: writeHash
   });
 
-  // 计算 convoId
+  // 计算 convoId（仅私聊）
   const currentConvoId = useMemo(() => {
+    if (chatType !== 'private') return undefined; // 群聊不需要 convoId
     if (!currentAddress || !recipientAddress) return undefined;
     return computeConvoId(currentAddress, recipientAddress);
-  }, [currentAddress, recipientAddress]);
+  }, [chatType, currentAddress, recipientAddress]);
 
   // 实时消息监听
   useListenMessageSent(
@@ -352,35 +361,47 @@ export default function ChatPage() {
   // 3️⃣ 处理 rawMessages 更新（从链上获取的消息）
   useEffect(() => {
     if (!isConnected || !currentAddress || !conversationId) return;
-    if (
-      !rawMessages ||
-      !Array.isArray(rawMessages) ||
-      rawMessages.length === 0
-    ) {
-      // 如果没有消息，重置状态
-      if (chatType !== 'group') {
+
+    // 群聊特殊处理：直接设置为加载完成并显示邀请消息
+    if (chatType === 'group') {
+      setIsLoading(false);
+      setIsFetchingMore(false);
+      // 群聊消息会在下面处理
+    }
+
+    // 私聊时，如果没有消息则提前返回
+    if (chatType === 'private') {
+      if (
+        !rawMessages ||
+        !Array.isArray(rawMessages) ||
+        rawMessages.length === 0
+      ) {
         setIsLoading(false);
         setIsFetchingMore(false);
+        return;
       }
-      return;
     }
 
     // 检查是否是新的数据范围（避免重复处理）
-    const currentRange = { start, count };
     const lastRange = lastProcessedRangeRef.current;
 
-    if (
-      lastRange &&
-      lastRange.start === currentRange.start &&
-      lastRange.count === currentRange.count
-    ) {
-      return;
+    // 群聊时跳过此检查，因为群聊不依赖 rawMessages
+    if (chatType === 'private') {
+      const currentRange = { start, count };
+
+      if (
+        lastRange &&
+        lastRange.start === currentRange.start &&
+        lastRange.count === currentRange.count
+      ) {
+        return;
+      }
     }
 
     const processMessages = () => {
       let newMessages: Message[] = [];
 
-      if (chatType === 'private') {
+      if (chatType === 'private' && rawMessages && Array.isArray(rawMessages)) {
         // 单聊：处理从链上获取的原始消息
         // 使用全局索引来生成唯一 ID，避免 key 重复
         newMessages = rawMessages.map((msg: DMMessage, index: number) => ({
@@ -396,34 +417,41 @@ export default function ChatPage() {
           originalContent: msg.content,
           recipient: msg.recipient
         }));
-      } else if (chatType === 'group' && invitedMembersMessage) {
-        // 群聊：显示邀请成功消息
-        newMessages = [
-          {
-            id: `system-time-${Date.now()}`,
-            sender: 'other' as const,
-            content: dayjs().format('A h:mm'),
-            timestamp: new Date(),
-            type: 'system-time' as const,
-            isEncrypted: false,
-            originalContent: dayjs().format('A h:mm'),
-            recipient: recipientAddress
-          },
-          {
-            id: `system-${Date.now()}`,
-            sender: 'other' as const,
-            content: invitedMembersMessage,
-            timestamp: new Date(),
-            type: 'system' as const,
-            isEncrypted: false,
-            originalContent: invitedMembersMessage,
-            recipient: recipientAddress
-          }
-        ];
+      } else if (chatType === 'group') {
+        // 群聊：区分邀请消息和正常聊天
+        if (invitedMembersMessage) {
+          // 从邀请进入：显示邀请成功消息
+          newMessages = [
+            {
+              id: `system-time-${Date.now()}`,
+              sender: 'other' as const,
+              content: dayjs().format('A h:mm'),
+              timestamp: new Date(),
+              type: 'system-time' as const,
+              isEncrypted: false,
+              originalContent: dayjs().format('A h:mm'),
+              recipient: recipientAddress
+            },
+            {
+              id: `system-${Date.now()}`,
+              sender: 'other' as const,
+              content: invitedMembersMessage,
+              timestamp: new Date(),
+              type: 'system' as const,
+              isEncrypted: false,
+              originalContent: invitedMembersMessage,
+              recipient: recipientAddress
+            }
+          ];
+        } else {
+          // 从聊天列表进入：显示正常群聊内容（暂时为空，等待后续实现群聊消息）
+          newMessages = [];
+        }
       }
 
       // 判断是初始加载还是增量加载
-      const isIncrementalLoad = lastRange !== null && start < lastRange.start;
+      const isIncrementalLoad =
+        chatType === 'private' && lastRange !== null && start < lastRange.start;
 
       if (isIncrementalLoad && newMessages.length > 0) {
         // 增量加载（下拉加载更多）
@@ -451,12 +479,17 @@ export default function ChatPage() {
         setIsFetchingMore(false);
         // 首次加载后滚动到底部会由另一个 useEffect 处理
       } else {
+        // 无消息（包括群聊从列表进入的场景）
+        setMessages([]);
         setIsLoading(false);
         setIsFetchingMore(false);
       }
 
-      // 记录已处理的数据范围
-      lastProcessedRangeRef.current = currentRange;
+      // 记录已处理的数据范围（仅私聊需要）
+      if (chatType === 'private') {
+        const currentRange = { start, count };
+        lastProcessedRangeRef.current = currentRange;
+      }
     };
 
     processMessages();
@@ -926,6 +959,18 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
+
+            {/* 空状态提示（仅群聊从列表进入时显示） */}
+            {messages.length === 0 &&
+              chatType === 'group' &&
+              !invitedMembersMessage && (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <p className="text-sm text-gray-400">群聊功能开发中...</p>
+                  <p className="text-xs text-gray-300 mt-2">
+                    暂不支持发送和接收群聊消息
+                  </p>
+                </div>
+              )}
 
             {messages.map((message) => {
               if (message.type === 'system-time') {
