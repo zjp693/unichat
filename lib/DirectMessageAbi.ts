@@ -9,8 +9,23 @@ import DirectMessageAbiJson from '../contract/abi/DirectMessageAbi.json';
 export const DirectMessageAbi = DirectMessageAbiJson.abi as Abi;
 
 // DirectMessage 合约地址 (从环境变量读取)
-export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address = process.env
-  .NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS as Address;
+const contractAddressFromEnv =
+  process.env.NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS;
+
+if (
+  !contractAddressFromEnv ||
+  contractAddressFromEnv === 'NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS'
+) {
+  console.error(
+    '❌ 错误: NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS 环境变量未正确设置！'
+  );
+  console.error(
+    '请在 .env.local 文件中添加: NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS=0x你的合约地址'
+  );
+}
+
+export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
+  contractAddressFromEnv as Address;
 
 // 1. 定义数据类型
 export type DMMessage = {

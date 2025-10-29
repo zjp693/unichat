@@ -26,6 +26,7 @@ import {
   usePeerLastMessage,
   formatMessageTime
 } from '@/hooks/usePeerLastMessage';
+import { useChatListSync } from '@/hooks/useChatListSync';
 
 interface ChatItem {
   id: string;
@@ -83,8 +84,45 @@ export default function ChatPage() {
   const { address: currentAddress, isConnected } = useAccount();
 
   // 获取当前用户的对端列表
-  const { data: peers, isLoading: isPeersLoading } = useGetPeersOf(
-    currentAddress as Address
+  const {
+    data: peers,
+    isLoading: isPeersLoading,
+    refetch: refetchPeers
+  } = useGetPeersOf(currentAddress as Address);
+
+  // 添加调试日志，监控对端列表变化
+  useEffect(() => {
+    console.log('📋 对端列表更新:', {
+      peers,
+      peersCount: Array.isArray(peers) ? peers.length : 0,
+      isLoading: isPeersLoading,
+      currentAddress
+    });
+  }, [peers, isPeersLoading, currentAddress]);
+
+  // 监听新消息，自动刷新列表
+  useChatListSync(
+    currentAddress as Address,
+    (from, to) => {
+      console.log('🔄 收到新消息，刷新对端列表:', { from, to, currentAddress });
+      // 当收到新消息时，重新获取对端列表
+      // 这样如果有新的对端，会自动添加到列表中
+      refetchPeers()
+        .then((result) => {
+          console.log('✅ 对端列表刷新完成:', {
+            success: result.isSuccess,
+            data: result.data,
+            peersCount: (result.data as Address[])?.length || 0
+          });
+        })
+        .catch((error) => {
+          console.error('❌ 刷新对端列表失败:', error);
+        });
+
+      // usePeerLastMessage 会自动更新最后消息时间（因为依赖了 timestamp）
+      // 这里不需要额外操作
+    },
+    isConnected && !!currentAddress
   );
 
   // 将对端地址转换为 ChatItem
@@ -109,12 +147,12 @@ export default function ChatPage() {
   }, [privateChats]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
       <TopNavbar />
 
       {/* 搜索栏和操作按钮 */}
-      <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right">
+      <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right flex-shrink-0">
         <button
           className="p-2 rounded-full mr-2 hover:bg-gray-100 transition-colors"
           onClick={() => router.push('/search')}
@@ -207,7 +245,16 @@ function ChatListItem({
     <div onClick={handleChatClick} className="block cursor-pointer">
       <div className="relative flex items-center p-3 bg-white">
         <div className="relative">
-          <div className="h-12 w-12 rounded-sm overflow-hidden">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              // 私聊时点击头像跳转到个人资料页（需要判断是否好友，这里先用nonfriend）
+              if (!chat.isGroup && chat.id) {
+                router.push(`/contacts/profile/${chat.id}?type=nonfriend`);
+              }
+            }}
+            className="h-12 w-12 rounded-sm overflow-hidden"
+          >
             {chat.unreadCount && (
               <Badge
                 variant="destructive"
@@ -223,7 +270,7 @@ function ChatListItem({
               height={48}
               className="h-full w-full object-cover"
             />
-          </div>
+          </button>
           {chat.isOnline && (
             <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-white rounded-full" />
           )}
