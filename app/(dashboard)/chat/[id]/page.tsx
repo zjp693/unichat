@@ -52,6 +52,7 @@ import { ChevronDown } from 'lucide-react';
 import { keccak256, encodePacked, getAddress } from 'viem';
 import {
   DirectMessageAbi,
+  DIRECT_MESSAGE_CONTRACT_ADDRESS,
   useGetMessageCount,
   useGetMessages,
   useSendMessage,
@@ -85,10 +86,6 @@ const DEFAULT_BOTTOM_INSET_PADDING = 8; // 默认底部填充，例如 8px
 const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
 // const LOCAL_STORAGE_KEY = 'chat_latest_cid'; // 暂时保留，后续会移除
 const MESSAGES_PER_LOAD = 15; // 每次加载15条消息
-
-// DirectMessage 合约地址从环境变量中获取
-const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
-  '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
 // 已废弃：改为动态使用 conversationId 作为接收者地址
 // const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
@@ -336,7 +333,7 @@ export default function ChatPage() {
   useEffect(() => {
     loadKeysFromStorage();
     setIsClient(true);
-  }, []); // 空依赖数组，只运行一次
+  }, [loadKeysFromStorage]); // 添加 loadKeysFromStorage 到依赖数组
 
   // 2️⃣ 连接状态检查：钱包未连接时清空消息
   useEffect(() => {
@@ -491,6 +488,7 @@ export default function ChatPage() {
     isConnected,
     currentAddress,
     conversationId,
+    recipientAddress,
     start,
     count
   ]);

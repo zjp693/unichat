@@ -38,7 +38,9 @@ export function ContactListItem({
       {/* 联系人信息 */}
       <div className="flex-1 min-w-0">
         {/* 第一行：姓名和金额 */}
-        <div className={`flex items-center mb-0.5 ${contact.type === 'mutual_friends' ? 'justify-start' : 'justify-between'}`}>
+        <div
+          className={`flex items-center mb-0.5 ${contact.type === 'mutual_friends' ? 'justify-start' : 'justify-between'}`}
+        >
           <h4 className="text-sm font-medium text-gray-900 truncate">
             {contact.name}
           </h4>
@@ -74,8 +76,11 @@ export function ContactListItem({
               {contact.walletAddress}
               {/* 复制按钮 */}
               <button
-                onClick={(e) => {e.stopPropagation(); onCopyAddress(contact.walletAddress)}}
-                className="pl-1 hover:bg-gray-100 rounded flex-shrink-0 translate-y-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCopyAddress(contact.walletAddress);
+                }}
+                className="pl-1 rounded flex-shrink-0 translate-y-0.5"
               >
                 <img
                   src="/contacts/copy.svg"

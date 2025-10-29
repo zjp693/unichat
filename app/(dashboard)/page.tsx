@@ -5,7 +5,6 @@ import { Card } from '@/components/ui/card';
 import {
   Search,
   CirclePlus,
-  Copy,
   Wallet,
   Users,
   Globe,
@@ -20,12 +19,13 @@ import Image from 'next/image';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
-import {
-  useGetPeersOf,
-  useGetMessageCount,
-  useGetMessages
-} from '@/lib/DirectMessageAbi';
+import { useGetPeersOf } from '@/lib/DirectMessageAbi';
 import { Address } from 'viem';
+import { useToast } from '@/hooks/use-toast';
+import {
+  usePeerLastMessage,
+  formatMessageTime
+} from '@/hooks/usePeerLastMessage';
 
 interface ChatItem {
   id: string;
@@ -94,10 +94,10 @@ export default function ChatPage() {
     return peers.map((peerAddress: Address) => ({
       id: peerAddress,
       name: `${peerAddress.slice(0, 6)}...${peerAddress.slice(-4)}`,
-      avatar: '/placeholder-user.jpg',
-      lastMessage: '点击查看聊天',
+      avatar: '/me/me2.png',
+      lastMessage: peerAddress, // 直接显示完整钱包地址
       time: '-',
-      unreadCount: 10, // 显示未读徽标
+      unreadCount: 1, // 显示未读徽标
       isGroup: false,
       copy: false
     }));
@@ -139,74 +139,73 @@ export default function ChatPage() {
             <p className="text-sm text-gray-400">暂无聊天记录</p>
           </div>
         ) : (
-          allChats.map((chat) => <ChatListItem key={chat.id} chat={chat} />)
+          allChats.map((chat) => (
+            <ChatListItem
+              key={chat.id}
+              chat={chat}
+              currentAddress={currentAddress}
+            />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-function ChatListItem({ chat }: { chat: ChatItem }) {
+function ChatListItem({
+  chat,
+  currentAddress
+}: {
+  chat: ChatItem;
+  currentAddress?: Address;
+}) {
   const router = useRouter();
-  const { address: currentAddress } = useAccount();
+  const { toast } = useToast();
 
-  // 仅在私聊时获取消息总数
-  // 群聊时传入空字符串地址，利用钩子内置的 enabled 条件自动禁用查询
-  const { data: messageCountBigInt } = useGetMessageCount(
-    currentAddress as Address,
-    (chat.isGroup ? '' : chat.id) as Address
+  // 获取私聊的最后消息时间
+  const { timestamp } = usePeerLastMessage(
+    !chat.isGroup && currentAddress ? currentAddress : undefined,
+    !chat.isGroup ? (chat.id as Address) : (undefined as any)
   );
 
-  const messageCount = messageCountBigInt ? Number(messageCountBigInt) : 0;
-
-  // 获取最后一条消息（仅当有消息且为私聊时）
-  // 群聊时传入空字符串地址，利用钩子内置的 enabled 条件自动禁用查询
-  const { data: lastMessages } = useGetMessages(
-    currentAddress as Address,
-    (chat.isGroup ? '' : chat.id) as Address,
-    BigInt(messageCount > 0 ? messageCount - 1 : 0), // start = total - 1
-    BigInt(messageCount > 0 ? 1 : 0) // count = 1
-  );
-
-  // 提取最后一条消息的内容
-  const lastMessageContent = useMemo(() => {
-    if (
-      !lastMessages ||
-      !Array.isArray(lastMessages) ||
-      lastMessages.length === 0
-    ) {
-      return null;
-    }
-    const lastMsg = lastMessages[0];
-    // 显示消息内容的前30个字符
-    const content = lastMsg.content || '';
-    return content.length > 30 ? `${content.slice(0, 30)}...` : content;
-  }, [lastMessages]);
-
-  // 动态更新 lastMessage 显示
-  const displayLastMessage = chat.isGroup
-    ? chat.lastMessage
-    : lastMessageContent
-      ? lastMessageContent
-      : messageCount > 0
-        ? '加载中...'
-        : '暂无消息';
+  // 格式化时间
+  const displayTime =
+    !chat.isGroup && timestamp ? formatMessageTime(timestamp) : chat.time;
 
   const handleChatClick = () => {
     // 根据 chat.isGroup 动态构建 URL
     if (chat.isGroup) {
-      // 对于群聊，如果需要，可以添加不同的参数
       router.push(`/chat/${chat.id}?type=group`);
     } else {
-      // 对于单对单聊天，显式添加 type=private
       router.push(`/chat/${chat.id}?type=private`);
+    }
+  };
+
+  const handleCopyAddress = async (e: React.MouseEvent) => {
+    // 阻止事件冒泡，避免触发父元素的点击事件
+    e.stopPropagation();
+
+    try {
+      // 复制地址到剪贴板
+      await navigator.clipboard.writeText(chat.lastMessage);
+      toast({
+        title: '复制成功',
+        description: '钱包地址已复制到剪贴板',
+        variant: 'success'
+      });
+    } catch (err) {
+      toast({
+        title: '复制失败',
+        description: '无法复制地址',
+        variant: 'destructive'
+      });
     }
   };
 
   return (
     // 将 <a> 标签替换为 div，并添加 onClick 事件
     <div onClick={handleChatClick} className="block cursor-pointer">
-      <div className="relative flex items-center p-3 hover:bg-gray-100/50 bg-white">
+      <div className="relative flex items-center p-3 bg-white">
         <div className="relative">
           <div className="h-12 w-12 rounded-sm overflow-hidden">
             {chat.unreadCount && (
@@ -231,17 +230,27 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
         </div>
 
         <div className="flex-1 ml-3 min-w-0">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-1">
             <h3 className="font-medium text-sm truncate">{chat.name}</h3>
-            <span className="text-xs text-gray-400">{chat.time}</span>
+            <span className="text-xs text-gray-400">{displayTime}</span>
           </div>
-          <div className="flex items-center justify-between mt-1">
-            <div className="w-[100%]">
-              <p className="text-xs text-gray-500 truncate max-w-[94%] inline-block align-middle">
-                {displayLastMessage}
-              </p>
-              {!chat.copy && <Copy className="h-4 w-4 inline-block ml-1" />}
-            </div>
+          <div className="flex items-center gap-1">
+            <p className="text-xs leading-[1.3] text-gray-500 break-all font-mono tracking-tight">
+              {chat.lastMessage}
+            </p>
+            {!chat.copy && (
+              <button
+                onClick={handleCopyAddress}
+                className="flex-shrink-0 p-0.5 rounded  mt-0.5"
+                title="复制地址"
+              >
+                <img
+                  src="/contacts/copy.svg"
+                  alt="复制"
+                  className="w-3.5 h-3.5 object-cover"
+                />
+              </button>
+            )}
           </div>
           {/* 下边框 */}
           <div className="border-t w-[calc(100%-5rem)] border-border absolute bottom-0"></div>
