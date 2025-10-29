@@ -19,7 +19,11 @@ import Image from 'next/image';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
-import { useGetPeersOf } from '@/lib/DirectMessageAbi';
+import dayjs from 'dayjs';
+import {
+  useGetPeersOf,
+  useCountReceivedTodayBetween
+} from '@/lib/DirectMessageAbi';
 import { Address } from 'viem';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -135,7 +139,7 @@ export default function ChatPage() {
       avatar: '/me/me2.png',
       lastMessage: peerAddress, // 直接显示完整钱包地址
       time: '-',
-      unreadCount: 1, // 显示未读徽标
+      unreadCount: undefined, // 将由 ChatListItem 组件通过 useCountReceivedTodayBetween 动态获取
       isGroup: false,
       copy: false
     }));
@@ -149,7 +153,9 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
-      <TopNavbar />
+      <div className="flex-shrink-0">
+        <TopNavbar />
+      </div>
 
       {/* 搜索栏和操作按钮 */}
       <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right flex-shrink-0">
@@ -163,27 +169,32 @@ export default function ChatPage() {
       </div>
 
       {/* 聊天列表 */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div
+        className="bg-gray-50 overflow-y-auto"
+        style={{ maxHeight: 'calc(100vh - 180px)' }}
+      >
         {!isConnected ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
           </div>
         ) : isPeersLoading ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">加载中...</p>
           </div>
         ) : allChats.length === 0 ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">暂无聊天记录</p>
           </div>
         ) : (
-          allChats.map((chat) => (
-            <ChatListItem
-              key={chat.id}
-              chat={chat}
-              currentAddress={currentAddress}
-            />
-          ))
+          <div className="p-2">
+            {allChats.map((chat) => (
+              <ChatListItem
+                key={chat.id}
+                chat={chat}
+                currentAddress={currentAddress}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -206,9 +217,90 @@ function ChatListItem({
     !chat.isGroup ? (chat.id as Address) : (undefined as any)
   );
 
+  // 获取私聊的今日消息总数
+  // 根据网页测试结果，可能需要交换参数
+  // 将聊天对象作为接收者(me)，当前用户作为发送者(peer)
+  const me = !chat.isGroup ? (chat.id as Address) : (undefined as any);
+  const peer =
+    !chat.isGroup && currentAddress ? currentAddress : (undefined as any);
+
+  // 打印入参调试信息
+  useEffect(() => {
+    if (!chat.isGroup && currentAddress && chat.id) {
+      console.log('📊 useCountReceivedTodayBetween 入参:', {
+        me: '接收者（me）',
+        peer: '发送者（peer）',
+        meAddress: me,
+        peerAddress: peer,
+        chatId: chat.id,
+        currentAddress,
+        isGroup: chat.isGroup
+      });
+    }
+  }, [me, peer, chat.id, currentAddress, chat.isGroup]);
+
+  // 注意：根据合约定义，me 是接收者，peer 是发送者
+  // 统计的是：me（接收者）从 peer（发送者）那里今天收到的消息数
+  const useCountReceivedTodayBetweenResult = useCountReceivedTodayBetween(
+    me, // me: 接收者（当前用户）
+    peer, // peer: 发送者（聊天对象）
+    {
+      query: {
+        enabled: !chat.isGroup && !!currentAddress && !!chat.id
+      }
+    }
+  );
+
+  // 打印参数用于调试
+  useEffect(() => {
+    if (!chat.isGroup && currentAddress && chat.id) {
+      console.log('🔍 参数检查:', {
+        'me (接收者)': me,
+        'peer (发送者)': peer,
+        currentAddress: currentAddress,
+        'chat.id': chat.id,
+        提示: '如果返回0，可能需要交换 me 和 peer 的顺序'
+      });
+    }
+  }, [me, peer, currentAddress, chat.id, chat.isGroup]);
+
+  // 提取原始数据
+  const {
+    data: todayMessageCount,
+    isLoading: isTodayCountLoading,
+    error: todayCountError
+  } = useCountReceivedTodayBetweenResult;
+
+  // 直接打印原始返回数据
+  useEffect(() => {
+    if (!chat.isGroup && currentAddress && chat.id) {
+      console.log(
+        '📊 useCountReceivedTodayBetween 原始返回数据:',
+        useCountReceivedTodayBetweenResult
+      );
+      console.log('📊 原始 data:', todayMessageCount);
+    }
+  }, [
+    useCountReceivedTodayBetweenResult,
+    todayMessageCount,
+    chat.isGroup,
+    currentAddress,
+    chat.id
+  ]);
+
+  // 将 bigint 转换为 number（今日消息数）
+  const todayCount = todayMessageCount ? Number(todayMessageCount) : 0;
+
   // 格式化时间
   const displayTime =
     !chat.isGroup && timestamp ? formatMessageTime(timestamp) : chat.time;
+
+  // 决定显示的消息数：私聊显示今日消息数，群聊显示原有的 unreadCount
+  const displayUnreadCount = chat.isGroup
+    ? chat.unreadCount
+    : todayCount > 0
+      ? todayCount
+      : undefined;
 
   const handleChatClick = () => {
     // 根据 chat.isGroup 动态构建 URL
@@ -255,12 +347,12 @@ function ChatListItem({
             }}
             className="h-12 w-12 rounded-sm overflow-hidden"
           >
-            {chat.unreadCount && (
+            {displayUnreadCount && (
               <Badge
                 variant="destructive"
                 className="absolute top-0 right-[-0.6rem] ml-2 h-5 min-w-[20px] text-xs flex items-center justify-center rounded-full"
               >
-                {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
+                {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
               </Badge>
             )}
             <Image

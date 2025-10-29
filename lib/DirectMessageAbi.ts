@@ -151,3 +151,96 @@ export function useListenMessageSent(
     enabled: enabled
   });
 }
+
+/**
+ * 钩子：统计指定接收者在指定时间范围内接收的消息总数
+ * @param recipient 接收者地址
+ * @param startTs 开始时间戳 (uint40)
+ * @param endTs 结束时间戳 (uint40)
+ * @param options 可选配置项
+ * @returns 消息总数 (bigint)
+ */
+export function useCountReceivedInRange(
+  recipient: Address,
+  startTs: bigint,
+  endTs: bigint,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'countReceivedInRange',
+    args: [recipient, startTs, endTs],
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!recipient &&
+        startTs !== undefined &&
+        endTs !== undefined
+    }
+  });
+}
+
+/**
+ * 钩子：统计指定接收者和对端在指定时间范围内之间的消息数
+ * @param recipient 接收者地址
+ * @param peer 对端地址
+ * @param startTs 开始时间戳 (uint40)
+ * @param endTs 结束时间戳 (uint40)
+ * @param options 可选配置项
+ * @returns 消息总数 (bigint)
+ */
+export function useCountReceivedInRangeBetween(
+  recipient: Address,
+  peer: Address,
+  startTs: bigint,
+  endTs: bigint,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'countReceivedInRangeBetween',
+    args: [recipient, peer, startTs, endTs],
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!recipient &&
+        !!peer &&
+        startTs !== undefined &&
+        endTs !== undefined
+    }
+  });
+}
+
+/**
+ * 钩子：统计今天指定用户和对端之间的消息数
+ * @param me 当前用户地址
+ * @param peer 对端地址
+ * @param options 可选配置项
+ * @returns 今天的消息总数 (bigint)
+ */
+export function useCountReceivedTodayBetween(
+  me: Address,
+  peer: Address,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'countReceivedTodayBetween',
+    args: [me, peer],
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!me &&
+        !!peer
+    }
+  });
+}
