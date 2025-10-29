@@ -15,9 +15,17 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { TopNavbar } from '@/components/ui/top-navbar';
 import Image from 'next/image';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
+import {
+  useGetPeersOf,
+  useGetMessageCount,
+  useGetMessages
+} from '@/lib/DirectMessageAbi';
+import { Address } from 'viem';
 
 interface ChatItem {
   id: string;
@@ -31,7 +39,8 @@ interface ChatItem {
   copy?: boolean;
 }
 
-const mockChats: ChatItem[] = [
+// 群聊 Mock 数据（保留）
+const mockGroupChats: ChatItem[] = [
   {
     id: '1',
     name: 'Arbitrum Vote Group',
@@ -67,62 +76,49 @@ const mockChats: ChatItem[] = [
     time: '9:11',
     unreadCount: 65,
     isGroup: true
-  },
-  {
-    id: '5',
-    name: 'Vitalik Musk',
-    avatar: '/me/me2.png',
-    lastMessage: 'welcome',
-    time: '8:28',
-    unreadCount: 65,
-    copy: true
-  },
-  {
-    id: '6',
-    name: 'Musk JedMcCaleb',
-    avatar: '/me/me2.png',
-    lastMessage: 'welcome',
-    time: '6:28',
-    unreadCount: 65,
-    copy: true
   }
 ];
-const address = '0xE0438Eb3703bF871E31Ce639bd351109c88666ea';
 export default function ChatPage() {
-  const router = useRouter(); // <-- 添加 useRouter 钩子
+  const router = useRouter();
+  const { address: currentAddress, isConnected } = useAccount();
+
+  // 获取当前用户的对端列表
+  const { data: peers, isLoading: isPeersLoading } = useGetPeersOf(
+    currentAddress as Address
+  );
+
+  // 将对端地址转换为 ChatItem
+  const privateChats: ChatItem[] = useMemo(() => {
+    if (!peers || !Array.isArray(peers)) return [];
+
+    return peers.map((peerAddress: Address) => ({
+      id: peerAddress,
+      name: `${peerAddress.slice(0, 6)}...${peerAddress.slice(-4)}`,
+      avatar: '/placeholder-user.jpg',
+      lastMessage: '点击查看聊天',
+      time: '-',
+      unreadCount: 10, // 显示未读徽标
+      isGroup: false,
+      copy: false
+    }));
+  }, [peers]);
+
+  // 合并群聊和私聊列表
+  const allChats = useMemo(() => {
+    return [...mockGroupChats, ...privateChats];
+  }, [privateChats]);
+
   return (
     <div className="flex flex-col h-full">
       {/* 顶部导航栏 */}
-      <div className="flex justify-between items-center py-4 px-1 bg-white">
-        {/* <Button variant="outline" className="px-3 py-1 text-xs">
-          <Image
-            src="/top/bnb.png"
-            alt="usa"
-            className="object-cover mr-1"
-            width={19}
-            height={19}
-          />
-          BNB Chain
-        </Button> */}
-        {/* 使用 AppKit 钱包连接按钮替换原有的地址显示 */}
-        <appkit-button />
-        <Button variant="outline" className="flex items-center space-x-1">
-          <div className="inline-block align-middle mr-1 w-4 h-4 rounded-full overflow-hidden">
-            <Image
-              src="/top/usa.png"
-              alt="usa"
-              className="w-full h-full object-cover"
-              width={20}
-              height={20}
-            />
-          </div>
-          <span className="text-xs">USA</span>
-        </Button>
-      </div>
+      <TopNavbar />
 
       {/* 搜索栏和操作按钮 */}
       <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right">
-        <button className="p-2 rounded-full mr-2">
+        <button
+          className="p-2 rounded-full mr-2 hover:bg-gray-100 transition-colors"
+          onClick={() => router.push('/search')}
+        >
           <Search size={18} />
         </button>
         <DropdownMenu />
@@ -130,16 +126,71 @@ export default function ChatPage() {
 
       {/* 聊天列表 */}
       <div className="flex-1 overflow-y-auto bg-gray-50">
-        {mockChats.map((chat) => (
-          <ChatListItem key={chat.id} chat={chat} />
-        ))}
+        {!isConnected ? (
+          <div className="flex items-center justify-center py-20">
+            <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
+          </div>
+        ) : isPeersLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <p className="text-sm text-gray-400">加载中...</p>
+          </div>
+        ) : allChats.length === 0 ? (
+          <div className="flex items-center justify-center py-20">
+            <p className="text-sm text-gray-400">暂无聊天记录</p>
+          </div>
+        ) : (
+          allChats.map((chat) => <ChatListItem key={chat.id} chat={chat} />)
+        )}
       </div>
     </div>
   );
 }
 
 function ChatListItem({ chat }: { chat: ChatItem }) {
-  const router = useRouter(); // <-- 添加 useRouter 钩子
+  const router = useRouter();
+  const { address: currentAddress } = useAccount();
+
+  // 仅在私聊时获取消息总数
+  // 群聊时传入空字符串地址，利用钩子内置的 enabled 条件自动禁用查询
+  const { data: messageCountBigInt } = useGetMessageCount(
+    currentAddress as Address,
+    (chat.isGroup ? '' : chat.id) as Address
+  );
+
+  const messageCount = messageCountBigInt ? Number(messageCountBigInt) : 0;
+
+  // 获取最后一条消息（仅当有消息且为私聊时）
+  // 群聊时传入空字符串地址，利用钩子内置的 enabled 条件自动禁用查询
+  const { data: lastMessages } = useGetMessages(
+    currentAddress as Address,
+    (chat.isGroup ? '' : chat.id) as Address,
+    BigInt(messageCount > 0 ? messageCount - 1 : 0), // start = total - 1
+    BigInt(messageCount > 0 ? 1 : 0) // count = 1
+  );
+
+  // 提取最后一条消息的内容
+  const lastMessageContent = useMemo(() => {
+    if (
+      !lastMessages ||
+      !Array.isArray(lastMessages) ||
+      lastMessages.length === 0
+    ) {
+      return null;
+    }
+    const lastMsg = lastMessages[0];
+    // 显示消息内容的前30个字符
+    const content = lastMsg.content || '';
+    return content.length > 30 ? `${content.slice(0, 30)}...` : content;
+  }, [lastMessages]);
+
+  // 动态更新 lastMessage 显示
+  const displayLastMessage = chat.isGroup
+    ? chat.lastMessage
+    : lastMessageContent
+      ? lastMessageContent
+      : messageCount > 0
+        ? '加载中...'
+        : '暂无消息';
 
   const handleChatClick = () => {
     // 根据 chat.isGroup 动态构建 URL
@@ -157,7 +208,7 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
     <div onClick={handleChatClick} className="block cursor-pointer">
       <div className="relative flex items-center p-3 hover:bg-gray-100/50 bg-white">
         <div className="relative">
-          <div className="h-12 w-12 rounded overflow-hidden border border-gray-200">
+          <div className="h-12 w-12 rounded-sm overflow-hidden">
             {chat.unreadCount && (
               <Badge
                 variant="destructive"
@@ -187,7 +238,7 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
           <div className="flex items-center justify-between mt-1">
             <div className="w-[100%]">
               <p className="text-xs text-gray-500 truncate max-w-[94%] inline-block align-middle">
-                {chat.lastMessage}
+                {displayLastMessage}
               </p>
               {!chat.copy && <Copy className="h-4 w-4 inline-block ml-1" />}
             </div>

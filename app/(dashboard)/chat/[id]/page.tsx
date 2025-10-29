@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { TopNavbar } from '@/components/ui/top-navbar';
 import {
   MoreHorizontal,
   Plus,
@@ -89,8 +90,9 @@ const MESSAGES_PER_LOAD = 15; // 每次加载15条消息
 const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
   '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
-const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
-  '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678'; // <-- 固定接收者地址
+// 已废弃：改为动态使用 conversationId 作为接收者地址
+// const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
+//   '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
 export default function ChatPage() {
   // --- 基础钩子 ---
@@ -138,20 +140,33 @@ export default function ChatPage() {
     : null;
   const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
 
-  // 确保 recipientAddress 是一个有效的以太坊地址
-  // if (!isValidEthereumAddress(recipientAddress)) {
-  //   console.error("Invalid recipient address in URL params:", params.id);
-  //   // 可以重定向到聊天列表或显示错误信息
-  //   // 例如：router.push('/chat');
-  //   // 为了演示，我们暂时返回一个空页面或错误提示
-  //   return <div className="flex items-center justify-center min-h-screen text-red-500">无效的聊天地址。</div>;
-  // }
+  // 验证并使用 conversationId 作为接收者地址（私聊时）
+  // 群聊时使用空字符串，避免调用合约（空字符串会让钩子的 enabled 条件为 false）
+  const recipientAddress: Address = (
+    chatType === 'private' ? conversationId : ''
+  ) as Address;
+
+  // 验证地址格式（仅在私聊时）
+  if (chatType === 'private' && !isValidEthereumAddress(recipientAddress)) {
+    console.error('Invalid recipient address in URL params:', params.id);
+    return (
+      <div className="flex items-center justify-center min-h-screen text-red-500">
+        无效的聊天地址。请返回重新选择。
+      </div>
+    );
+  }
+
   const publicClient = usePublicClient();
 
-  // --- 新增：使用封装的钩子获取消息总数和消息列表 ---
+  // --- 新增：使用封装的钩子获取消息总数和消息列表（仅私聊） ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
     currentAddress as Address,
-    CONTRACT_RECIPIENT_FOR_WAGMI // <-- 使用固定地址
+    recipientAddress, // <-- 使用动态接收者地址
+    {
+      query: {
+        enabled: chatType === 'private' // 仅在私聊时启用
+      }
+    }
   );
 
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
@@ -193,7 +208,7 @@ export default function ChatPage() {
 
   const { data: rawMessages, refetch: refetchMessages } = useGetMessages(
     currentAddress as Address,
-    CONTRACT_RECIPIENT_FOR_WAGMI, // <-- 使用固定地址
+    recipientAddress, // <-- 使用动态接收者地址（群聊时为空字符串，会禁用查询）
     BigInt(start),
     BigInt(count)
   );
@@ -213,11 +228,12 @@ export default function ChatPage() {
     hash: writeHash
   });
 
-  // 计算 convoId
+  // 计算 convoId（仅私聊）
   const currentConvoId = useMemo(() => {
-    if (!currentAddress || !CONTRACT_RECIPIENT_FOR_WAGMI) return undefined;
-    return computeConvoId(currentAddress, CONTRACT_RECIPIENT_FOR_WAGMI);
-  }, [currentAddress, CONTRACT_RECIPIENT_FOR_WAGMI]);
+    if (chatType !== 'private') return undefined; // 群聊不需要 convoId
+    if (!currentAddress || !recipientAddress) return undefined;
+    return computeConvoId(currentAddress, recipientAddress);
+  }, [chatType, currentAddress, recipientAddress]);
 
   // 实时消息监听
   useListenMessageSent(
@@ -345,35 +361,47 @@ export default function ChatPage() {
   // 3️⃣ 处理 rawMessages 更新（从链上获取的消息）
   useEffect(() => {
     if (!isConnected || !currentAddress || !conversationId) return;
-    if (
-      !rawMessages ||
-      !Array.isArray(rawMessages) ||
-      rawMessages.length === 0
-    ) {
-      // 如果没有消息，重置状态
-      if (chatType !== 'group') {
+
+    // 群聊特殊处理：直接设置为加载完成并显示邀请消息
+    if (chatType === 'group') {
+      setIsLoading(false);
+      setIsFetchingMore(false);
+      // 群聊消息会在下面处理
+    }
+
+    // 私聊时，如果没有消息则提前返回
+    if (chatType === 'private') {
+      if (
+        !rawMessages ||
+        !Array.isArray(rawMessages) ||
+        rawMessages.length === 0
+      ) {
         setIsLoading(false);
         setIsFetchingMore(false);
+        return;
       }
-      return;
     }
 
     // 检查是否是新的数据范围（避免重复处理）
-    const currentRange = { start, count };
     const lastRange = lastProcessedRangeRef.current;
 
-    if (
-      lastRange &&
-      lastRange.start === currentRange.start &&
-      lastRange.count === currentRange.count
-    ) {
-      return;
+    // 群聊时跳过此检查，因为群聊不依赖 rawMessages
+    if (chatType === 'private') {
+      const currentRange = { start, count };
+
+      if (
+        lastRange &&
+        lastRange.start === currentRange.start &&
+        lastRange.count === currentRange.count
+      ) {
+        return;
+      }
     }
 
     const processMessages = () => {
       let newMessages: Message[] = [];
 
-      if (chatType === 'private') {
+      if (chatType === 'private' && rawMessages && Array.isArray(rawMessages)) {
         // 单聊：处理从链上获取的原始消息
         // 使用全局索引来生成唯一 ID，避免 key 重复
         newMessages = rawMessages.map((msg: DMMessage, index: number) => ({
@@ -389,34 +417,41 @@ export default function ChatPage() {
           originalContent: msg.content,
           recipient: msg.recipient
         }));
-      } else if (chatType === 'group' && invitedMembersMessage) {
-        // 群聊：显示邀请成功消息
-        newMessages = [
-          {
-            id: `system-time-${Date.now()}`,
-            sender: 'other' as const,
-            content: dayjs().format('A h:mm'),
-            timestamp: new Date(),
-            type: 'system-time' as const,
-            isEncrypted: false,
-            originalContent: dayjs().format('A h:mm'),
-            recipient: CONTRACT_RECIPIENT_FOR_WAGMI
-          },
-          {
-            id: `system-${Date.now()}`,
-            sender: 'other' as const,
-            content: invitedMembersMessage,
-            timestamp: new Date(),
-            type: 'system' as const,
-            isEncrypted: false,
-            originalContent: invitedMembersMessage,
-            recipient: CONTRACT_RECIPIENT_FOR_WAGMI
-          }
-        ];
+      } else if (chatType === 'group') {
+        // 群聊：区分邀请消息和正常聊天
+        if (invitedMembersMessage) {
+          // 从邀请进入：显示邀请成功消息
+          newMessages = [
+            {
+              id: `system-time-${Date.now()}`,
+              sender: 'other' as const,
+              content: dayjs().format('A h:mm'),
+              timestamp: new Date(),
+              type: 'system-time' as const,
+              isEncrypted: false,
+              originalContent: dayjs().format('A h:mm'),
+              recipient: recipientAddress
+            },
+            {
+              id: `system-${Date.now()}`,
+              sender: 'other' as const,
+              content: invitedMembersMessage,
+              timestamp: new Date(),
+              type: 'system' as const,
+              isEncrypted: false,
+              originalContent: invitedMembersMessage,
+              recipient: recipientAddress
+            }
+          ];
+        } else {
+          // 从聊天列表进入：显示正常群聊内容（暂时为空，等待后续实现群聊消息）
+          newMessages = [];
+        }
       }
 
       // 判断是初始加载还是增量加载
-      const isIncrementalLoad = lastRange !== null && start < lastRange.start;
+      const isIncrementalLoad =
+        chatType === 'private' && lastRange !== null && start < lastRange.start;
 
       if (isIncrementalLoad && newMessages.length > 0) {
         // 增量加载（下拉加载更多）
@@ -444,12 +479,17 @@ export default function ChatPage() {
         setIsFetchingMore(false);
         // 首次加载后滚动到底部会由另一个 useEffect 处理
       } else {
+        // 无消息（包括群聊从列表进入的场景）
+        setMessages([]);
         setIsLoading(false);
         setIsFetchingMore(false);
       }
 
-      // 记录已处理的数据范围
-      lastProcessedRangeRef.current = currentRange;
+      // 记录已处理的数据范围（仅私聊需要）
+      if (chatType === 'private') {
+        const currentRange = { start, count };
+        lastProcessedRangeRef.current = currentRange;
+      }
     };
 
     processMessages();
@@ -550,7 +590,7 @@ export default function ChatPage() {
       isEncrypted: true,
       originalContent: originalMessageText,
       status: 'sending',
-      recipient: CONTRACT_RECIPIENT_FOR_WAGMI // <-- 总是使用固定地址作为 recipient
+      recipient: recipientAddress // <-- 使用动态接收者地址作为 recipient
     };
 
     // 2. 乐观更新UI：立即在界面上显示新消息，让用户感觉流畅
@@ -573,16 +613,16 @@ export default function ChatPage() {
       //   address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
       //   abi: DirectMessageAbi,
       //   functionName: 'sendMessage',
-      //   args: [CONTRACT_RECIPIENT_FOR_WAGMI, encryptedContent],
+      //   args: [recipientAddress, encryptedContent],
       //   account: currentAddress,
-      //   recipientAddressLength: CONTRACT_RECIPIENT_FOR_WAGMI.length,
+      //   recipientAddressLength: recipientAddress.length,
       //   encryptedContentLength: encryptedContent.length
       // });
       writeContract({
         address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
         abi: DirectMessageAbi,
         functionName: 'sendMessage',
-        args: [CONTRACT_RECIPIENT_FOR_WAGMI, encryptedContent],
+        args: [recipientAddress, encryptedContent],
         account: currentAddress
       });
 
@@ -852,27 +892,7 @@ export default function ChatPage() {
       {/* 固定的头部区域 */}
       <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
         {/* 顶部钱包栏 */}
-        <div
-          className="flex items-center justify-between px-4 py-3 border-b"
-          style={{ height: `${TOP_BAR_HEIGHT}px` }}
-        >
-          <div className="flex items-center gap-2">
-            <appkit-button />
-          </div>
-          <Button
-            variant="outline"
-            className="rounded-lg flex items-center gap-2"
-          >
-            <Image
-              src="/top/usa.png"
-              alt="USA Flag"
-              width={20}
-              height={20}
-              className="rounded-full"
-            />
-            USA
-          </Button>
-        </div>
+        <TopNavbar className="" />
         {/* 聊天导航栏 */}
         <div
           className="flex items-center justify-between px-3"
@@ -889,10 +909,8 @@ export default function ChatPage() {
           </Button>
           <h1 className="text-base font-medium text-black">
             {chatType === 'private'
-              ? // 硬编码私聊对象名称，可以根据 conversationId 映射
-                conversationId === CONTRACT_RECIPIENT_FOR_WAGMI
-                ? '固定私聊好友'
-                : '未知私聊对象'
+              ? // 显示钱包地址的缩略形式
+                `${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
               : // 群聊名称，现在包含动态成员数量
                 `${conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊'} (${memberCount})`}
           </h1>
@@ -941,6 +959,18 @@ export default function ChatPage() {
                 </div>
               </div>
             )}
+
+            {/* 空状态提示（仅群聊从列表进入时显示） */}
+            {messages.length === 0 &&
+              chatType === 'group' &&
+              !invitedMembersMessage && (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <p className="text-sm text-gray-400">群聊功能开发中...</p>
+                  <p className="text-xs text-gray-300 mt-2">
+                    暂不支持发送和接收群聊消息
+                  </p>
+                </div>
+              )}
 
             {messages.map((message) => {
               if (message.type === 'system-time') {
