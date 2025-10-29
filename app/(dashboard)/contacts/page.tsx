@@ -21,8 +21,6 @@ import { CelebrityListItemSkeleton } from './components/CelebrityListItemSkeleto
 import { ContactListItem } from './components/ContactListItem';
 import { CelebrityListItem } from './components/CelebrityListItem';
 
-
-
 export default function ContactsPage() {
   const [activeTab, setActiveTab] = useState<'contacts' | 'celebrities'>(
     'contacts'
@@ -45,33 +43,38 @@ export default function ContactsPage() {
   const {
     celebrities: pagedCelebrities,
     rawPages,
-  pageSize,
-  page,
+    pageSize,
+    page,
     isLoading: isLoadingCelebs,
     isLoadingMore,
     hasMore,
     error: celebError,
     loadNext,
-    reset: resetCelebPagination,
-  } = useCelebrityPagination({ pageSize: 10, activeOnly: false, enabled: true });
+    reset: resetCelebPagination
+  } = useCelebrityPagination({
+    pageSize: 10,
+    activeOnly: false,
+    enabled: true
+  });
 
   // 原始合约数据合集（用于传给 CelebrityListItem 获取 CID）
   const celebrityData = rawPages.flat();
 
   // 搜索接口 - 用户输入任何内容后都调用此接口
-  const { 
-    data: searchResult, 
-    isLoading: isLoadingSearch, 
+  const {
+    data: searchResult,
+    isLoading: isLoadingSearch,
     error: searchError,
     refetch: refetchSearch
   } = useReadContract(prepareGetByAddressCall(searchTerm));
 
-  const { processContractData, handleContractError } = createCelebrityContractHooks();
+  const { processContractData, handleContractError } =
+    createCelebrityContractHooks();
 
   // 处理合约数据 -（原始数据在分页 hook 中处理为 pagedCelebrities）
-  
+
   // 处理地址搜索结果
-  const searchResultCelebrities = searchResult 
+  const searchResultCelebrities = searchResult
     ? processContractData([searchResult as CelebrityFromContract])
     : [];
 
@@ -103,10 +106,12 @@ export default function ContactsPage() {
 
   // 查看交易记录
   const viewTransactions = (contact: Contact) => {
-  console.log(contact,"交易记录");
-  
+    console.log(contact, '交易记录');
+
     // 跳转到交易记录页面，使用ETH作为默认symbol
-    router.push(`/token/ETH/transactions?contact=${encodeURIComponent(contact.name)}&address=${encodeURIComponent(contact.walletAddress)}`);
+    router.push(
+      `/token/ETH/transactions?contact=${encodeURIComponent(contact.name)}&address=${encodeURIComponent(contact.walletAddress)}`
+    );
   };
 
   // 过滤联系人
@@ -121,7 +126,7 @@ export default function ContactsPage() {
 
   const filteredTradedContacts = filterContacts(tradedContacts);
   const filteredMutualContacts = filterContacts(mutualFriendsContacts);
-  
+
   // 根据搜索状态决定显示的数据
   const contractCelebrities = pagedCelebrities;
 
@@ -136,31 +141,37 @@ export default function ContactsPage() {
     const sentinel = document.getElementById('celebrity-list-sentinel');
     if (!sentinel) return;
 
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting && hasMore && !isLoadingCelebs) {
-          loadNext();
-        }
-      });
-    }, {
-      root: null,
-      rootMargin: '0px',
-      threshold: 0.25,
-    });
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && hasMore && !isLoadingCelebs) {
+            loadNext();
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.25
+      }
+    );
 
     io.observe(sentinel);
     return () => io.disconnect();
   }, [hasSearchTerm, hasMore, isLoadingCelebs, loadNext]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
-      <div className="flex items-center py-2 px-2 bg-white">
+      <div className="flex items-center py-2 px-2 bg-white flex-shrink-0">
         {/* <div style={{ transform: 'scale(0.85)', transformOrigin: 'left center' }}>
           <appkit-network-button />
         </div> */}
 
-        <div className="ml-2" style={{ transform: 'scale(1)', transformOrigin: 'left center' }}>
+        <div
+          className="ml-2"
+          style={{ transform: 'scale(1)', transformOrigin: 'left center' }}
+        >
           <appkit-button />
         </div>
         <Button
@@ -181,12 +192,12 @@ export default function ContactsPage() {
       </div>
 
       {/* 标题 */}
-      <div className="px-4 py-2 bg-white">
+      <div className="px-4 py-2 bg-white flex-shrink-0">
         <h1 className="text-base font-medium text-center">通讯录</h1>
       </div>
 
       {/* 搜索栏  */}
-      <div className="px-4 py-3 bg-white">
+      <div className="px-4 py-3 bg-white flex-shrink-0">
         <div className="relative bg-gray-100 rounded-full">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
@@ -200,7 +211,7 @@ export default function ContactsPage() {
       </div>
 
       {/* 切换标签 -   */}
-      <div className="flex justify-between bg-white px-4 pt-2 pb-5">
+      <div className="flex justify-between bg-white px-4 pt-2 pb-5 flex-shrink-0">
         <button
           onClick={() => setActiveTab('contacts')}
           className={`flex justify-center items-center px-6 py-2 rounded-full w-6/12 text-sm font-medium transition-colors mr-2 ${
@@ -299,16 +310,16 @@ export default function ContactsPage() {
           /* 名人列表 - 根据搜索类型显示不同数据 */
           <div className="">
             {(() => {
-              const showFullSkeleton = hasSearchTerm ? isLoadingSearch : (isLoadingCelebs && page === 0 && !isLoadingMore);
+              const showFullSkeleton = hasSearchTerm
+                ? isLoadingSearch
+                : isLoadingCelebs && page === 0 && !isLoadingMore;
               return showFullSkeleton;
             })() ? (
               <CelebrityListSkeleton />
-            ) : (hasSearchTerm && searchError) ? (
+            ) : hasSearchTerm && searchError ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg mx-4 mt-4">
                 <p className="text-gray-600">🔍 没有搜索到内容</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  请尝试其他搜索词
-                </p>
+                <p className="text-sm text-gray-500 mt-1">请尝试其他搜索词</p>
               </div>
             ) : filteredCelebrities.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg mx-4 mt-4">
@@ -329,9 +340,7 @@ export default function ContactsPage() {
                 ) : (
                   <>
                     <p className="text-gray-600">📭 暂无数据</p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      请稍后再试
-                    </p>
+                    <p className="text-sm text-gray-500 mt-1">请稍后再试</p>
                   </>
                 )}
               </div>
@@ -342,21 +351,28 @@ export default function ContactsPage() {
                     key={contact.id}
                     contact={contact}
                     onCopyAddress={copyAddress}
-                    isLast={index === filteredCelebrities.length - 1 && !hasMore}
-                    contractData={celebrityData as CelebrityFromContract[] | undefined}
+                    isLast={
+                      index === filteredCelebrities.length - 1 && !hasMore
+                    }
+                    contractData={
+                      celebrityData as CelebrityFromContract[] | undefined
+                    }
                     dataIndex={index}
                   />
                 ))}
 
                 {/* sentinel for infinite scroll */}
                 {/* 当正在加载更多时，只渲染若干条骨架项在列表底部（追加到列表末尾） */}
-                {isLoadingMore && Array.from({ length: pageSize }).map((_, i) => (
-                  <CelebrityListItemSkeleton key={`skeleton-${i}`} />
-                ))}
+                {isLoadingMore &&
+                  Array.from({ length: pageSize }).map((_, i) => (
+                    <CelebrityListItemSkeleton key={`skeleton-${i}`} />
+                  ))}
 
                 {/* 当没有更多时展示提示 */}
                 {!isLoadingMore && !hasMore && (
-                  <div className="h-8 flex items-center justify-center text-sm text-gray-400">没有更多了</div>
+                  <div className="h-8 flex items-center justify-center text-sm text-gray-400">
+                    没有更多了
+                  </div>
                 )}
 
                 {/* 专门的 sentinel：放在列表最末尾，IntersectionObserver 观察此小元素以触发下一页加载 */}
@@ -369,7 +385,3 @@ export default function ContactsPage() {
     </div>
   );
 }
-
-
-
-

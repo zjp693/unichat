@@ -8,9 +8,9 @@ import DirectMessageAbiJson from '../contract/abi/DirectMessageAbi.json';
 
 export const DirectMessageAbi = DirectMessageAbiJson.abi as Abi;
 
-// DirectMessage 合约地址 (硬编码)
-const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
-  '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
+// DirectMessage 合约地址 (从环境变量读取)
+export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address = process.env
+  .NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS as Address;
 
 // 1. 定义数据类型
 export type DMMessage = {

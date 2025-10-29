@@ -78,41 +78,25 @@ export default function AirdropPage() {
 
   const alreadyClaimed = !!isClaimedData;
 
-  // 监听认领成功事件
-  useEffect(() => {
-    if (isClaimSuccess && airdropData) {
-      refetchIsClaimed();
-      toast({
-        title: '认领成功！',
-        description: '代币已成功转入您的钱包',
-        variant: 'success'
-      });
-    }
-  }, [isClaimSuccess, airdropData, refetchIsClaimed, toast]);
-
-  // 连接钱包后自动检查资格
-  useEffect(() => {
-    if (isConnected && address && !airdropData && !checkingEligibility) {
-      checkEligibility();
-    }
-  }, [isConnected, address, airdropData, checkingEligibility]);
-
   // 进度模拟函数
-  const simulateProgress = async (targetProgress: number, status: string) => {
-    setCheckStatus(status);
-    const startProgress = checkProgress;
-    const increment = targetProgress - startProgress;
-    const steps = 10;
+  const simulateProgress = useCallback(
+    async (targetProgress: number, status: string) => {
+      setCheckStatus(status);
+      const startProgress = checkProgress;
+      const increment = targetProgress - startProgress;
+      const steps = 10;
 
-    for (let i = 1; i <= steps; i++) {
-      const nextProgress = startProgress + (increment * i) / steps;
-      setCheckProgress(nextProgress);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  };
+      for (let i = 1; i <= steps; i++) {
+        const nextProgress = startProgress + (increment * i) / steps;
+        setCheckProgress(nextProgress);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    },
+    [checkProgress]
+  );
 
   // 检查空投资格
-  const checkEligibility = async () => {
+  const checkEligibility = useCallback(async () => {
     if (!address) {
       setError('请先连接钱包');
       return;
@@ -151,7 +135,32 @@ export default function AirdropPage() {
       setCheckStatus('检查出错');
       setCheckingEligibility(false);
     }
-  };
+  }, [address, simulateProgress, refetchIsClaimed]);
+
+  // 监听认领成功事件
+  useEffect(() => {
+    if (isClaimSuccess && airdropData) {
+      refetchIsClaimed();
+      toast({
+        title: '认领成功！',
+        description: '代币已成功转入您的钱包',
+        variant: 'success'
+      });
+    }
+  }, [isClaimSuccess, airdropData, refetchIsClaimed, toast]);
+
+  // 连接钱包后自动检查资格
+  useEffect(() => {
+    if (isConnected && address && !airdropData && !checkingEligibility) {
+      checkEligibility();
+    }
+  }, [
+    isConnected,
+    address,
+    airdropData,
+    checkingEligibility,
+    checkEligibility
+  ]);
 
   // 认领代币
   const claimAirdrop = async () => {
