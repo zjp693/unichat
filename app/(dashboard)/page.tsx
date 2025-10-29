@@ -19,13 +19,18 @@ import Image from 'next/image';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
-import { useGetPeersOf } from '@/lib/DirectMessageAbi';
+import dayjs from 'dayjs';
+import {
+  useGetPeersOf,
+  useCountReceivedTodayBetween
+} from '@/lib/DirectMessageAbi';
 import { Address } from 'viem';
 import { useToast } from '@/hooks/use-toast';
 import {
   usePeerLastMessage,
   formatMessageTime
 } from '@/hooks/usePeerLastMessage';
+import { useChatListSync } from '@/hooks/useChatListSync';
 
 interface ChatItem {
   id: string;
@@ -83,8 +88,45 @@ export default function ChatPage() {
   const { address: currentAddress, isConnected } = useAccount();
 
   // 获取当前用户的对端列表
-  const { data: peers, isLoading: isPeersLoading } = useGetPeersOf(
-    currentAddress as Address
+  const {
+    data: peers,
+    isLoading: isPeersLoading,
+    refetch: refetchPeers
+  } = useGetPeersOf(currentAddress as Address);
+
+  // 添加调试日志，监控对端列表变化
+  useEffect(() => {
+    console.log('📋 对端列表更新:', {
+      peers,
+      peersCount: Array.isArray(peers) ? peers.length : 0,
+      isLoading: isPeersLoading,
+      currentAddress
+    });
+  }, [peers, isPeersLoading, currentAddress]);
+
+  // 监听新消息，自动刷新列表
+  useChatListSync(
+    currentAddress as Address,
+    (from, to) => {
+      console.log('🔄 收到新消息，刷新对端列表:', { from, to, currentAddress });
+      // 当收到新消息时，重新获取对端列表
+      // 这样如果有新的对端，会自动添加到列表中
+      refetchPeers()
+        .then((result) => {
+          console.log('✅ 对端列表刷新完成:', {
+            success: result.isSuccess,
+            data: result.data,
+            peersCount: (result.data as Address[])?.length || 0
+          });
+        })
+        .catch((error) => {
+          console.error('❌ 刷新对端列表失败:', error);
+        });
+
+      // usePeerLastMessage 会自动更新最后消息时间（因为依赖了 timestamp）
+      // 这里不需要额外操作
+    },
+    isConnected && !!currentAddress
   );
 
   // 将对端地址转换为 ChatItem
@@ -97,7 +139,7 @@ export default function ChatPage() {
       avatar: '/me/me2.png',
       lastMessage: peerAddress, // 直接显示完整钱包地址
       time: '-',
-      unreadCount: 1, // 显示未读徽标
+      unreadCount: undefined, // 将由 ChatListItem 组件通过 useCountReceivedTodayBetween 动态获取
       isGroup: false,
       copy: false
     }));
@@ -109,12 +151,14 @@ export default function ChatPage() {
   }, [privateChats]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
-      <TopNavbar />
+      <div className="flex-shrink-0">
+        <TopNavbar />
+      </div>
 
       {/* 搜索栏和操作按钮 */}
-      <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right">
+      <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right flex-shrink-0">
         <button
           className="p-2 rounded-full mr-2 hover:bg-gray-100 transition-colors"
           onClick={() => router.push('/search')}
@@ -125,27 +169,32 @@ export default function ChatPage() {
       </div>
 
       {/* 聊天列表 */}
-      <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div
+        className="bg-gray-50 overflow-y-auto"
+        style={{ maxHeight: 'calc(100vh - 180px)' }}
+      >
         {!isConnected ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
           </div>
         ) : isPeersLoading ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">加载中...</p>
           </div>
         ) : allChats.length === 0 ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">暂无聊天记录</p>
           </div>
         ) : (
-          allChats.map((chat) => (
-            <ChatListItem
-              key={chat.id}
-              chat={chat}
-              currentAddress={currentAddress}
-            />
-          ))
+          <div className="p-2">
+            {allChats.map((chat) => (
+              <ChatListItem
+                key={chat.id}
+                chat={chat}
+                currentAddress={currentAddress}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -168,9 +217,90 @@ function ChatListItem({
     !chat.isGroup ? (chat.id as Address) : (undefined as any)
   );
 
+  // 获取私聊的今日消息总数
+  // 根据网页测试结果，可能需要交换参数
+  // 将聊天对象作为接收者(me)，当前用户作为发送者(peer)
+  const me = !chat.isGroup ? (chat.id as Address) : (undefined as any);
+  const peer =
+    !chat.isGroup && currentAddress ? currentAddress : (undefined as any);
+
+  // 打印入参调试信息
+  useEffect(() => {
+    if (!chat.isGroup && currentAddress && chat.id) {
+      console.log('📊 useCountReceivedTodayBetween 入参:', {
+        me: '接收者（me）',
+        peer: '发送者（peer）',
+        meAddress: me,
+        peerAddress: peer,
+        chatId: chat.id,
+        currentAddress,
+        isGroup: chat.isGroup
+      });
+    }
+  }, [me, peer, chat.id, currentAddress, chat.isGroup]);
+
+  // 注意：根据合约定义，me 是接收者，peer 是发送者
+  // 统计的是：me（接收者）从 peer（发送者）那里今天收到的消息数
+  const useCountReceivedTodayBetweenResult = useCountReceivedTodayBetween(
+    me, // me: 接收者（当前用户）
+    peer, // peer: 发送者（聊天对象）
+    {
+      query: {
+        enabled: !chat.isGroup && !!currentAddress && !!chat.id
+      }
+    }
+  );
+
+  // 打印参数用于调试
+  useEffect(() => {
+    if (!chat.isGroup && currentAddress && chat.id) {
+      console.log('🔍 参数检查:', {
+        'me (接收者)': me,
+        'peer (发送者)': peer,
+        currentAddress: currentAddress,
+        'chat.id': chat.id,
+        提示: '如果返回0，可能需要交换 me 和 peer 的顺序'
+      });
+    }
+  }, [me, peer, currentAddress, chat.id, chat.isGroup]);
+
+  // 提取原始数据
+  const {
+    data: todayMessageCount,
+    isLoading: isTodayCountLoading,
+    error: todayCountError
+  } = useCountReceivedTodayBetweenResult;
+
+  // 直接打印原始返回数据
+  useEffect(() => {
+    if (!chat.isGroup && currentAddress && chat.id) {
+      console.log(
+        '📊 useCountReceivedTodayBetween 原始返回数据:',
+        useCountReceivedTodayBetweenResult
+      );
+      console.log('📊 原始 data:', todayMessageCount);
+    }
+  }, [
+    useCountReceivedTodayBetweenResult,
+    todayMessageCount,
+    chat.isGroup,
+    currentAddress,
+    chat.id
+  ]);
+
+  // 将 bigint 转换为 number（今日消息数）
+  const todayCount = todayMessageCount ? Number(todayMessageCount) : 0;
+
   // 格式化时间
   const displayTime =
     !chat.isGroup && timestamp ? formatMessageTime(timestamp) : chat.time;
+
+  // 决定显示的消息数：私聊显示今日消息数，群聊显示原有的 unreadCount
+  const displayUnreadCount = chat.isGroup
+    ? chat.unreadCount
+    : todayCount > 0
+      ? todayCount
+      : undefined;
 
   const handleChatClick = () => {
     // 根据 chat.isGroup 动态构建 URL
@@ -207,13 +337,22 @@ function ChatListItem({
     <div onClick={handleChatClick} className="block cursor-pointer">
       <div className="relative flex items-center p-3 bg-white">
         <div className="relative">
-          <div className="h-12 w-12 rounded-sm overflow-hidden">
-            {chat.unreadCount && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              // 私聊时点击头像跳转到个人资料页（需要判断是否好友，这里先用nonfriend）
+              if (!chat.isGroup && chat.id) {
+                router.push(`/contacts/profile/${chat.id}?type=nonfriend`);
+              }
+            }}
+            className="h-12 w-12 rounded-sm overflow-hidden"
+          >
+            {displayUnreadCount && (
               <Badge
                 variant="destructive"
                 className="absolute top-0 right-[-0.6rem] ml-2 h-5 min-w-[20px] text-xs flex items-center justify-center rounded-full"
               >
-                {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
+                {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
               </Badge>
             )}
             <Image
@@ -223,7 +362,7 @@ function ChatListItem({
               height={48}
               className="h-full w-full object-cover"
             />
-          </div>
+          </button>
           {chat.isOnline && (
             <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-white rounded-full" />
           )}

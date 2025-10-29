@@ -9,8 +9,23 @@ import DirectMessageAbiJson from '../contract/abi/DirectMessageAbi.json';
 export const DirectMessageAbi = DirectMessageAbiJson.abi as Abi;
 
 // DirectMessage 合约地址 (从环境变量读取)
-export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address = process.env
-  .NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS as Address;
+const contractAddressFromEnv =
+  process.env.NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS;
+
+if (
+  !contractAddressFromEnv ||
+  contractAddressFromEnv === 'NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS'
+) {
+  console.error(
+    '❌ 错误: NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS 环境变量未正确设置！'
+  );
+  console.error(
+    '请在 .env.local 文件中添加: NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS=0x你的合约地址'
+  );
+}
+
+export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
+  contractAddressFromEnv as Address;
 
 // 1. 定义数据类型
 export type DMMessage = {
@@ -134,5 +149,98 @@ export function useListenMessageSent(
     args: args,
     onLogs: onLogs,
     enabled: enabled
+  });
+}
+
+/**
+ * 钩子：统计指定接收者在指定时间范围内接收的消息总数
+ * @param recipient 接收者地址
+ * @param startTs 开始时间戳 (uint40)
+ * @param endTs 结束时间戳 (uint40)
+ * @param options 可选配置项
+ * @returns 消息总数 (bigint)
+ */
+export function useCountReceivedInRange(
+  recipient: Address,
+  startTs: bigint,
+  endTs: bigint,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'countReceivedInRange',
+    args: [recipient, startTs, endTs],
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!recipient &&
+        startTs !== undefined &&
+        endTs !== undefined
+    }
+  });
+}
+
+/**
+ * 钩子：统计指定接收者和对端在指定时间范围内之间的消息数
+ * @param recipient 接收者地址
+ * @param peer 对端地址
+ * @param startTs 开始时间戳 (uint40)
+ * @param endTs 结束时间戳 (uint40)
+ * @param options 可选配置项
+ * @returns 消息总数 (bigint)
+ */
+export function useCountReceivedInRangeBetween(
+  recipient: Address,
+  peer: Address,
+  startTs: bigint,
+  endTs: bigint,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'countReceivedInRangeBetween',
+    args: [recipient, peer, startTs, endTs],
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!recipient &&
+        !!peer &&
+        startTs !== undefined &&
+        endTs !== undefined
+    }
+  });
+}
+
+/**
+ * 钩子：统计今天指定用户和对端之间的消息数
+ * @param me 当前用户地址
+ * @param peer 对端地址
+ * @param options 可选配置项
+ * @returns 今天的消息总数 (bigint)
+ */
+export function useCountReceivedTodayBetween(
+  me: Address,
+  peer: Address,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'countReceivedTodayBetween',
+    args: [me, peer],
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!me &&
+        !!peer
+    }
   });
 }

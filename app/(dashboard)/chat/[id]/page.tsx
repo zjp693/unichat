@@ -298,8 +298,8 @@ export default function ChatPage() {
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const actionsPanelContentRef = useRef<HTMLDivElement>(null); // 新增 ref
+  const scrollAreaRef = useRef<React.ElementRef<typeof ScrollArea>>(null);
+  const actionsPanelContentRef = useRef<HTMLDivElement>(null);
   const lastProcessedRangeRef = useRef<{ start: number; count: number } | null>(
     null
   ); // 跟踪上次处理的范围
@@ -389,6 +389,24 @@ export default function ChatPage() {
       let newMessages: Message[] = [];
 
       if (chatType === 'private' && rawMessages && Array.isArray(rawMessages)) {
+        // 调试日志：检查获取到的消息
+        console.log('📨 获取到的原始消息:', {
+          totalMessages,
+          start,
+          count,
+          rawMessagesCount: rawMessages.length,
+          messages: rawMessages.map((msg) => ({
+            sender: msg.sender,
+            recipient: msg.recipient,
+            isCurrentUserSender:
+              msg.sender.toLowerCase() === currentAddress?.toLowerCase(),
+            isCurrentUserRecipient:
+              msg.recipient.toLowerCase() === currentAddress?.toLowerCase()
+          })),
+          currentAddress,
+          recipientAddress
+        });
+
         // 单聊：处理从链上获取的原始消息
         // 使用全局索引来生成唯一 ID，避免 key 重复
         newMessages = rawMessages.map((msg: DMMessage, index: number) => ({
@@ -404,6 +422,12 @@ export default function ChatPage() {
           originalContent: msg.content,
           recipient: msg.recipient
         }));
+
+        console.log('✅ 处理后的消息:', {
+          totalProcessed: newMessages.length,
+          userMessages: newMessages.filter((m) => m.sender === 'user').length,
+          otherMessages: newMessages.filter((m) => m.sender === 'other').length
+        });
       } else if (chatType === 'group') {
         // 群聊：区分邀请消息和正常聊天
         if (invitedMembersMessage) {
@@ -587,6 +611,27 @@ export default function ChatPage() {
     setTimeout(() => scrollToBottom('smooth'), 100);
 
     try {
+      // 验证合约地址是否配置正确
+      const contractAddrStr = String(DIRECT_MESSAGE_CONTRACT_ADDRESS);
+      if (
+        !DIRECT_MESSAGE_CONTRACT_ADDRESS ||
+        contractAddrStr === '0x0000000000000000000000000000000000000000' ||
+        contractAddrStr === 'NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS' ||
+        !contractAddrStr.startsWith('0x') ||
+        contractAddrStr.length !== 42
+      ) {
+        console.error('❌ 合约地址配置错误:', DIRECT_MESSAGE_CONTRACT_ADDRESS);
+        alert(
+          `合约地址配置错误！请检查环境变量 NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS\n当前值: ${DIRECT_MESSAGE_CONTRACT_ADDRESS}`
+        );
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === newMessageObject.id ? { ...msg, status: 'failed' } : msg
+          )
+        );
+        return;
+      }
+
       // 私聊：调用合约发送到固定地址
       if (!currentAddress || !writeContract) {
         alert('钱包未连接或接收地址无效。');
@@ -597,15 +642,25 @@ export default function ChatPage() {
         );
         return;
       }
-      // console.log('发送消息请求参数：', {
-      //   address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
-      //   abi: DirectMessageAbi,
-      //   functionName: 'sendMessage',
-      //   args: [recipientAddress, encryptedContent],
-      //   account: currentAddress,
-      //   recipientAddressLength: recipientAddress.length,
-      //   encryptedContentLength: encryptedContent.length
-      // });
+
+      // 验证接收者地址
+      if (!recipientAddress || recipientAddress.length !== 42) {
+        alert('接收者地址无效，无法发送消息。');
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === newMessageObject.id ? { ...msg, status: 'failed' } : msg
+          )
+        );
+        return;
+      }
+
+      console.log('📤 发送消息到合约:', {
+        contractAddress: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+        recipient: recipientAddress,
+        contentLength: encryptedContent.length,
+        functionName: 'sendMessage'
+      });
+
       writeContract({
         address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
         abi: DirectMessageAbi,
@@ -852,19 +907,39 @@ export default function ChatPage() {
     setShowGenerationModal(false);
   };
 
-  // 处理滚动事件
-  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop } = event.currentTarget;
+  // 处理滚动事件 - 使用 useEffect 监听 viewport 滚动
+  useEffect(() => {
+    if (!scrollAreaRef.current) return;
 
-    // 检查是否接近顶部（距离顶部小于30px）并且不在加载更多消息的状态
-    // 只有当还有更早的消息时才允许加载
-    const hasMoreMessages = oldestLoadedIndex !== null && oldestLoadedIndex > 0;
-    const LOAD_MORE_THRESHOLD = 30; // 距离顶部30px时就开始加载
+    const viewport = scrollAreaRef.current.querySelector(
+      '[data-radix-scroll-area-viewport]'
+    ) as HTMLElement;
 
-    if (scrollTop < LOAD_MORE_THRESHOLD && !isFetchingMore && hasMoreMessages) {
-      setIsFetchingMore(true);
-    }
-  };
+    if (!viewport) return;
+
+    const handleScrollEvent = () => {
+      const scrollTop = viewport.scrollTop;
+
+      // 检查是否接近顶部（距离顶部小于30px）并且不在加载更多消息的状态
+      // 只有当还有更早的消息时才允许加载
+      const hasMoreMessages =
+        oldestLoadedIndex !== null && oldestLoadedIndex > 0;
+      const LOAD_MORE_THRESHOLD = 30; // 距离顶部30px时就开始加载
+
+      if (
+        scrollTop < LOAD_MORE_THRESHOLD &&
+        !isFetchingMore &&
+        hasMoreMessages
+      ) {
+        setIsFetchingMore(true);
+      }
+    };
+
+    viewport.addEventListener('scroll', handleScrollEvent);
+    return () => {
+      viewport.removeEventListener('scroll', handleScrollEvent);
+    };
+  }, [oldestLoadedIndex, isFetchingMore]);
 
   // --- JSX 渲染 ---
   // 验证地址格式（仅在私聊时，在所有 Hooks 之后进行验证）
@@ -930,7 +1005,7 @@ export default function ChatPage() {
 
       {/* 滚动的内容区域 */}
       <div
-        className="fixed w-full overflow-hidden"
+        className="fixed w-full flex flex-col"
         style={{
           top: `${TOTAL_HEADER_HEIGHT}px`,
           // 计算底部偏移：输入框高度 + 安全区域 + 功能面板高度（如果打开）
@@ -941,11 +1016,7 @@ export default function ChatPage() {
           transition: 'bottom 0.3s ease-in-out'
         }}
       >
-        <ScrollArea
-          className="h-full w-full"
-          ref={scrollAreaRef}
-          onScroll={handleScroll}
-        >
+        <ScrollArea className="flex-1 w-full" ref={scrollAreaRef}>
           <div className="p-4 space-y-5">
             {/* 加载更多消息的指示器 - 现代渐变效果 */}
             {isFetchingMore && (
@@ -1006,17 +1077,43 @@ export default function ChatPage() {
                         : 'flex-row'
                     )}
                   >
-                    <Image
-                      src={
-                        message.sender === 'user'
-                          ? '/placeholder-user.jpg'
-                          : '/placeholder-user.jpg'
-                      }
-                      alt="Avatar"
-                      width={40}
-                      height={40}
-                      className="rounded-md flex-shrink-0"
-                    />
+                    {chatType === 'private' ? (
+                      <button
+                        onClick={() => {
+                          if (message.sender === 'other') {
+                            // 点击对方头像跳转到对方资料页
+                            router.push(
+                              `/contacts/profile/${recipientAddress}?type=nonfriend`
+                            );
+                          } else if (
+                            message.sender === 'user' &&
+                            currentAddress
+                          ) {
+                            // 点击自己头像跳转到自己资料页
+                            router.push(
+                              `/contacts/profile/${currentAddress}?type=friend`
+                            );
+                          }
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <Image
+                          src="/placeholder-user.jpg"
+                          alt="Avatar"
+                          width={40}
+                          height={40}
+                          className="rounded-md flex-shrink-0"
+                        />
+                      </button>
+                    ) : (
+                      <Image
+                        src="/placeholder-user.jpg"
+                        alt="Avatar"
+                        width={40}
+                        height={40}
+                        className="rounded-md flex-shrink-0"
+                      />
+                    )}
                     <div
                       className={cn(
                         'max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm',
