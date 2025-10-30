@@ -10,6 +10,10 @@ import type { Chain } from 'viem';
 // 从环境变量读取项目 ID
 export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
 
+// 用显式常量承载站点 URL，避免 SSR 环境下访问 window
+export const appUrl =
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://unichat-rho.vercel.app';
+
 // 确保项目 ID 在构建时已定义
 if (!projectId) {
   throw new Error(
