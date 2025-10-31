@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils';
 import { KeyGenerationModal } from '@/components/chat/KeyGenerationModal';
 import { DecryptionModal } from '@/components/chat/DecryptionModal';
 import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
-import { KeyPair, chatEncryption, DEFAULT_KEY_PAIR } from '@/lib/encryption';
+import { KeyPair, chatEncryption } from '@/lib/encryption';
 // 导入dayjs用于格式化时间
 import dayjs from 'dayjs';
 import {
@@ -57,6 +57,7 @@ import {
   useGetMessages,
   useSendMessage,
   useListenMessageSent,
+  useGetDefaultPublicKey,
   DMMessage
 } from '@/lib/DirectMessageAbi';
 import { computeConvoId, Address, isValidEthereumAddress } from '@/lib/utils';
@@ -126,6 +127,7 @@ export default function ChatPage() {
   const chainId = useChainId();
   const chains = useChains();
   const publicClient = usePublicClient(); // 用于读取合约数据
+  const { data: defaultPublicKey } = useGetDefaultPublicKey(); // 获取链上默认公钥
 
   // 移除 openConnectModal 和 openChainModal 的解构
   // const { openConnectModal, openChainModal } = useAppKit();
@@ -582,9 +584,13 @@ export default function ChatPage() {
     const originalMessageText = inputMessage;
     setInputMessage('');
 
-    // 1. 获取自己的公钥
-    const senderPublicKey =
-      keys.length > 0 ? keys[0].publicKey : DEFAULT_KEY_PAIR.publicKey;
+    // 1. 获取自己的公钥（必须已生成密钥）
+    if (keys.length === 0) {
+      alert('请先生成密钥对！');
+      setInputMessage(originalMessageText); // 恢复输入
+      return;
+    }
+    const senderPublicKey = keys[0].publicKey;
 
     // 2. 从链上实时获取对方的公钥（不缓存，保证最新）
     console.log('📡 正在查询接收者公钥，接收者地址:', recipientAddress);
@@ -601,7 +607,7 @@ export default function ChatPage() {
         throw new Error('Public client 未初始化，请确保钱包已连接');
       }
 
-      // 使用合约查询对方公钥 (调用 getPublicKeyOrDefault)
+      // 使用合约查询对方公钥 (调用 getPublicKeyOrDefault - 自动返回默认公钥)
       console.log('🔧 调用合约方法: getPublicKeyOrDefault');
 
       const result = await publicClient.readContract({
@@ -620,32 +626,25 @@ export default function ChatPage() {
       });
 
       // 检查返回值是否有效
-      if (result === undefined || result === null) {
-        throw new Error(
-          `合约返回值为空: undefined=${result === undefined}, null=${result === null}`
-        );
-      }
-
-      if (typeof result !== 'string') {
-        throw new Error(
-          `合约返回的数据类型错误，期望 string，实际 ${typeof result}`
-        );
-      }
-
-      if (result.length === 0) {
-        throw new Error('合约返回的公钥为空字符串');
+      if (!result || (typeof result === 'string' && result.length === 0)) {
+        throw new Error('合约返回的公钥为空');
       }
 
       recipientPublicKey = result as string;
-      console.log('✅ 获取到接收者公钥:', {
-        address: recipientAddress,
-        keyLength: recipientPublicKey.length,
-        keyPreview: recipientPublicKey.substring(0, 50) + '...',
-        isDefault:
-          recipientPublicKey === DEFAULT_KEY_PAIR.publicKey
-            ? '是（默认）'
-            : '否'
-      });
+
+      // 判断是否使用了默认公钥
+      const isUsingDefault =
+        defaultPublicKey && recipientPublicKey === defaultPublicKey;
+
+      console.log(
+        isUsingDefault ? '⚠️ 使用链上默认公钥:' : '✅ 获取到接收者公钥:',
+        {
+          address: recipientAddress,
+          keyLength: recipientPublicKey.length,
+          keyPreview: recipientPublicKey.substring(0, 50) + '...',
+          isDefault: isUsingDefault
+        }
+      );
     } catch (error) {
       console.error('❌ 获取接收者公钥失败:', error);
       alert('获取对方公钥失败，无法发送加密消息');
@@ -653,16 +652,15 @@ export default function ChatPage() {
       return;
     }
 
-    // 3. 双公钥加密消息
+    // 3. 单公钥加密消息（只用接收者公钥）
     let encryptedContent: string;
     try {
-      console.log('🔐 开始双公钥加密...');
-      encryptedContent = encryptMessageDual(
+      console.log('🔐 开始单公钥加密（只用接收者公钥）...');
+      encryptedContent = encryptMessage(
         originalMessageText,
-        senderPublicKey,
         recipientPublicKey
       );
-      console.log('✅ 双公钥加密成功');
+      console.log('✅ 单公钥加密成功');
     } catch (error) {
       console.error('❌ 加密失败:', error);
       alert(
@@ -1207,30 +1205,30 @@ export default function ChatPage() {
                       {(message.isEncrypted || message.originalContent) && (
                         <div className="flex items-center justify-between mt-2 min-w-[12rem]">
                           <div className="flex items-center gap-2">
-                            {/* 解密按钮 */}
-                            <button
-                              onClick={() => {
-                                handleDecryptClick(message.id);
-                              }}
-                              disabled={!message.isEncrypted}
-                              className={cn(
-                                'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
-                                message.sender === 'user'
-                                  ? 'bg-[#785ff7]'
-                                  : 'bg-[#fef0ee]',
-                                message.isEncrypted && 'hover:bg-black/20',
-                                'disabled:opacity-80 disabled:cursor-not-allowed'
-                              )}
-                            >
-                              <Image
-                                src="/chats/keyIcon.png"
-                                alt="解密"
-                                width={14}
-                                height={14}
-                                className="mr-1"
-                              />
-                              {message.isEncrypted ? '解密' : '已解密'}
-                            </button>
+                            {/* 解密按钮 - 只对接收者显示 */}
+                            {message.sender !== 'user' && (
+                              <button
+                                onClick={() => {
+                                  handleDecryptClick(message.id);
+                                }}
+                                disabled={!message.isEncrypted}
+                                className={cn(
+                                  'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                                  'bg-[#fef0ee]',
+                                  message.isEncrypted && 'hover:bg-black/20',
+                                  'disabled:opacity-80 disabled:cursor-not-allowed'
+                                )}
+                              >
+                                <Image
+                                  src="/chats/keyIcon.png"
+                                  alt="解密"
+                                  width={14}
+                                  height={14}
+                                  className="mr-1"
+                                />
+                                {message.isEncrypted ? '解密' : '已解密'}
+                              </button>
+                            )}
                             {/* 计数器按钮 */}
                             <div
                               className={cn(
