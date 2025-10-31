@@ -6,7 +6,9 @@ import {
 import { Address, Abi } from 'viem';
 import DirectMessageAbiJson from '../contract/abi/DirectMessageAbi.json';
 
-export const DirectMessageAbi = DirectMessageAbiJson.abi as Abi;
+// JSON 文件结构: { "abi": [...] }
+// 强制类型断言以处理 TypeScript 导入
+export const DirectMessageAbi = (DirectMessageAbiJson as { abi: Abi }).abi;
 
 // DirectMessage 合约地址 (从环境变量读取)
 const contractAddressFromEnv =
@@ -242,5 +244,99 @@ export function useCountReceivedTodayBetween(
         !!me &&
         !!peer
     }
+  });
+}
+
+/**
+ * 钩子：获取指定用户的公钥
+ * @param user 用户地址
+ * @param options 可选配置项
+ * @returns 用户的公钥字符串（如果未注册则返回空字符串）
+ */
+export function useGetPublicKey(
+  user: Address | undefined,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'getPublicKey',
+    args: user ? [user] : undefined,
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) && !!user
+    }
+  });
+}
+
+/**
+ * 钩子：获取指定用户的公钥或默认公钥
+ * @param user 用户地址
+ * @param options 可选配置项
+ * @returns 用户的公钥字符串（如果未注册则返回默认公钥）
+ */
+export function useGetPublicKeyOrDefault(
+  user: Address | undefined,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'getPublicKeyOrDefault',
+    args: user ? [user] : undefined,
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) && !!user
+    }
+  });
+}
+
+/**
+ * 钩子：批量获取多个用户的公钥或默认公钥
+ * @param users 用户地址数组
+ * @param options 可选配置项
+ * @returns 公钥字符串数组
+ */
+export function useGetPublicKeysOrDefault(
+  users: Address[] | undefined,
+  options?: { query?: { enabled?: boolean } }
+) {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'getPublicKeysOrDefault',
+    args: users ? [users] : undefined,
+    query: {
+      enabled:
+        (options?.query?.enabled !== undefined
+          ? options.query.enabled
+          : true) &&
+        !!users &&
+        users.length > 0
+    }
+  });
+}
+
+/**
+ * 钩子：注册公钥到链上
+ * @returns useWriteContract 的返回值，包含 writeContract, data, isPending, error 等
+ */
+export function useRegisterPublicKey() {
+  return useWriteContract({});
+}
+
+/**
+ * 钩子：获取默认公钥
+ * @returns 默认公钥字符串
+ */
+export function useGetDefaultPublicKey() {
+  return useReadContract({
+    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    abi: DirectMessageAbi,
+    functionName: 'defaultPublicKey'
   });
 }

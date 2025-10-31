@@ -59,10 +59,26 @@ export const useKeyManagementRedux = () => {
     dispatch(clearError());
   }, [dispatch]);
 
-  // 加密消息
+  // 单公钥加密消息（旧版，兼容性）
   const encryptMessage = useCallback(
     (message: string, publicKey: string): string => {
       return chatEncryption.encryptMessage(message, publicKey);
+    },
+    []
+  );
+
+  // 双公钥加密消息（端到端加密）
+  const encryptMessageDual = useCallback(
+    (
+      message: string,
+      senderPublicKey: string,
+      recipientPublicKey: string
+    ): string => {
+      return chatEncryption.encryptMessageDual(
+        message,
+        senderPublicKey,
+        recipientPublicKey
+      );
     },
     []
   );
@@ -111,6 +127,7 @@ export const useKeyManagementRedux = () => {
     setSelectedKeyId,
     clearErrorMessage,
     encryptMessage,
+    encryptMessageDual, // 新增：双公钥加密
     decryptMessage,
     decryptMessages
   };

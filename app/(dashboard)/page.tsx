@@ -6,7 +6,6 @@ import {
   Search,
   CirclePlus,
   Wallet,
-  Users,
   Globe,
   QrCode,
   CreditCard,
@@ -93,16 +92,6 @@ export default function ChatPage() {
     isLoading: isPeersLoading,
     refetch: refetchPeers
   } = useGetPeersOf(currentAddress as Address);
-
-  // 添加调试日志，监控对端列表变化
-  useEffect(() => {
-    console.log('📋 对端列表更新:', {
-      peers,
-      peersCount: Array.isArray(peers) ? peers.length : 0,
-      isLoading: isPeersLoading,
-      currentAddress
-    });
-  }, [peers, isPeersLoading, currentAddress]);
 
   // 监听新消息，自动刷新列表
   useChatListSync(
@@ -224,21 +213,6 @@ function ChatListItem({
   const peer =
     !chat.isGroup && currentAddress ? currentAddress : (undefined as any);
 
-  // 打印入参调试信息
-  useEffect(() => {
-    if (!chat.isGroup && currentAddress && chat.id) {
-      console.log('📊 useCountReceivedTodayBetween 入参:', {
-        me: '接收者（me）',
-        peer: '发送者（peer）',
-        meAddress: me,
-        peerAddress: peer,
-        chatId: chat.id,
-        currentAddress,
-        isGroup: chat.isGroup
-      });
-    }
-  }, [me, peer, chat.id, currentAddress, chat.isGroup]);
-
   // 注意：根据合约定义，me 是接收者，peer 是发送者
   // 统计的是：me（接收者）从 peer（发送者）那里今天收到的消息数
   const useCountReceivedTodayBetweenResult = useCountReceivedTodayBetween(
@@ -251,42 +225,12 @@ function ChatListItem({
     }
   );
 
-  // 打印参数用于调试
-  useEffect(() => {
-    if (!chat.isGroup && currentAddress && chat.id) {
-      console.log('🔍 参数检查:', {
-        'me (接收者)': me,
-        'peer (发送者)': peer,
-        currentAddress: currentAddress,
-        'chat.id': chat.id,
-        提示: '如果返回0，可能需要交换 me 和 peer 的顺序'
-      });
-    }
-  }, [me, peer, currentAddress, chat.id, chat.isGroup]);
-
   // 提取原始数据
   const {
     data: todayMessageCount,
     isLoading: isTodayCountLoading,
     error: todayCountError
   } = useCountReceivedTodayBetweenResult;
-
-  // 直接打印原始返回数据
-  useEffect(() => {
-    if (!chat.isGroup && currentAddress && chat.id) {
-      console.log(
-        '📊 useCountReceivedTodayBetween 原始返回数据:',
-        useCountReceivedTodayBetweenResult
-      );
-      console.log('📊 原始 data:', todayMessageCount);
-    }
-  }, [
-    useCountReceivedTodayBetweenResult,
-    todayMessageCount,
-    chat.isGroup,
-    currentAddress,
-    chat.id
-  ]);
 
   // 将 bigint 转换为 number（今日消息数）
   const todayCount = todayMessageCount ? Number(todayMessageCount) : 0;
@@ -440,38 +384,93 @@ function DropdownMenu() {
         <div className="absolute right-0 mt-2 w-32 bg-[#424242] text-xs text-white shadow-lg rounded-md z-50">
           {/* 添加向上箭头 */}
           <div className="absolute -top-3 right-2 w-0 h-0 border-l-8 border-r-8 border-b-[16px] border-l-transparent border-r-transparent border-b-[#424242]"></div>
-          <div className="pt-2 px-2 flex" onClick={handleGroupChatClick}>
-            <Users className="mr-2 h-4 w-4" />
+          <div
+            className="pt-2 px-2 flex items-center"
+            onClick={handleGroupChatClick}
+          >
+            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
+              <Image
+                src="/chats/Group chat.png"
+                alt="Group chat"
+                width={16}
+                height={16}
+                className="w-full h-full object-contain"
+              />
+            </div>
             <div className="w-full text-left">
               <div className="w-full pb-2  border-b border-[#585858]">
                 Group chat
               </div>
             </div>
           </div>
-          <div className="py-2 px-2 flex" onClick={handleItemClick}>
-            <Users className="mr-2 h-4 w-4" />
+          <div
+            className="py-2 px-2 flex items-center"
+            onClick={handleItemClick}
+          >
+            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
+              <Image
+                src="/chats/Global Contacts.png"
+                alt="Global Contacts"
+                width={16}
+                height={16}
+                className="w-full h-full object-contain"
+              />
+            </div>
             <div className="w-full text-left">
               <div className="w-full pb-2  border-b border-[#585858]">
                 Global Contacts
               </div>
             </div>
           </div>
-          <div className="py-2 px-2 flex" onClick={handleItemClick}>
-            <Users className="mr-2 h-4 w-4" />
+          <div
+            className="py-2 px-2 flex items-center"
+            onClick={handleItemClick}
+          >
+            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
+              <Image
+                src="/chats/Scan.png"
+                alt="Scan"
+                width={16}
+                height={16}
+                className="w-full h-full object-contain"
+              />
+            </div>
             <div className="w-full text-left">
               <div className="w-full pb-2  border-b border-[#585858]">Scan</div>
             </div>
           </div>
-          <div className="py-2 px-2 flex" onClick={handleItemClick}>
-            <Users className="mr-2 h-4 w-4" />
+          <div
+            className="py-2 px-2 flex items-center"
+            onClick={handleItemClick}
+          >
+            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
+              <Image
+                src="/chats/payment.png"
+                alt="Payment"
+                width={16}
+                height={16}
+                className="w-full h-full object-contain"
+              />
+            </div>
             <div className="w-full text-left">
               <div className="w-full pb-2  border-b border-[#585858]">
                 Payment
               </div>
             </div>
           </div>
-          <div className="py-2 px-2 flex" onClick={handleItemClick}>
-            <Users className="mr-2 h-4 w-4" />
+          <div
+            className="py-2 px-2 flex items-center"
+            onClick={handleItemClick}
+          >
+            <div className="w-4 h-4 flex-shrink-0 mr-2 flex items-center justify-center">
+              <Image
+                src="/chats/Airdrop.png"
+                alt="Airdrop"
+                width={16}
+                height={16}
+                className="w-full h-full object-contain"
+              />
+            </div>
             <div className="w-full text-left">
               <div className="w-full">Airdrop</div>
             </div>
