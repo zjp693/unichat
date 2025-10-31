@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { X } from 'lucide-react';
 import { KeyPair, chatEncryption } from '@/lib/encryption';
 import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
+import { useRegisterPublicKey } from '@/lib/DirectMessageAbi';
+import { useAccount } from 'wagmi';
 
 interface KeyGenerationModalProps {
   isOpen: boolean;
@@ -22,7 +24,10 @@ export const KeyGenerationModal = ({
   const [generatedKey, setGeneratedKey] = useState<KeyPair | null>(null);
   const [privateKeyInput, setPrivateKeyInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
   const { saveKeyToStorage, generateNewKeyPair } = useKeyManagementRedux();
+  const { address } = useAccount();
+  const { writeContractAsync } = useRegisterPublicKey();
 
   if (!isOpen) return null;
 
@@ -45,7 +50,7 @@ export const KeyGenerationModal = ({
     }
   };
 
-  const handleSaveKey = () => {
+  const handleSaveKey = async () => {
     if (!generatedKey) {
       alert('请先生成密钥');
       return;
@@ -61,18 +66,40 @@ export const KeyGenerationModal = ({
       return;
     }
 
+    if (!address) {
+      alert('请先连接钱包');
+      return;
+    }
+
+    setIsRegistering(true);
     try {
+      console.log('🔐 开始注册公钥到链上...');
+      console.log('公钥:', generatedKey.publicKey);
+
+      // 1. 先把公钥注册到链上
+      const hash = await writeContractAsync({
+        address: process.env
+          .NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS as `0x${string}`,
+        abi: (await import('@/lib/DirectMessageAbi')).DirectMessageAbi,
+        functionName: 'registerPublicKey',
+        args: [generatedKey.publicKey]
+      });
+
+      console.log('✅ 公钥注册交易已发送:', hash);
+      alert('公钥正在上链中，请等待交易确认...');
+
+      // 2. 交易发送成功后，保存密钥到本地
       const keyData = {
         ...generatedKey,
         password: passwordInput,
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        txHash: hash
       };
 
       // 保存密钥到 Redux 和本地存储
       saveKeyToStorage(keyData);
 
-      alert('密钥保存成功！');
-      // 仅保存密钥，不触发解密操作
+      alert('密钥保存成功！公钥已上链！');
       onKeyGenerated(keyData);
       setGeneratedKey(null);
       setPasswordInput('');
@@ -80,8 +107,12 @@ export const KeyGenerationModal = ({
       setKeyName('');
       onClose();
     } catch (error) {
-      console.error('保存密钥失败:', error);
-      alert('保存密钥失败，请重试');
+      console.error('❌ 保存密钥失败:', error);
+      alert(
+        `保存密钥失败: ${error instanceof Error ? error.message : '未知错误'}`
+      );
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -205,9 +236,10 @@ ${key.privateKey}
 
             <Button
               onClick={handleSaveKey}
-              className="w-full bg-green-500 hover:bg-green-600 text-white rounded-md h-10 text-sm font-normal"
+              disabled={isRegistering}
+              className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md h-10 text-sm font-normal"
             >
-              保存密码
+              {isRegistering ? '正在上链注册...' : '保存密码并上链公钥'}
             </Button>
 
             {generatedKey && passwordInput && (

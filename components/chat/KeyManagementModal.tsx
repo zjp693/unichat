@@ -8,6 +8,8 @@ import { X, Copy, Key, ChevronDown } from 'lucide-react';
 import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
 import { KeyPair, chatEncryption } from '@/lib/encryption';
 import { cn } from '@/lib/utils';
+import { useRegisterPublicKey } from '@/lib/DirectMessageAbi';
+import { useAccount } from 'wagmi';
 
 interface KeyManagementModalProps {
   isOpen: boolean;
@@ -24,6 +26,8 @@ export const KeyManagementModal = ({
 }: KeyManagementModalProps) => {
   const { keys, loading, generateNewKeyPair, saveKeyToStorage } =
     useKeyManagementRedux();
+  const { address } = useAccount();
+  const { writeContractAsync } = useRegisterPublicKey();
 
   // 根据是否有密钥来决定初始步骤
   const initialStep = keys.length > 0 ? 'select' : 'generate';
@@ -36,6 +40,7 @@ export const KeyManagementModal = ({
   const [passwordInput, setPasswordInput] = useState('');
   const [selectedKeyId, setSelectedKeyId] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 只在弹框首次打开时设置初始步骤和默认选择的密钥
@@ -101,7 +106,7 @@ export const KeyManagementModal = ({
     }
   };
 
-  const handleSaveKey = () => {
+  const handleSaveKey = async () => {
     if (!generatedKey) {
       alert('请先生成密钥');
       return;
@@ -117,17 +122,39 @@ export const KeyManagementModal = ({
       return;
     }
 
+    if (!address) {
+      alert('请先连接钱包');
+      return;
+    }
+
+    setIsRegistering(true);
     try {
-      // 保存密钥到 Redux 和本地存储
+      console.log('🔐 开始注册公钥到链上...');
+      console.log('公钥:', generatedKey.publicKey);
+
+      // 1. 先把公钥注册到链上
+      const hash = await writeContractAsync({
+        address: process.env
+          .NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS as `0x${string}`,
+        abi: (await import('@/lib/DirectMessageAbi')).DirectMessageAbi,
+        functionName: 'registerPublicKey',
+        args: [generatedKey.publicKey]
+      });
+
+      console.log('✅ 公钥注册交易已发送:', hash);
+      alert('公钥正在上链中，请等待交易确认...');
+
+      // 2. 交易发送成功后，保存密钥到本地
       const keyData = {
         ...generatedKey,
         password: passwordInput,
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        txHash: hash
       };
 
       saveKeyToStorage(keyData);
 
-      alert('密钥保存成功！');
+      alert('密钥保存成功！公钥已上链！');
 
       // 仅保存密钥，不触发解密操作
       onKeySelect(keyData); // 通知父组件使用新密钥
@@ -137,8 +164,12 @@ export const KeyManagementModal = ({
       setKeyName('');
       onClose(); // 关闭模态框
     } catch (error) {
-      console.error('保存密钥失败:', error);
-      alert('保存密钥失败，请重试');
+      console.error('❌ 保存密钥失败:', error);
+      alert(
+        `保存密钥失败: ${error instanceof Error ? error.message : '未知错误'}`
+      );
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -554,9 +585,10 @@ ${key.privateKey}
               {/* 保存密码按钮 */}
               <Button
                 onClick={handleSaveKey}
-                className="w-full bg-green-500 hover:bg-green-600 text-white rounded-md h-10 text-sm font-normal"
+                disabled={isRegistering}
+                className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md h-10 text-sm font-normal"
               >
-                保存密码
+                {isRegistering ? '正在上链注册...' : '保存密码并上链公钥'}
               </Button>
 
               {/* 下载密钥按钮 - 只在首次生成时提供 */}
