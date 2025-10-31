@@ -263,7 +263,7 @@ export class ChatEncryption {
   /**
    * 批量解密消息
    * @param encryptedMessages 加密消息数组
-   * @param privateKey 私钥
+   * @param privateKey 用户私钥
    * @returns 解密结果数组，包含成功解密的消息和解密失败的错误信息
    */
   decryptMessages(
@@ -274,11 +274,32 @@ export class ChatEncryption {
   > {
     return encryptedMessages.map((encryptedMessage) => {
       try {
+        // 首先尝试用用户的私钥解密
         const decrypted = this.decryptMessage(encryptedMessage, privateKey);
         return { success: true, decrypted };
       } catch (error: any) {
+        // 如果用户私钥解密失败，尝试使用默认私钥（如果配置了的话）
+        if (DEFAULT_PRIVATE_KEY && DEFAULT_PRIVATE_KEY.length > 0) {
+          try {
+            console.log('⚠️ 用户私钥解密失败，尝试使用默认私钥...');
+            const decrypted = this.decryptMessage(
+              encryptedMessage,
+              DEFAULT_PRIVATE_KEY
+            );
+            console.log('✅ 默认私钥解密成功');
+            return { success: true, decrypted };
+          } catch (defaultError: any) {
+            console.error(`默认私钥也解密失败，错误: ${defaultError.message}`);
+            return {
+              success: false,
+              error: `用户私钥和默认私钥都解密失败: ${error.message}`
+            };
+          }
+        }
+
+        // 没有配置默认私钥，直接返回失败
         console.error(
-          `批量解密消息失败: ${encryptedMessage}, 错误: ${error.message}`
+          `批量解密消息失败: ${encryptedMessage.substring(0, 50)}..., 错误: ${error.message}`
         );
         return { success: false, error: error.message || '未知错误' };
       }
