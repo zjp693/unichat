@@ -52,15 +52,31 @@ export const useKeyManagement = () => {
     saveKeys(updatedKeys);
   };
 
-  // 加密消息
+  // 单公钥加密消息（旧版，保留兼容性）
   const encryptMessage = useCallback(
     (message: string, publicKey: string): string => {
       return chatEncryption.encryptMessage(message, publicKey);
     },
     []
-  ); // 没有外部依赖，所以依赖数组为空
+  );
 
-  // 解密消息
+  // 双公钥加密消息（端到端加密）
+  const encryptMessageDual = useCallback(
+    (
+      message: string,
+      senderPublicKey: string,
+      recipientPublicKey: string
+    ): string => {
+      return chatEncryption.encryptMessageDual(
+        message,
+        senderPublicKey,
+        recipientPublicKey
+      );
+    },
+    []
+  );
+
+  // 解密消息（自动支持旧格式和新格式）
   const decryptMessage = useCallback(
     (encryptedMessage: string, privateKey: string): string => {
       if (!encryptedMessage) {
@@ -72,7 +88,7 @@ export const useKeyManagement = () => {
       return chatEncryption.decryptMessage(encryptedMessage, privateKey);
     },
     []
-  ); // 没有外部依赖，所以依赖数组为空
+  );
 
   // 批量解密消息
   const decryptMessages = useCallback(
@@ -85,7 +101,7 @@ export const useKeyManagement = () => {
       return chatEncryption.decryptMessages(encryptedMessages, privateKey);
     },
     []
-  ); // 没有外部依赖，所以依赖数组为空
+  );
 
   return {
     keys,
@@ -93,6 +109,7 @@ export const useKeyManagement = () => {
     generateKeyPair,
     deleteKey,
     encryptMessage,
+    encryptMessageDual, // 新增：双公钥加密
     decryptMessage,
     decryptMessages
   };

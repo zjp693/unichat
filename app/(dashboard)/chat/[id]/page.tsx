@@ -60,7 +60,7 @@ import {
   DMMessage
 } from '@/lib/DirectMessageAbi';
 import { computeConvoId, Address, isValidEthereumAddress } from '@/lib/utils';
-import { useWaitForTransactionReceipt } from 'wagmi';
+import { useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel'; // <-- 导入 GroupChatInfoPanel 组件
 import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel'; // <-- 导入 PrivateChatSettingsPanel 组件
 
@@ -104,6 +104,7 @@ export default function ChatPage() {
     saveKeyToStorage,
     decryptMessage,
     encryptMessage,
+    encryptMessageDual,
     decryptMessages
   } = useKeyManagementRedux();
   const [loadedMessageCount, setLoadedMessageCount] =
@@ -124,6 +125,7 @@ export default function ChatPage() {
   const { switchChain } = useSwitchChain();
   const chainId = useChainId();
   const chains = useChains();
+  const publicClient = usePublicClient(); // 用于读取合约数据
 
   // 移除 openConnectModal 和 openChainModal 的解构
   // const { openConnectModal, openChainModal } = useAppKit();
@@ -142,8 +144,6 @@ export default function ChatPage() {
   const recipientAddress: Address = (
     chatType === 'private' ? conversationId : ''
   ) as Address;
-
-  const publicClient = usePublicClient();
 
   // --- 新增：使用封装的钩子获取消息总数和消息列表（仅私聊） ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
@@ -582,14 +582,93 @@ export default function ChatPage() {
     const originalMessageText = inputMessage;
     setInputMessage('');
 
-    // 1. 加密消息
+    // 1. 获取自己的公钥
+    const senderPublicKey =
+      keys.length > 0 ? keys[0].publicKey : DEFAULT_KEY_PAIR.publicKey;
+
+    // 2. 从链上实时获取对方的公钥（不缓存，保证最新）
+    console.log('📡 正在查询接收者公钥，接收者地址:', recipientAddress);
+    console.log('🔍 调试信息:', {
+      publicClient: publicClient,
+      hasPublicClient: !!publicClient,
+      contractAddress: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+      recipientAddress: recipientAddress
+    });
+
+    let recipientPublicKey: string;
+    try {
+      if (!publicClient) {
+        throw new Error('Public client 未初始化，请确保钱包已连接');
+      }
+
+      // 使用合约查询对方公钥 (调用 getPublicKeyOrDefault)
+      console.log('🔧 调用合约方法: getPublicKeyOrDefault');
+
+      const result = await publicClient.readContract({
+        address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+        abi: DirectMessageAbi,
+        functionName: 'getPublicKeyOrDefault',
+        args: [recipientAddress as Address]
+      });
+
+      console.log('🔍 合约返回的原始数据:', {
+        result,
+        type: typeof result,
+        isString: typeof result === 'string',
+        isUndefined: result === undefined,
+        isNull: result === null
+      });
+
+      // 检查返回值是否有效
+      if (result === undefined || result === null) {
+        throw new Error(
+          `合约返回值为空: undefined=${result === undefined}, null=${result === null}`
+        );
+      }
+
+      if (typeof result !== 'string') {
+        throw new Error(
+          `合约返回的数据类型错误，期望 string，实际 ${typeof result}`
+        );
+      }
+
+      if (result.length === 0) {
+        throw new Error('合约返回的公钥为空字符串');
+      }
+
+      recipientPublicKey = result as string;
+      console.log('✅ 获取到接收者公钥:', {
+        address: recipientAddress,
+        keyLength: recipientPublicKey.length,
+        keyPreview: recipientPublicKey.substring(0, 50) + '...',
+        isDefault:
+          recipientPublicKey === DEFAULT_KEY_PAIR.publicKey
+            ? '是（默认）'
+            : '否'
+      });
+    } catch (error) {
+      console.error('❌ 获取接收者公钥失败:', error);
+      alert('获取对方公钥失败，无法发送加密消息');
+      setInputMessage(originalMessageText); // 恢复输入
+      return;
+    }
+
+    // 3. 双公钥加密消息
     let encryptedContent: string;
     try {
-      const publicKeyToUse =
-        keys.length > 0 ? keys[0].publicKey : DEFAULT_KEY_PAIR.publicKey;
-      encryptedContent = encryptMessage(originalMessageText, publicKeyToUse);
+      console.log('🔐 开始双公钥加密...');
+      encryptedContent = encryptMessageDual(
+        originalMessageText,
+        senderPublicKey,
+        recipientPublicKey
+      );
+      console.log('✅ 双公钥加密成功');
     } catch (error) {
-      alert('加密失败!');
+      console.error('❌ 加密失败:', error);
+      alert(
+        '加密失败: ' + (error instanceof Error ? error.message : '未知错误')
+      );
+      setInputMessage(originalMessageText); // 恢复输入
       return;
     }
 

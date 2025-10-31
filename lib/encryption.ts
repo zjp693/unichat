@@ -83,6 +83,7 @@ export class ChatEncryption {
     }
   }
 
+  // 单公钥加密（旧版本，保留兼容性）
   encryptMessage(message: string, publicKey: string): string {
     try {
       // 验证输入参数
@@ -141,6 +142,104 @@ export class ChatEncryption {
     }
   }
 
+  /**
+   * 双公钥加密（端到端加密）
+   * @param message 明文消息
+   * @param senderPublicKey 发送者的公钥（用于发送者自己解密）
+   * @param recipientPublicKey 接收者的公钥（用于接收者解密）
+   * @returns 加密后的消息，格式：[给发送者的key]:[给接收者的key]:[加密消息]
+   */
+  encryptMessageDual(
+    message: string,
+    senderPublicKey: string,
+    recipientPublicKey: string
+  ): string {
+    try {
+      // 验证输入参数
+      if (!message || typeof message !== 'string') {
+        throw new Error('消息内容无效');
+      }
+      if (!senderPublicKey || typeof senderPublicKey !== 'string') {
+        throw new Error('发送者公钥无效');
+      }
+      if (!recipientPublicKey || typeof recipientPublicKey !== 'string') {
+        throw new Error('接收者公钥无效');
+      }
+
+      const MAX_MESSAGE_LENGTH = 10000; // 限制为1万字
+      let processedMessage = message;
+
+      if (message.length > MAX_MESSAGE_LENGTH) {
+        console.warn(`消息长度超过 ${MAX_MESSAGE_LENGTH} 字，将进行截断。`);
+        processedMessage = message.substring(0, MAX_MESSAGE_LENGTH);
+      }
+
+      console.log('🔐 开始双公钥加密:', {
+        messageLength: processedMessage.length,
+        senderKeyLength: senderPublicKey.length,
+        recipientKeyLength: recipientPublicKey.length
+      });
+
+      // 1. 生成随机 AES 密钥
+      const aesKey = this._generateAesKey();
+      console.log('✅ AES 密钥已生成');
+
+      // 2. 用 AES 密钥加密消息
+      const aesEncryptedMessage = this._encryptWithAes(
+        processedMessage,
+        aesKey
+      );
+      console.log('✅ 消息已用 AES 加密');
+
+      // 3. 用发送者公钥加密 AES 密钥
+      const jsEncryptSender = new JSEncrypt();
+      if (!this.validatePublicKey(senderPublicKey)) {
+        throw new Error('发送者公钥格式无效');
+      }
+      jsEncryptSender.setPublicKey(senderPublicKey);
+      const senderEncryptedAesKey = jsEncryptSender.encrypt(aesKey);
+
+      if (!senderEncryptedAesKey) {
+        throw new Error('用发送者公钥加密 AES 密钥失败');
+      }
+      console.log('✅ AES 密钥已用发送者公钥加密');
+
+      // 4. 用接收者公钥加密 AES 密钥
+      const jsEncryptRecipient = new JSEncrypt();
+      if (!this.validatePublicKey(recipientPublicKey)) {
+        throw new Error('接收者公钥格式无效');
+      }
+      jsEncryptRecipient.setPublicKey(recipientPublicKey);
+      const recipientEncryptedAesKey = jsEncryptRecipient.encrypt(aesKey);
+
+      if (!recipientEncryptedAesKey) {
+        throw new Error('用接收者公钥加密 AES 密钥失败');
+      }
+      console.log('✅ AES 密钥已用接收者公钥加密');
+
+      // 5. 组合三段：[给发送者的key]:[给接收者的key]:[加密消息]
+      const result = `${senderEncryptedAesKey}:${recipientEncryptedAesKey}:${aesEncryptedMessage}`;
+
+      console.log('✅ 双公钥加密完成:', {
+        parts: result.split(':').length,
+        totalLength: result.length
+      });
+
+      return result;
+    } catch (error) {
+      console.error('❌ 双公钥加密错误:', error);
+      throw new Error(
+        `双公钥加密失败: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * 解密消息（双公钥格式）
+   * @param encryptedMessage 加密消息（3段格式：发送者密钥:接收者密钥:加密内容）
+   * @param privateKey 私钥
+   * @returns 解密后的明文
+   */
   decryptMessage(encryptedMessage: string, privateKey: string): string {
     try {
       if (!encryptedMessage) {
@@ -151,37 +250,50 @@ export class ChatEncryption {
       }
 
       const parts = encryptedMessage.split(':');
-      if (parts.length !== 2) {
-        throw new Error('加密消息格式不正确');
+
+      // 只支持新格式（3段）：[给发送者的key]:[给接收者的key]:[加密消息]
+      if (parts.length !== 3) {
+        throw new Error(
+          `消息格式不正确，应为3段（双公钥格式），当前为${parts.length}段`
+        );
       }
 
-      const rsaEncryptedAesKey = parts[0];
-      const aesEncryptedMessage = parts[1];
+      console.log('🔓 开始解密消息（双公钥格式）');
+      const senderEncryptedAesKey = parts[0]; // [给发送者的key]
+      const recipientEncryptedAesKey = parts[1]; // [给接收者的key]
+      const aesEncryptedMessage = parts[2]; // [加密消息]
 
       const jsEncrypt = new JSEncrypt();
       jsEncrypt.setPrivateKey(privateKey);
 
-      // 尝试解密 AES 密钥
-      let aesKey = jsEncrypt.decrypt(rsaEncryptedAesKey);
+      // 尝试解密第一个密钥（给发送者的）
+      console.log('🔑 尝试解密第一个密钥（给发送者的）...');
+      let aesKey = jsEncrypt.decrypt(senderEncryptedAesKey);
 
-      // 如果使用提供的私钥解密 AES 密钥失败，尝试使用默认私钥解密
-      if (!aesKey) {
-        console.warn('使用提供的私钥解密 AES 密钥失败，尝试使用默认私钥解密');
-        const defaultJsEncrypt = new JSEncrypt();
-        defaultJsEncrypt.setPrivateKey(DEFAULT_KEY_PAIR.privateKey);
-        aesKey = defaultJsEncrypt.decrypt(rsaEncryptedAesKey);
+      if (aesKey) {
+        console.log('✅ 用第一个密钥解密成功！（你是发送者）');
+      } else {
+        // 如果失败，尝试第二个密钥（给接收者的）
+        console.log('🔑 尝试解密第二个密钥（给接收者的）...');
+        aesKey = jsEncrypt.decrypt(recipientEncryptedAesKey);
+
+        if (aesKey) {
+          console.log('✅ 用第二个密钥解密成功！（你是接收者）');
+        }
       }
 
       if (!aesKey) {
-        throw new Error('AES 密钥解密失败，可能是密钥不匹配');
+        throw new Error(
+          'AES 密钥解密失败，两个密钥都无法解密。可能密钥不匹配或消息不是发给你的。'
+        );
       }
 
       // 使用解密后的 AES 密钥解密消息内容
       const decrypted = this._decryptWithAes(aesEncryptedMessage, aesKey);
-
+      console.log('✅ 消息解密成功');
       return decrypted;
     } catch (error: any) {
-      console.error('解密错误:', error);
+      console.error('❌ 解密错误:', error);
       throw new Error(`消息解密失败: ${error.message || error}`);
     }
   }
