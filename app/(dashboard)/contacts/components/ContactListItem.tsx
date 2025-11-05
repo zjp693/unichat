@@ -57,7 +57,7 @@ export function ContactListItem({
           )}
 
           {/* 共同好友数 */}
-          {contact.type === 'mutual_friends' && contact.mutualFriendsCount && (
+          {contact.type === 'mutual_friends' && (
             <span className="text-xs  text-gray-600 bg-zinc-100 rounded-lg ml-2  py-1.5 px-3 flex items-center">
               <img
                 src="/contacts/friend.png"
