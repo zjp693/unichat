@@ -2,14 +2,11 @@ import 'server-only';
 import { neon } from '@neondatabase/serverless';
 
 // 检查环境变量
-const databaseUrl = process.env.NEON_DATABASE_URL;
+const databaseUrl = process.env.POSTGRES_URL;
 
 if (!databaseUrl) {
-  console.error('⚠️ 警告: NEON_DATABASE_URL 环境变量未设置');
-  console.error('请确保在 .env.local 文件中设置了 NEON_DATABASE_URL');
-  console.error(
-    '格式示例: NEON_DATABASE_URL=postgresql://user:password@host/database?sslmode=require'
-  );
+  console.error('⚠️ 警告: POSTGRES_URL 环境变量未设置');
+  console.error('请确保在 .env.local 文件中设置了 POSTGRES_URL');
 }
 
 // Neon 数据库客户端
