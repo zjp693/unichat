@@ -289,8 +289,8 @@ export default function TokenDetailPage() {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* 顶部导航栏 */}
-      <div className="flex items-center px-4 py-4 bg-white">
+      {/* Token 详情导航栏 */}
+      <div className="flex items-center px-4 py-4 bg-white flex-shrink-0">
         <Button
           variant="ghost"
           size="sm"

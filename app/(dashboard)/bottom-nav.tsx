@@ -10,7 +10,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 z-50 w-full border-t bg-background px-2 py-2">
+    <nav className="fixed bottom-0 left-0 z-1 w-full border-t bg-background px-2 py-2">
       <div className="flex justify-around">
         <NavItem
           href="/"
@@ -41,7 +41,12 @@ export function BottomNav() {
                 height={25}
               />
             ) : (
-              <Image src="/bottom/contacts.png" alt="contacts" width={25} height={25} />
+              <Image
+                src="/bottom/contacts.png"
+                alt="contacts"
+                width={25}
+                height={25}
+              />
             )
           }
           label="Contacts"

@@ -28,7 +28,7 @@ export default function TransactionDetailPage() {
   const searchParams = useSearchParams();
   const { symbol, id } = params as { symbol: string; id: string };
   const { toast } = useToast();
-  
+
   const [transaction, setTransaction] = useState<TransactionItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export default function TransactionDetailPage() {
     // 从 URL 参数中获取传递的交易数据
     const transactionData = searchParams?.get('data');
     const thumbnail = searchParams?.get('thumbnail');
-    
+
     if (transactionData) {
       try {
         const decodedData = JSON.parse(decodeURIComponent(transactionData));
@@ -63,7 +63,7 @@ export default function TransactionDetailPage() {
       // 如果没有传递数据，显示错误
       setError('未找到交易数据');
     }
-    
+
     // 设置 token 图标
     setTokenThumbnail(thumbnail);
     setLoading(false);
@@ -73,21 +73,24 @@ export default function TransactionDetailPage() {
     try {
       await navigator.clipboard.writeText(text);
       toast({
-        title: "复制成功",
-        description: "内容已复制到剪贴板",
-        variant: "success"
+        title: '复制成功',
+        description: '内容已复制到剪贴板',
+        variant: 'success'
       });
     } catch (err) {
       toast({
-        title: "复制失败",
-        description: "无法复制内容，请手动复制",
-        variant: "destructive"
+        title: '复制失败',
+        description: '无法复制内容，请手动复制',
+        variant: 'destructive'
       });
     }
   };
 
   // 获取区块链浏览器URL
-  const getBlockchainExplorerUrl = (transactionHash: string, network: string) => {
+  const getBlockchainExplorerUrl = (
+    transactionHash: string,
+    network: string
+  ) => {
     switch (network.toLowerCase()) {
       case 'arbitrum':
         return `https://arbiscan.io/tx/${transactionHash}`;
@@ -105,7 +108,10 @@ export default function TransactionDetailPage() {
   // 打开区块链浏览器
   const openBlockchainExplorer = () => {
     if (transaction) {
-      const url = getBlockchainExplorerUrl(transaction.transactionHash, transaction.network);
+      const url = getBlockchainExplorerUrl(
+        transaction.transactionHash,
+        transaction.network
+      );
       window.open(url, '_blank');
     }
   };
@@ -121,7 +127,11 @@ export default function TransactionDetailPage() {
             className="p-2 flex items-center justify-center"
             onClick={() => router.back()}
           >
-           <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
+            <img
+              src="/contacts/arrow_left.png"
+              alt=""
+              className="h-4 object-cover"
+            />
           </Button>
           <div className="text-[#303133] text-base font-semibold">交易详情</div>
           <div className="w-5" />
@@ -151,7 +161,7 @@ export default function TransactionDetailPage() {
               <div className="h-3 bg-gray-100 rounded w-32 animate-pulse ml-auto"></div>
             </div>
           </div>
-          
+
           {/* InfoRow 转出地址行骨架 - 匹配 InfoRow 组件结构 */}
           <div className="flex items-start justify-between">
             <div className="text-sm mr-4 whitespace-nowrap">
@@ -164,7 +174,7 @@ export default function TransactionDetailPage() {
               <div className="inline-block w-4 h-4 bg-gray-200 rounded animate-pulse ml-2 align-[-2px]"></div>
             </div>
           </div>
-          
+
           {/* InfoRow 交易ID行骨架 - 匹配 InfoRow 组件结构 */}
           <div className="flex items-start justify-between">
             <div className="text-sm mr-4 whitespace-nowrap">
@@ -177,7 +187,7 @@ export default function TransactionDetailPage() {
               <div className="inline-block w-4 h-4 bg-gray-200 rounded animate-pulse ml-2 align-[-2px]"></div>
             </div>
           </div>
-          
+
           {/* 网络行骨架 - 匹配实际结构 */}
           <div className="flex items-center justify-between">
             <div className="text-sm text-[#606266]">
@@ -188,7 +198,7 @@ export default function TransactionDetailPage() {
               <div className="h-3 bg-gray-100 rounded w-16 animate-pulse"></div>
             </div>
           </div>
-          
+
           {/* USD价值行骨架 - 匹配实际结构 */}
           <div className="flex items-center justify-between">
             <div className="text-sm text-[#606266]">
@@ -198,7 +208,7 @@ export default function TransactionDetailPage() {
               <div className="h-3 bg-gray-100 rounded w-20 animate-pulse"></div>
             </div>
           </div>
-          
+
           {/* Gas费行骨架 - 匹配实际结构 */}
           <div className="flex items-center justify-between">
             <div className="text-sm text-[#606266]">
@@ -236,7 +246,11 @@ export default function TransactionDetailPage() {
             className="p-2 flex items-center justify-center"
             onClick={() => router.back()}
           >
-           <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
+            <img
+              src="/contacts/arrow_left.png"
+              alt=""
+              className="h-4 object-cover"
+            />
           </Button>
           <div className="text-[#303133] text-base font-semibold">交易详情</div>
           <div className="w-5" />
@@ -244,11 +258,7 @@ export default function TransactionDetailPage() {
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-red-500 text-lg mb-2">⚠️</div>
           <div className="text-gray-600 text-sm mb-4">{error}</div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => router.back()}
-          >
+          <Button variant="outline" size="sm" onClick={() => router.back()}>
             返回
           </Button>
         </div>
@@ -267,7 +277,11 @@ export default function TransactionDetailPage() {
             className="p-2 flex items-center justify-center"
             onClick={() => router.back()}
           >
-           <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
+            <img
+              src="/contacts/arrow_left.png"
+              alt=""
+              className="h-4 object-cover"
+            />
           </Button>
           <div className="text-[#303133] text-base font-semibold">交易详情</div>
           <div className="w-5" />
@@ -275,11 +289,7 @@ export default function TransactionDetailPage() {
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="text-gray-500 text-lg mb-2">📄</div>
           <div className="text-gray-600 text-sm mb-4">暂无交易数据</div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => router.back()}
-          >
+          <Button variant="outline" size="sm" onClick={() => router.back()}>
             返回
           </Button>
         </div>
@@ -297,29 +307,44 @@ export default function TransactionDetailPage() {
           className="p-2 flex items-center justify-center"
           onClick={() => router.back()}
         >
-         <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
+          <img
+            src="/contacts/arrow_left.png"
+            alt=""
+            className="h-4 object-cover"
+          />
         </Button>
-        <div className="text-[#303133] text-base font-semibold">{symbol?.toUpperCase()} 收款</div>
+        <div className="text-[#303133] text-base font-semibold">
+          {symbol?.toUpperCase()} 收款
+        </div>
         <div className="w-5" />
       </div>
 
       {/* 中心图标与金额区域  */}
       <div className="px-6 pt-6 pb-4 flex flex-col items-center">
         {tokenThumbnail ? (
-          <img 
-            src={tokenThumbnail} 
-            alt={symbol} 
-            className="w-14 h-14 rounded object-cover mb-4" 
+          <img
+            src={tokenThumbnail}
+            alt={symbol}
+            className="w-14 h-14 rounded object-cover mb-4"
           />
         ) : (
           <div className="w-14 h-14 bg-gray-500 rounded flex items-center justify-center mb-4">
-            <span className="text-white text-2xl font-bold">{symbol?.charAt(0)}</span>
+            <span className="text-white text-2xl font-bold">
+              {symbol?.charAt(0)}
+            </span>
           </div>
         )}
-        <div className="text-[34px]  font-semibold text-[#012332] mb-2">{transaction.amount}</div>
+        <div className="text-[30px] text-center font-semibold text-[#012332] mb-2 w-full break-words break-all px-2">
+          {transaction.amount}
+        </div>
         <div className="text-sm text-gray-500">≈{transaction.usdValue}</div>
         <div className="mt-4 flex items-center  text-[#0B8A64] text-base font-semibold ">
-          <img src="/contacts/circleCheck.jpg" alt="交易完成" className="h-5 w-5 mr-1" /> 交易完成
+          <img
+            src="/contacts/circleCheck.jpg"
+            alt="交易完成"
+            className="h-5 w-5 mr-1"
+          />{' '}
+          交易完成
         </div>
       </div>
 
@@ -328,13 +353,27 @@ export default function TransactionDetailPage() {
       {/* 明细 */}
       <div className="px-3 py-2 space-y-2">
         <InfoRow label="时间" value={transaction.timestamp} />
-        <InfoRow label="转出地址" value={transaction.fromAddress} canCopy onCopy={() => copy(transaction.fromAddress)} />
-        <InfoRow label="交易ID" value={transaction.transactionHash} canCopy onCopy={() => copy(transaction.transactionHash)} />
+        <InfoRow
+          label="转出地址"
+          value={transaction.fromAddress}
+          canCopy
+          onCopy={() => copy(transaction.fromAddress)}
+        />
+        <InfoRow
+          label="交易ID"
+          value={transaction.transactionHash}
+          canCopy
+          onCopy={() => copy(transaction.transactionHash)}
+        />
         <div className="flex items-center justify-between">
           <div className="text-sm text-[#606266]">网络</div>
           <div className="text-xs flex items-center text-black">
-            <img src={transaction.networkIcon} alt={transaction.network} className="w-3.5 h-3.5" />
-           <div>{transaction.network}</div>
+            <img
+              src={transaction.networkIcon}
+              alt={transaction.network}
+              className="w-3.5 h-3.5"
+            />
+            <div>{transaction.network}</div>
           </div>
         </div>
         <div className="flex items-center justify-between">
@@ -358,23 +397,39 @@ export default function TransactionDetailPage() {
       <div className="h-[10px] bg-gray-100" />
 
       {/* 区块链浏览器链接 */}
-      <div 
+      <div
         className="px-3 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50"
         onClick={openBlockchainExplorer}
       >
         <div className="text-sm text-[#606266]">区块链浏览器</div>
         <div className="text-black">
-          <img src="/contacts/arrow_right.png" alt="" className="h-3 object-cover" />
+          <img
+            src="/contacts/arrow_right.png"
+            alt=""
+            className="h-3 object-cover"
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function InfoRow({ label, value, canCopy, onCopy }: { label: string; value: string; canCopy?: boolean; onCopy?: () => void }) {
+function InfoRow({
+  label,
+  value,
+  canCopy,
+  onCopy
+}: {
+  label: string;
+  value: string;
+  canCopy?: boolean;
+  onCopy?: () => void;
+}) {
   return (
     <div className="flex items-start justify-between">
-      <div className="text-[#606266] text-sm mr-1 whitespace-nowrap">{label}</div>
+      <div className="text-[#606266] text-sm mr-1 whitespace-nowrap">
+        {label}
+      </div>
       <div className="flex-1 text-right text-black break-all">
         <span className="align-middle text-xs">{value}</span>
         {canCopy && (
@@ -389,5 +444,3 @@ function InfoRow({ label, value, canCopy, onCopy }: { label: string; value: stri
     </div>
   );
 }
-
-

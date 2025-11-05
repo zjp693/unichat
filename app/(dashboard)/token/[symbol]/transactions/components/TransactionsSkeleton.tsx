@@ -5,18 +5,22 @@ import { useRouter } from 'next/navigation';
 
 export function TransactionsSkeleton() {
   const router = useRouter();
-  
+
   return (
     <div className="flex flex-col h-full bg-[#F2F4F9]">
-      {/* 顶部导航栏 */}
-      <div className="flex items-center justify-between px-4 py-4">
+      {/* 交易记录导航栏 */}
+      <div className="flex items-center justify-between px-4 py-4 flex-shrink-0">
         <Button
           variant="ghost"
           size="sm"
           className="p-2 flex items-center justify-center"
           onClick={() => router.back()}
         >
-          <img src="/contacts/arrow_left.png" alt="返回" className="h-4 object-cover" />
+          <img
+            src="/contacts/arrow_left.png"
+            alt="返回"
+            className="h-4 object-cover"
+          />
         </Button>
         <div className="text-[#303133] text-base font-semibold">交易记录</div>
         <div className="w-5" />
@@ -61,7 +65,10 @@ export function TransactionsSkeleton() {
         <div className="mx-4 mt-4">
           <div className="bg-white rounded-lg overflow-hidden">
             {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="relative px-4 py-3 border-b border-[#DCDFE6] last:border-b-0">
+              <div
+                key={index}
+                className="relative px-4 py-3 border-b border-[#DCDFE6] last:border-b-0"
+              >
                 {/* 顶部：标题 + 勾选 + 金额 */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -96,4 +103,3 @@ export function TransactionsSkeleton() {
     </div>
   );
 }
-

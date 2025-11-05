@@ -1,4 +1,22 @@
 import 'server-only';
+import { neon } from '@neondatabase/serverless';
+
+// 检查环境变量
+const databaseUrl = process.env.NEON_DATABASE_URL;
+
+if (!databaseUrl) {
+  console.error('⚠️ 警告: NEON_DATABASE_URL 环境变量未设置');
+  console.error('请确保在 .env.local 文件中设置了 NEON_DATABASE_URL');
+  console.error(
+    '格式示例: NEON_DATABASE_URL=postgresql://user:password@host/database?sslmode=require'
+  );
+}
+
+// Neon 数据库客户端
+// 如果没有设置环境变量，使用空字符串（会在执行查询时失败并给出明确的错误信息）
+const sql = neon(databaseUrl || '');
+
+export { sql };
 
 // 模拟产品数据类型
 export const statusEnum = {
@@ -74,7 +92,7 @@ export const mockProducts: Product[] = [
     price: 129.99,
     stock: 60,
     availableAt: new Date('2023-06-15')
-  },
+  }
 ];
 
 export type SelectProduct = Product;
@@ -91,7 +109,7 @@ export async function getProducts(
   // 模拟搜索功能
   let filteredProducts = mockProducts;
   if (search) {
-    filteredProducts = mockProducts.filter(product =>
+    filteredProducts = mockProducts.filter((product) =>
       product.name.toLowerCase().includes(search.toLowerCase())
     );
     return {
@@ -108,9 +126,11 @@ export async function getProducts(
   const totalProducts = filteredProducts.length;
   const productsPerPage = 5;
   const moreProducts = filteredProducts.slice(offset, offset + productsPerPage);
-  const newOffset = moreProducts.length >= productsPerPage && offset + productsPerPage < totalProducts
-    ? offset + productsPerPage
-    : null;
+  const newOffset =
+    moreProducts.length >= productsPerPage &&
+    offset + productsPerPage < totalProducts
+      ? offset + productsPerPage
+      : null;
 
   return {
     products: moreProducts,
