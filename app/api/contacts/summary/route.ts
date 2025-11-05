@@ -66,13 +66,13 @@ export async function GET(request: NextRequest) {
     console.error('查询联系人摘要失败:', error);
 
     // 检查是否是环境变量问题
-    if (!process.env.NEON_DATABASE_URL) {
+    if (!process.env.POSTGRES_URL) {
       return NextResponse.json(
         {
           success: false,
           error: '数据库配置错误',
-          details: 'NEON_DATABASE_URL 环境变量未设置',
-          message: '请检查 .env.local 文件中是否配置了 NEON_DATABASE_URL'
+          details: 'POSTGRES_URL 环境变量未设置',
+          message: '请检查 .env.local 文件中是否配置了 POSTGRES_URL'
         },
         { status: 500 }
       );
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
         error: '查询失败',
         details: errorMessage,
         ...(isNetworkError && {
-          hint: '可能是数据库连接问题，请检查：1) NEON_DATABASE_URL 是否正确 2) 网络连接是否正常 3) Neon 数据库服务是否可用'
+          hint: '可能是数据库连接问题，请检查：1) POSTGRES_URL 是否正确 2) 网络连接是否正常 3) Neon 数据库服务是否可用'
         }),
         ...(process.env.NODE_ENV === 'development' &&
           errorStack && {
