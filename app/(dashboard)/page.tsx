@@ -41,45 +41,90 @@ interface ChatItem {
   isOnline?: boolean;
   isGroup?: boolean;
   copy?: boolean;
+  level?: 1 | 2 | 3 | 4 | 5 | 6;
+  memberCount?: number;
+  groupCondition?: string;
+  address?: string; // 群聊地址或私聊对方地址
 }
 
 // 群聊 Mock 数据（保留）
 const mockGroupChats: ChatItem[] = [
   {
-    id: '1',
-    name: 'Arbitrum Vote Group',
+    id: 'group_lv1',
+    name: 'BNB 比特鱼鱼 LV1',
     avatar: '/me/me1.png',
     lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     time: '9:28',
     unreadCount: 5,
-    isGroup: true
+    isGroup: true,
+    level: 1,
+    memberCount: 50,
+    groupCondition: '群条件:>1,000$，才能在本群聊天',
+    address: '0x1234567890123456789012345678901234567890'
   },
   {
-    id: '2',
-    name: 'BNB Chain持币群',
+    id: 'group_lv2',
+    name: 'BNB 以太飞鱼 LV2',
     avatar: '/top/bnb1.jpg',
     lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     time: '9:22',
-    unreadCount: 65,
-    isGroup: true
+    unreadCount: 12,
+    isGroup: true,
+    level: 2,
+    memberCount: 120,
+    groupCondition: '群条件:>10,000$，才能在本群聊天',
+    address: '0x2345678901234567890123456789012345678901'
   },
   {
-    id: '3',
-    name: 'Publicleader Group',
+    id: 'group_lv3',
+    name: 'BNB POW 小屋 LV3',
     avatar: '/me/me1.png',
     lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     time: '9:14',
-    unreadCount: 65,
-    isGroup: true
+    unreadCount: 28,
+    isGroup: true,
+    level: 3,
+    memberCount: 200,
+    groupCondition: '群条件:>50,000$，才能在本群聊天',
+    address: '0x3456789012345678901234567890123456789012'
   },
   {
-    id: '4',
-    name: 'Arbitrim Project Team',
+    id: 'group_lv4',
+    name: 'BNB DEFI 中鲸 LV4',
     avatar: '/me/me1.png',
     lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     time: '9:11',
-    unreadCount: 65,
-    isGroup: true
+    unreadCount: 45,
+    isGroup: true,
+    level: 4,
+    memberCount: 234,
+    groupCondition: '群条件:>100,000$，才能在本群聊天',
+    address: '0x052cc4e91eaDC9a40BF66F4b6f62BE4f9c0559ab'
+  },
+  {
+    id: 'group_lv5',
+    name: 'BNB AI 巨鲸 LV5',
+    avatar: '/me/me1.png',
+    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    time: '9:05',
+    unreadCount: 88,
+    isGroup: true,
+    level: 5,
+    memberCount: 500,
+    groupCondition: '群条件:>500,000$，才能在本群聊天',
+    address: '0x5678901234567890123456789012345678901234'
+  },
+  {
+    id: 'group_lv6',
+    name: 'BNB 星宇蓝鲸 LV6',
+    avatar: '/me/me1.png',
+    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    time: '8:58',
+    unreadCount: 99,
+    isGroup: true,
+    level: 6,
+    memberCount: 1000,
+    groupCondition: '群条件:>1,000,000$，才能在本群聊天'
   }
 ];
 export default function ChatPage() {
@@ -249,7 +294,17 @@ function ChatListItem({
   const handleChatClick = () => {
     // 根据 chat.isGroup 动态构建 URL
     if (chat.isGroup) {
-      router.push(`/chat/${chat.id}?type=group`);
+      const params = new URLSearchParams({
+        type: 'group',
+        ...(chat.name && { name: encodeURIComponent(chat.name) }),
+        ...(chat.address && { address: chat.address }),
+        ...(chat.level && { level: chat.level.toString() }),
+        ...(chat.memberCount && { memberCount: chat.memberCount.toString() }),
+        ...(chat.groupCondition && {
+          groupCondition: encodeURIComponent(chat.groupCondition)
+        })
+      });
+      router.push(`/chat/${chat.id}?${params.toString()}`);
     } else {
       router.push(`/chat/${chat.id}?type=private`);
     }

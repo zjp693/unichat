@@ -1,0 +1,102 @@
+# 实现计划
+
+- [ ] 1. 创建核心组件文件和类型定义
+  - 创建 `components/chat/chat-navigation-bar.tsx` 主组件文件
+  - 定义 TypeScript 接口：`ChatNavigationBarProps`、`TopSectionProps`、`BottomSectionProps`
+  - 定义等级主题类型 `LevelTheme` 和常量 `LEVEL_THEMES`
+  - 创建地址格式化工具函数 `formatAddress`
+  - _需求: 1.1, 1.2, 4.1, 4.2, 4.3, 4.4_
+
+- [ ] 2. 实现顶部区域组件 (TopSection)
+  - [ ] 2.1 创建 TopSection 子组件结构
+    - 实现白色背景容器，使用 `bg-white py-4 px-4` 样式
+    - 实现 flex 布局：`flex items-center justify-between`
+    - _需求: 1.1, 3.1_
+  - [ ] 2.2 实现链名称标签
+    - 创建链名称显示元素，样式：`px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl font-medium`
+    - 支持可配置的链名称（默认 "BNB Chain"）
+    - _需求: 1.1, 4.4_
+  - [ ] 2.3 实现钱包连接按钮
+    - 集成 `<appkit-button />` 组件或创建自定义按钮
+    - 支持通过 `showWalletButton` 配置显示/隐藏
+    - 绑定 `onWalletConnect` 回调函数
+    - _需求: 1.1, 4.5, 5.2_
+  - [ ] 2.4 实现地区选择器
+    - 创建地区标签容器，样式：`flex items-center px-2 py-0 text-xs border h-9 border-gray-200 rounded-xl`
+    - 实现国旗图标显示（使用 Next.js Image 组件）
+    - 实现地区代码文本显示
+    - 支持可配置的地区代码和国旗图片路径
+    - _需求: 1.1, 4.4_
+
+- [ ] 3. 实现底部区域组件 (BottomSection)
+  - [ ] 3.1 创建 BottomSection 子组件结构
+    - 实现根据等级应用渐变背景的容器
+    - 使用 `useMemo` 缓存等级主题计算
+    - 实现 flex 布局：`flex items-center justify-between py-3 px-4`
+    - _需求: 1.2, 1.3-1.8, 3.1_
+  - [ ] 3.2 实现左侧返回按钮和成员数徽章
+    - 创建返回按钮（使用 lucide-react 的 ChevronLeft 图标）
+    - 实现成员数圆形徽章（仅群聊模式显示）
+    - 绑定 `onBack` 回调函数
+    - 添加 ARIA 标签提升可访问性
+    - _需求: 2.3, 4.3, 5.1_
+  - [ ] 3.3 实现中间聊天信息区域
+    - 创建头像显示（使用 Next.js Image 组件）
+    - 实现头像加载失败的占位符处理
+    - 实现可配置的名称显示（支持长文本截断）
+    - 实现等级徽章显示（仅群聊模式，使用 Badge 组件）
+    - 实现钱包地址显示（使用 `formatAddress` 格式化）
+    - 添加地址点击复制功能
+    - _需求: 1.2, 2.1, 2.2, 3.2, 4.3, 5.4_
+  - [ ] 3.4 实现右侧菜单按钮
+    - 创建三点菜单按钮（使用 lucide-react 的 MoreVertical 图标）
+    - 绑定 `onMenuClick` 回调函数
+    - 添加 ARIA 标签提升可访问性
+    - _需求: 2.4, 4.5, 5.3_
+
+- [ ] 4. 实现等级主题系统
+  - 定义 6 个等级的主题配置对象 `LEVEL_THEMES`
+  - 实现主题应用逻辑（根据 level 选择对应主题）
+  - 为每个等级配置渐变背景、文本颜色、徽章颜色
+  - _需求: 1.3, 1.4, 1.5, 1.6, 1.7, 1.8_
+
+- [ ] 5. 实现交互功能
+  - [ ] 5.1 实现地址复制到剪贴板功能
+    - 使用 `navigator.clipboard.writeText` API
+    - 添加错误处理（try-catch）
+    - 触发 `onAddressCopy` 回调
+    - _需求: 5.4_
+  - [ ] 5.2 实现所有回调函数的安全调用
+    - 使用 `useCallback` 包装所有回调函数
+    - 使用可选链调用 `onBack?.()`、`onWalletConnect?.()`、`onMenuClick?.()`
+    - _需求: 4.5, 5.1, 5.2, 5.3_
+
+- [ ] 6. 优化和完善
+  - [ ] 6.1 性能优化
+    - 使用 `React.memo` 包装主组件
+    - 使用 `useMemo` 缓存等级主题计算
+    - 使用 `useCallback` 缓存事件处理函数
+    - _需求: 4.1_
+  - [ ] 6.2 响应式和样式优化
+    - 确保所有交互元素触摸目标至少 44x44px
+    - 添加悬停和点击状态样式（hover:opacity-80, active:scale-95）
+    - 添加过渡动画（transition-all duration-200）
+    - 支持 iOS 安全区域（safe-area-inset）
+    - _需求: 3.1, 3.2, 3.3_
+  - [ ] 6.3 可访问性改进
+    - 为所有按钮添加 `aria-label` 属性
+    - 确保键盘导航支持（Tab 键）
+    - 确保颜色对比度符合 WCAG AA 标准
+    - _需求: 3.3_
+  - [ ]\* 6.4 错误处理和边界情况
+    - 实现图片加载失败的占位符
+    - 处理缺失的可选 props（使用默认值）
+    - 处理超长地址的截断
+    - 添加控制台错误日志
+    - _需求: 3.2, 4.1, 4.2, 4.3, 4.4_
+
+- [ ] 7. 导出和集成
+  - 从 `components/chat/chat-navigation-bar.tsx` 导出主组件
+  - 确保组件可以在聊天页面中正常使用
+  - 验证与现有 top-navbar.tsx 样式的一致性
+  - _需求: 4.1_

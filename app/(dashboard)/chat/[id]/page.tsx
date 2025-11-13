@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { TopNavbar } from '@/components/ui/top-navbar';
+import { ChatNavigationBar } from '@/components/chat/chat-navigation-bar';
 import {
   MoreHorizontal,
   Plus,
@@ -133,13 +134,27 @@ export default function ChatPage() {
   // const { openConnectModal, openChainModal } = useAppKit();
   const currentChain = chains.find((chain) => chain.id === chainId);
 
-  // 从 URL 解析 conversationId, chatType, invitedMembersMessage, memberCount
+  // 从 URL 解析 conversationId, chatType, invitedMembersMessage, memberCount, level, groupCondition, groupName, groupAddress
   const conversationId = params.id as string; // <-- 将 Address 改为 string
   const chatType = searchParams.get('type') === 'group' ? 'group' : 'private';
   const invitedMembersMessage = searchParams.get('invitedMembers')
     ? decodeURIComponent(searchParams.get('invitedMembers') as string)
     : null;
   const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
+  const groupLevel = parseInt(searchParams.get('level') || '1', 10) as
+    | 1
+    | 2
+    | 3
+    | 4
+    | 5
+    | 6;
+  const groupCondition = searchParams.get('groupCondition')
+    ? decodeURIComponent(searchParams.get('groupCondition') as string)
+    : undefined;
+  const groupName = searchParams.get('name')
+    ? decodeURIComponent(searchParams.get('name') as string)
+    : null;
+  const groupAddress = searchParams.get('address') || conversationId;
 
   // 验证并使用 conversationId 作为接收者地址（私聊时）
   // 群聊时使用空字符串，避免调用合约（空字符串会让钩子的 enabled 条件为 false）
@@ -1042,42 +1057,38 @@ export default function ChatPage() {
     <div className="bg-gray-100 w-full h-full relative">
       {/* 固定的头部区域 */}
       <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
-        {/* 顶部钱包栏 */}
-        <TopNavbar className="" />
-        {/* 聊天导航栏 */}
-        <div
-          className="flex items-center justify-between px-3"
-          style={{ height: `${NAV_BAR_HEIGHT}px` }}
-        >
-          <Button variant="ghost" onClick={() => router.back()}>
-            <Image
-              src="/chats/arrow_left.png"
-              alt="返回"
-              width={10}
-              height={10}
-              className="text-black"
-            />
-          </Button>
-          <h1 className="text-base font-medium text-black">
-            {chatType === 'private'
-              ? // 显示钱包地址的缩略形式
-                `${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
-              : // 群聊名称，现在包含动态成员数量
-                `${conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊'} (${memberCount})`}
-          </h1>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              if (chatType === 'group') {
-                setShowGroupInfoPanel(true);
-              } else if (chatType === 'private') {
-                setShowPrivateChatSettingsPanel(true);
-              }
-            }}
-          >
-            <MoreHorizontal className="h-6 w-6 text-black" />
-          </Button>
-        </div>
+        {/* 使用新的聊天导航栏组件 */}
+        <ChatNavigationBar
+          mode={chatType}
+          chatInfo={{
+            name:
+              chatType === 'private'
+                ? `${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
+                : groupName || '未知群聊',
+            address: chatType === 'private' ? recipientAddress : groupAddress,
+            level: chatType === 'group' ? groupLevel : undefined,
+            memberCount: chatType === 'group' ? memberCount : undefined,
+            avatar: '/placeholder-user.jpg',
+            groupCondition: chatType === 'group' ? groupCondition : undefined
+          }}
+          topSection={{
+            regionCode: 'USA',
+            regionFlag: '/top/usa.png',
+            showWalletButton: true
+          }}
+          onBack={() => router.back()}
+          onMenuClick={() => {
+            if (chatType === 'group') {
+              setShowGroupInfoPanel(true);
+            } else if (chatType === 'private') {
+              setShowPrivateChatSettingsPanel(true);
+            }
+          }}
+          onAddressCopy={(address) => {
+            // 可以添加 toast 提示
+            console.log('地址已复制:', address);
+          }}
+        />
       </div>
 
       {/* 滚动的内容区域 */}
