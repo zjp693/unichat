@@ -134,13 +134,27 @@ export default function ChatPage() {
   // const { openConnectModal, openChainModal } = useAppKit();
   const currentChain = chains.find((chain) => chain.id === chainId);
 
-  // 从 URL 解析 conversationId, chatType, invitedMembersMessage, memberCount
+  // 从 URL 解析 conversationId, chatType, invitedMembersMessage, memberCount, level, groupCondition, groupName, groupAddress
   const conversationId = params.id as string; // <-- 将 Address 改为 string
   const chatType = searchParams.get('type') === 'group' ? 'group' : 'private';
   const invitedMembersMessage = searchParams.get('invitedMembers')
     ? decodeURIComponent(searchParams.get('invitedMembers') as string)
     : null;
   const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
+  const groupLevel = parseInt(searchParams.get('level') || '1', 10) as
+    | 1
+    | 2
+    | 3
+    | 4
+    | 5
+    | 6;
+  const groupCondition = searchParams.get('groupCondition')
+    ? decodeURIComponent(searchParams.get('groupCondition') as string)
+    : undefined;
+  const groupName = searchParams.get('name')
+    ? decodeURIComponent(searchParams.get('name') as string)
+    : null;
+  const groupAddress = searchParams.get('address') || conversationId;
 
   // 验证并使用 conversationId 作为接收者地址（私聊时）
   // 群聊时使用空字符串，避免调用合约（空字符串会让钩子的 enabled 条件为 false）
@@ -1050,16 +1064,14 @@ export default function ChatPage() {
             name:
               chatType === 'private'
                 ? `${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
-                : conversationId === 'g_my_first_group'
-                  ? '我的群聊'
-                  : '未知群聊',
-            address: chatType === 'private' ? recipientAddress : conversationId,
-            level: chatType === 'group' ? 1 : undefined, // 群聊显示等级，可以根据实际数据动态设置
+                : groupName || '未知群聊',
+            address: chatType === 'private' ? recipientAddress : groupAddress,
+            level: chatType === 'group' ? groupLevel : undefined,
             memberCount: chatType === 'group' ? memberCount : undefined,
-            avatar: '/placeholder-user.jpg'
+            avatar: '/placeholder-user.jpg',
+            groupCondition: chatType === 'group' ? groupCondition : undefined
           }}
           topSection={{
-            chainName: 'BNB Chain',
             regionCode: 'USA',
             regionFlag: '/top/usa.png',
             showWalletButton: true

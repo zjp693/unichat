@@ -16,9 +16,9 @@ interface ChatNavigationBarProps {
     level?: 1 | 2 | 3 | 4 | 5 | 6;
     address: string;
     memberCount?: number;
+    groupCondition?: string;
   };
   topSection?: {
-    chainName?: string;
     regionCode?: string;
     regionFlag?: string;
     showWalletButton?: boolean;
@@ -31,11 +31,11 @@ interface ChatNavigationBarProps {
 }
 
 interface TopSectionProps {
-  chainName: string;
   regionCode: string;
   regionFlag?: string;
   showWalletButton?: boolean;
   onWalletConnect?: () => void;
+  levelTheme: LevelTheme;
 }
 
 interface BottomSectionProps {
@@ -46,6 +46,7 @@ interface BottomSectionProps {
     level?: 1 | 2 | 3 | 4 | 5 | 6;
     address: string;
     memberCount?: number;
+    groupCondition?: string;
   };
   levelTheme: LevelTheme;
   onBack?: () => void;
@@ -54,7 +55,9 @@ interface BottomSectionProps {
 }
 
 type LevelTheme = {
-  background: string;
+  background?: string;
+  backgroundColor?: string;
+  backgroundImage?: string;
   textColor: string;
   badgeColor: string;
   opacity: string;
@@ -64,44 +67,44 @@ type LevelTheme = {
 
 const LEVEL_THEMES: Record<number, LevelTheme> = {
   1: {
-    background: 'from-blue-100 to-blue-200',
-    textColor: 'text-blue-900',
+    backgroundColor: '#b9cef8',
+    textColor: 'text-[#303133]',
     badgeColor: 'bg-blue-500',
     opacity: 'bg-opacity-90'
   },
   2: {
-    background: 'from-blue-500 to-blue-600',
+    backgroundColor: '#404de2',
     textColor: 'text-white',
     badgeColor: 'bg-blue-700',
     opacity: 'bg-opacity-95'
   },
   3: {
-    background: 'from-purple-500 to-purple-600',
+    backgroundColor: '#9673ff',
     textColor: 'text-white',
     badgeColor: 'bg-purple-700',
     opacity: 'bg-opacity-95'
   },
   4: {
-    background: 'from-yellow-400 to-yellow-500',
-    textColor: 'text-yellow-900',
+    backgroundImage: '/chats/LV4_bg.png',
+    textColor: 'text-[#303133]',
     badgeColor: 'bg-yellow-600',
     opacity: 'bg-opacity-95'
   },
   5: {
-    background: 'from-red-600 to-red-700',
+    backgroundImage: '/chats/LV5_bg.png',
     textColor: 'text-white',
     badgeColor: 'bg-red-800',
     opacity: 'bg-opacity-95'
   },
   6: {
-    background: 'from-gray-900 to-black',
+    backgroundImage: '/chats/LV6_bg.png',
     textColor: 'text-white',
     badgeColor: 'bg-gray-700',
     opacity: 'bg-opacity-100'
   }
 };
 
-const DEFAULT_CHAIN = 'BNB Chain';
+// const DEFAULT_CHAIN = 'BNB Chain';
 const DEFAULT_REGION = 'USA';
 const DEFAULT_LEVEL = 1;
 const DEFAULT_AVATAR = '/placeholder-user.jpg';
@@ -110,19 +113,19 @@ const DEFAULT_AVATAR = '/placeholder-user.jpg';
 
 // 顶部区域组件
 const TopSection: React.FC<TopSectionProps> = ({
-  chainName,
   regionCode,
   regionFlag,
   showWalletButton = true,
-  onWalletConnect
+  onWalletConnect,
+  levelTheme
 }) => {
   return (
-    <div className="flex items-center justify-between py-4 pl-0 pr-1 bg-white border-b border-gray-200">
-      {/* 链名称标签 */}
-      <div className="px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl font-medium">
-        {chainName}
-      </div>
-
+    <div
+      className={cn(
+        'flex items-center justify-between pt-4 pb-2 px-1 border-white/20',
+        levelTheme.textColor
+      )}
+    >
       {/* 钱包连接按钮 */}
       {showWalletButton && (
         <div className="flex-shrink-0">
@@ -131,7 +134,7 @@ const TopSection: React.FC<TopSectionProps> = ({
       )}
 
       {/* 地区选择器 */}
-      <div className="flex items-center px-2 py-0 text-xs border h-9 border-gray-200 rounded-xl">
+      <div className="flex items-center px-2 py-0 text-xs border h-7 border-white/30 rounded-lg bg-white">
         {regionFlag && (
           <div className="inline-block align-middle mr-3 w-4 h-4 rounded-full overflow-hidden">
             <Image
@@ -143,7 +146,7 @@ const TopSection: React.FC<TopSectionProps> = ({
             />
           </div>
         )}
-        <span className="font-bold">{regionCode}</span>
+        <span className="font-bold text-black">{regionCode}</span>
       </div>
     </div>
   );
@@ -180,8 +183,7 @@ const BottomSection: React.FC<BottomSectionProps> = ({
   return (
     <div
       className={cn(
-        'flex items-center justify-between py-3 pl-0 pr-1 bg-gradient-to-r',
-        levelTheme.background,
+        'flex items-center justify-between py-3 pl-0 pr-1',
         levelTheme.textColor
       )}
     >
@@ -190,7 +192,7 @@ const BottomSection: React.FC<BottomSectionProps> = ({
         <button
           onClick={handleBack}
           aria-label="返回聊天列表"
-          className="flex items-center justify-center w-10 h-10 rounded-full hover:opacity-80 active:scale-95 transition-all duration-200"
+          className="flex items-center justify-center w-10 h-10 rounded-full active:scale-95 transition-all duration-200"
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
@@ -202,10 +204,10 @@ const BottomSection: React.FC<BottomSectionProps> = ({
       </div>
 
       {/* 中间：聊天信息 */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 min-w-0">
+      <div className="flex-1 flex flex-col items-center justify-center px-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           {/* 头像 */}
-          <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+          <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
             <Image
               src={
                 avatarError ? DEFAULT_AVATAR : chatInfo.avatar || DEFAULT_AVATAR
@@ -224,15 +226,12 @@ const BottomSection: React.FC<BottomSectionProps> = ({
               {chatInfo.name}
             </span>
             {mode === 'group' && chatInfo.level && (
-              <Badge
-                className={cn(
-                  'text-xs px-2 py-0.5',
-                  levelTheme.badgeColor,
-                  'text-white'
-                )}
-              >
-                LV{chatInfo.level}
-              </Badge>
+              <div className="flex text-sm px-2 py-0.5">
+                LV{chatInfo.level}(11)
+                <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] ml-1 px-1">
+                  认证
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -241,18 +240,32 @@ const BottomSection: React.FC<BottomSectionProps> = ({
         <button
           onClick={handleAddressCopy}
           aria-label={`复制地址 ${chatInfo.address}`}
-          className="flex items-center gap-1 text-xs opacity-80 hover:opacity-100 transition-opacity font-mono tracking-tighter"
+          className="flex items-center gap-1 text-xs font-mono tracking-tighter"
         >
           <span>{chatInfo.address}</span>
           <Copy className="w-3 h-3" />
         </button>
+
+        {/* 群条件 */}
+        {mode === 'group' && chatInfo.groupCondition && (
+          <div
+            className={cn(
+              'text-xs mt-0.5 px-2 py-0.5 rounded',
+              chatInfo.level === 1 || chatInfo.level === 4
+                ? 'text-[#303133] bg-white/50'
+                : 'text-white bg-white/30'
+            )}
+          >
+            {chatInfo.groupCondition}
+          </div>
+        )}
       </div>
 
       {/* 右侧：菜单按钮 */}
       <button
         onClick={handleMenu}
         aria-label="打开菜单"
-        className="flex items-center justify-center w-10 h-10 rounded-full hover:opacity-80 active:scale-95 transition-all duration-200"
+        className="flex items-center justify-center w-10 h-10 rounded-full active:scale-95 transition-all duration-200"
       >
         <MoreVertical className="w-6 h-6 rotate-90" />
       </button>
@@ -280,20 +293,28 @@ export const ChatNavigationBar = React.memo<ChatNavigationBarProps>(
     );
 
     // 顶部区域配置
-    const chainName = topSection?.chainName || DEFAULT_CHAIN;
     const regionCode = topSection?.regionCode || DEFAULT_REGION;
     const regionFlag = topSection?.regionFlag;
     const showWalletButton = topSection?.showWalletButton ?? true;
 
+    // 背景样式
+    const backgroundStyle = levelTheme.backgroundImage
+      ? {
+          backgroundImage: `url(${levelTheme.backgroundImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }
+      : { backgroundColor: levelTheme.backgroundColor };
+
     return (
-      <div className={cn('w-full', className)}>
+      <div className={cn('w-full', className)} style={backgroundStyle}>
         {/* 顶部区域 */}
         <TopSection
-          chainName={chainName}
           regionCode={regionCode}
           regionFlag={regionFlag}
           showWalletButton={showWalletButton}
           onWalletConnect={onWalletConnect}
+          levelTheme={levelTheme}
         />
 
         {/* 底部区域 */}

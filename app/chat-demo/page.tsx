@@ -44,7 +44,8 @@ export default function ChatNavigationDemo() {
                   level: 1,
                   address: '0x052cc4e91eaDC9a40BF66F4b8f82BE4f3e0559ab',
                   // memberCount: 234,
-                  avatar: '/placeholder-user.jpg'
+                  avatar: '/placeholder-user.jpg',
+                  groupCondition: '群条件:>1,000$，才能在本群聊天'
                 }}
                 topSection={{
                   regionCode: 'USA',
@@ -68,7 +69,8 @@ export default function ChatNavigationDemo() {
                   level: 2,
                   address: '0x052cc4e91eaDC9a40BF66F4b8f82BE4f3e0559ab',
                   // memberCount: 234,
-                  avatar: '/placeholder-user.jpg'
+                  avatar: '/placeholder-user.jpg',
+                  groupCondition: '群条件:>10,000$，才能在本群聊天'
                 }}
                 topSection={{
                   regionCode: 'USA',
@@ -92,7 +94,8 @@ export default function ChatNavigationDemo() {
                   level: 3,
                   address: '0x052cc4e91eaDC9a40BF66F4b8f82BE4f3e0559ab',
                   // memberCount: 234,
-                  avatar: '/placeholder-user.jpg'
+                  avatar: '/placeholder-user.jpg',
+                  groupCondition: '群条件:>50,000$，才能在本群聊天'
                 }}
                 topSection={{
                   regionCode: 'USA',
@@ -116,7 +119,8 @@ export default function ChatNavigationDemo() {
                   level: 4,
                   address: '0x052cc4e91eaDC9a40BF66F4b8f82BE4f3e0559ab',
                   // memberCount: 234,
-                  avatar: '/placeholder-user.jpg'
+                  avatar: '/placeholder-user.jpg',
+                  groupCondition: '群条件:>100,000$，才能在本群聊天'
                 }}
                 topSection={{
                   regionCode: 'USA',
@@ -140,7 +144,8 @@ export default function ChatNavigationDemo() {
                   level: 5,
                   address: '0x052cc4e91eaDC9a40BF66F4b8f82BE4f3e0559ab',
                   // memberCount: 234,
-                  avatar: '/placeholder-user.jpg'
+                  avatar: '/placeholder-user.jpg',
+                  groupCondition: '群条件:>500,000$，才能在本群聊天'
                 }}
                 topSection={{
                   regionCode: 'USA',
@@ -164,7 +169,8 @@ export default function ChatNavigationDemo() {
                   level: 6,
                   address: '0x052cc4e91eaDC9a40BF66F4b8f82BE4f3e0559ab',
                   // memberCount: 234,
-                  avatar: '/placeholder-user.jpg'
+                  avatar: '/placeholder-user.jpg',
+                  groupCondition: '群条件:>1,000,000$，才能在本群聊天'
                 }}
                 topSection={{
                   regionCode: 'USA',
@@ -218,7 +224,6 @@ export default function ChatNavigationDemo() {
                   avatar: '/placeholder-user.jpg'
                 }}
                 topSection={{
-                  chainName: 'Ethereum',
                   regionCode: 'CHN',
                   regionFlag: '/top/usa.png'
                 }}
@@ -241,7 +246,6 @@ export default function ChatNavigationDemo() {
                   avatar: '/placeholder-user.jpg'
                 }}
                 topSection={{
-                  chainName: 'Polygon',
                   regionCode: 'JPN',
                   regionFlag: '/top/usa.png',
                   showWalletButton: false
