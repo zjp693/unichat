@@ -3,17 +3,24 @@ import { neon } from '@neondatabase/serverless';
 
 // 检查环境变量
 const databaseUrl = process.env.POSTGRES_URL;
+const merkleDatabaseUrl = process.env.MERKLE_POSTGRES_URL;
 
 if (!databaseUrl) {
   console.error('⚠️ 警告: POSTGRES_URL 环境变量未设置');
   console.error('请确保在 .env.local 文件中设置了 POSTGRES_URL');
 }
 
+if (!merkleDatabaseUrl) {
+  console.error('⚠️ 警告: MERKLE_POSTGRES_URL 环境变量未设置');
+  console.error('请确保在 .env.local 文件中设置了 MERKLE_POSTGRES_URL');
+}
+
 // Neon 数据库客户端
 // 如果没有设置环境变量，使用空字符串（会在执行查询时失败并给出明确的错误信息）
 const sql = neon(databaseUrl || '');
+const merkleSql = neon(merkleDatabaseUrl || '');
 
-export { sql };
+export { sql, merkleSql };
 
 // 模拟产品数据类型
 export const statusEnum = {
@@ -141,4 +148,68 @@ export async function deleteProductById(id: number) {
   // 在实际应用中，这里会从数据库中删除产品
   // 在这个模拟版本中，我们只是打印一条消息
   console.log(`删除产品 ID: ${id}`);
+}
+
+// ==================== Merkle Proof 相关类型和函数 ====================
+
+export type UserProof = {
+  account: string;
+  community: string;
+  epoch: string;
+  max_tier: number;
+  valid_until: string;
+  nonce: string;
+  proof: string; // JSON 字符串
+  leaf_hash: string;
+  source_table: string;
+};
+
+/**
+ * 查询用户可以加入的所有群聊及其 Merkle Proof 数据
+ * @param account 用户钱包地址
+ * @returns 用户的所有 proof 数据
+ */
+export async function getUserProofs(account: string): Promise<UserProof[]> {
+  if (!merkleDatabaseUrl) {
+    throw new Error('MERKLE_POSTGRES_URL 未配置');
+  }
+
+  try {
+    const result = await merkleSql`
+      SELECT * FROM all_snapshots 
+      WHERE account = ${account.toLowerCase()}
+    `;
+    return result as UserProof[];
+  } catch (error) {
+    console.error('查询用户 Merkle Proof 失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 查询用户对特定群聊的 Merkle Proof 数据
+ * @param account 用户钱包地址
+ * @param community 群聊合约地址
+ * @returns 用户对该群聊的 proof 数据
+ */
+export async function getUserProofForCommunity(
+  account: string,
+  community: string
+): Promise<UserProof | null> {
+  if (!merkleDatabaseUrl) {
+    throw new Error('MERKLE_POSTGRES_URL 未配置');
+  }
+
+  try {
+    const result = await merkleSql`
+      SELECT * FROM all_snapshots 
+      WHERE account = ${account.toLowerCase()} 
+      AND community = ${community.toLowerCase()}
+      LIMIT 1
+    `;
+    return result.length > 0 ? (result[0] as UserProof) : null;
+  } catch (error) {
+    console.error('查询用户群聊 Proof 失败:', error);
+    throw error;
+  }
 }

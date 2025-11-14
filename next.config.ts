@@ -15,6 +15,11 @@ export default {
         protocol: 'https',
         hostname: '*.mypinata.cloud',
         search: ''
+      },
+      {
+        protocol: 'https',
+        hostname: 'arbiscan.io',
+        search: ''
       }
     ]
   }

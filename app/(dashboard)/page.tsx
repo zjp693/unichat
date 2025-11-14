@@ -30,6 +30,9 @@ import {
   formatMessageTime
 } from '@/hooks/usePeerLastMessage';
 import { useChatListSync } from '@/hooks/useChatListSync';
+import { useCommunitiesWithStatus } from '@/hooks/useCommunities';
+import { useJoinCommunity } from '@/hooks/useJoinCommunity';
+import { CommunityWithStatus } from '@/lib/types/community';
 
 interface ChatItem {
   id: string;
@@ -45,91 +48,43 @@ interface ChatItem {
   memberCount?: number;
   groupCondition?: string;
   address?: string; // 群聊地址或私聊对方地址
+  // 群聊状态
+  canJoin?: boolean;
+  isJoined?: boolean;
+  proofData?: any;
 }
 
-// 群聊 Mock 数据（保留）
-const mockGroupChats: ChatItem[] = [
-  {
-    id: 'group_lv1',
-    name: 'BNB 比特鱼鱼 LV1',
-    avatar: '/me/me1.png',
-    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    time: '9:28',
-    unreadCount: 5,
+// 将链上群聊数据转换为 ChatItem 格式
+function convertCommunityToChat(community: CommunityWithStatus): ChatItem {
+  return {
+    id: community.communityAddress,
+    name: community.name,
+    avatar: community.avatarCid || '/me/me1.png',
+    lastMessage: community.communityAddress, // 显示群聊地址而不是代币地址
+    time: '-',
     isGroup: true,
-    level: 1,
-    memberCount: 50,
-    groupCondition: '群条件:>1,000$，才能在本群聊天',
-    address: '0x1234567890123456789012345678901234567890'
-  },
-  {
-    id: 'group_lv2',
-    name: 'BNB 以太飞鱼 LV2',
-    avatar: '/top/bnb1.jpg',
-    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    time: '9:22',
-    unreadCount: 12,
-    isGroup: true,
-    level: 2,
-    memberCount: 120,
-    groupCondition: '群条件:>10,000$，才能在本群聊天',
-    address: '0x2345678901234567890123456789012345678901'
-  },
-  {
-    id: 'group_lv3',
-    name: 'BNB POW 小屋 LV3',
-    avatar: '/me/me1.png',
-    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    time: '9:14',
-    unreadCount: 28,
-    isGroup: true,
-    level: 3,
-    memberCount: 200,
-    groupCondition: '群条件:>50,000$，才能在本群聊天',
-    address: '0x3456789012345678901234567890123456789012'
-  },
-  {
-    id: 'group_lv4',
-    name: 'BNB DEFI 中鲸 LV4',
-    avatar: '/me/me1.png',
-    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    time: '9:11',
-    unreadCount: 45,
-    isGroup: true,
-    level: 4,
-    memberCount: 234,
-    groupCondition: '群条件:>100,000$，才能在本群聊天',
-    address: '0x052cc4e91eaDC9a40BF66F4b6f62BE4f9c0559ab'
-  },
-  {
-    id: 'group_lv5',
-    name: 'BNB AI 巨鲸 LV5',
-    avatar: '/me/me1.png',
-    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    time: '9:05',
-    unreadCount: 88,
-    isGroup: true,
-    level: 5,
-    memberCount: 500,
-    groupCondition: '群条件:>500,000$，才能在本群聊天',
-    address: '0x5678901234567890123456789012345678901234'
-  },
-  {
-    id: 'group_lv6',
-    name: 'BNB 星宇蓝鲸 LV6',
-    avatar: '/me/me1.png',
-    lastMessage: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-    time: '8:58',
-    unreadCount: 99,
-    isGroup: true,
-    level: 6,
-    memberCount: 1000,
-    groupCondition: '群条件:>1,000,000$，才能在本群聊天'
-  }
-];
+    level: community.maxTier as 1 | 2 | 3 | 4 | 5 | 6,
+    memberCount: 0, // 可以后续从合约获取
+    groupCondition: `档位 ${community.maxTier}`,
+    address: community.communityAddress,
+    // 添加状态标识
+    canJoin: community.canJoin,
+    isJoined: community.isJoined,
+    proofData: community.proofData
+  };
+}
 export default function ChatPage() {
   const router = useRouter();
   const { address: currentAddress, isConnected } = useAccount();
+  const { toast } = useToast();
+
+  // 获取链上群聊数据
+  const {
+    communities: chainCommunities,
+    isLoading: isCommunitiesLoading,
+    error: communitiesError,
+    refetch: refetchCommunities
+  } = useCommunitiesWithStatus(currentAddress);
 
   // 获取当前用户的对端列表
   const {
@@ -142,7 +97,6 @@ export default function ChatPage() {
   useChatListSync(
     currentAddress as Address,
     (from, to) => {
-      console.log('🔄 收到新消息，刷新对端列表:', { from, to, currentAddress });
       // 当收到新消息时，重新获取对端列表
       // 这样如果有新的对端，会自动添加到列表中
       refetchPeers()
@@ -179,10 +133,15 @@ export default function ChatPage() {
     }));
   }, [peers]);
 
+  // 将链上群聊转换为 ChatItem 格式
+  const groupChats: ChatItem[] = useMemo(() => {
+    return chainCommunities.map(convertCommunityToChat);
+  }, [chainCommunities]);
+
   // 合并群聊和私聊列表
   const allChats = useMemo(() => {
-    return [...mockGroupChats, ...privateChats];
-  }, [privateChats]);
+    return [...groupChats, ...privateChats];
+  }, [groupChats, privateChats]);
 
   return (
     <div className="flex flex-col h-screen">
@@ -211,7 +170,7 @@ export default function ChatPage() {
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
           </div>
-        ) : isPeersLoading ? (
+        ) : isPeersLoading || isCommunitiesLoading ? (
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">加载中...</p>
           </div>
@@ -226,6 +185,7 @@ export default function ChatPage() {
                 key={chat.id}
                 chat={chat}
                 currentAddress={currentAddress}
+                onJoinSuccess={refetchCommunities}
               />
             ))}
           </div>
@@ -237,13 +197,16 @@ export default function ChatPage() {
 
 function ChatListItem({
   chat,
-  currentAddress
+  currentAddress,
+  onJoinSuccess
 }: {
   chat: ChatItem;
   currentAddress?: Address;
+  onJoinSuccess?: () => void;
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { joinCommunity, isJoining } = useJoinCommunity();
 
   // 获取私聊的最后消息时间
   const { timestamp } = usePeerLastMessage(
@@ -292,6 +255,11 @@ function ChatListItem({
       : undefined;
 
   const handleChatClick = () => {
+    // 群聊：如果未加入，不跳转
+    if (chat.isGroup && !chat.isJoined) {
+      return;
+    }
+
     // 根据 chat.isGroup 动态构建 URL
     if (chat.isGroup) {
       const params = new URLSearchParams({
@@ -307,6 +275,54 @@ function ChatListItem({
       router.push(`/chat/${chat.id}?${params.toString()}`);
     } else {
       router.push(`/chat/${chat.id}?type=private`);
+    }
+  };
+
+  const handleJoinClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!chat.proofData) {
+      toast({
+        title: '无法加入',
+        description: '您没有加入此群聊的资格',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const result = await joinCommunity(chat.id, chat.proofData);
+
+    if (result.success) {
+      toast({
+        title: '加入成功',
+        description: '正在进入群聊...',
+        variant: 'success'
+      });
+
+      // 刷新群聊状态
+      if (onJoinSuccess) {
+        onJoinSuccess();
+      }
+
+      // 延迟跳转到聊天页面
+      setTimeout(() => {
+        const params = new URLSearchParams({
+          type: 'group',
+          name: encodeURIComponent(chat.name),
+          address: chat.address || chat.id,
+          level: (chat.level || 1).toString(),
+          memberCount: (chat.memberCount || 0).toString(),
+          groupCondition: encodeURIComponent(chat.groupCondition || '')
+        });
+        router.push(`/chat/${chat.id}?${params.toString()}`);
+      }, 500);
+    } else {
+      console.error('❌ [加入群聊] 加入失败:', result.error);
+      toast({
+        title: '加入失败',
+        description: result.error || '请重试',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -333,7 +349,10 @@ function ChatListItem({
 
   return (
     // 将 <a> 标签替换为 div，并添加 onClick 事件
-    <div onClick={handleChatClick} className="block cursor-pointer">
+    <div
+      onClick={handleChatClick}
+      className={`block ${chat.isGroup && !chat.isJoined ? 'cursor-default' : 'cursor-pointer'}`}
+    >
       <div className="relative flex items-center p-3 bg-white">
         <div className="relative">
           <button
@@ -369,8 +388,38 @@ function ChatListItem({
 
         <div className="flex-1 ml-3 min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="font-medium text-sm truncate">{chat.name}</h3>
-            <span className="text-xs text-gray-400">{displayTime}</span>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <h3 className="font-medium text-sm truncate">
+                {chat.isGroup ? (
+                  <>
+                    {chat.name} Lv{chat.level}
+                  </>
+                ) : (
+                  chat.name
+                )}
+              </h3>
+              {/* 群聊加入按钮 - 放在群名后面 */}
+              {chat.isGroup && !chat.isJoined && (
+                <Button
+                  size="sm"
+                  className="h-6 text-xs px-3 flex-shrink-0"
+                  onClick={handleJoinClick}
+                  disabled={isJoining || !chat.canJoin}
+                  title={!chat.canJoin ? '暂无加入资格（proof 数据无效）' : ''}
+                >
+                  {isJoining ? '加入中...' : '加入'}
+                </Button>
+              )}
+              {/* 调试信息 - 显示状态 */}
+              {chat.isGroup && (
+                <span className="text-xs text-gray-400 ml-2">
+                  {chat.isJoined ? '(已加入)' : chat.canJoin ? '' : '(无资格)'}
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-gray-400 flex-shrink-0">
+              {displayTime}
+            </span>
           </div>
           <div className="flex items-center gap-1">
             <p className="text-xs leading-[1.3] text-gray-500 break-all font-mono tracking-tight">
@@ -390,6 +439,7 @@ function ChatListItem({
               </button>
             )}
           </div>
+
           {/* 下边框 */}
           <div className="border-t w-[calc(100%-5rem)] border-border absolute bottom-0"></div>
         </div>
@@ -422,7 +472,6 @@ function DropdownMenu() {
   const handleGroupChatClick = () => {
     setIsOpen(false);
     router.push('/chat/create-group');
-    console.log('✅ 创建群聊...');
   };
 
   const handleItemClick = () => {
