@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useWalletClient, usePublicClient } from 'wagmi';
 import communityABI from '@/contract/abi/community.json';
-import { ProofData } from '@/types/community';
+import { ProofData } from '@/lib/types/community';
 import { Abi } from 'viem';
 
 export function useJoinCommunity() {
