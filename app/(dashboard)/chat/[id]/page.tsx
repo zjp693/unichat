@@ -406,24 +406,6 @@ export default function ChatPage() {
       let newMessages: Message[] = [];
 
       if (chatType === 'private' && rawMessages && Array.isArray(rawMessages)) {
-        // 调试日志：检查获取到的消息
-        console.log('📨 获取到的原始消息:', {
-          totalMessages,
-          start,
-          count,
-          rawMessagesCount: rawMessages.length,
-          messages: rawMessages.map((msg) => ({
-            sender: msg.sender,
-            recipient: msg.recipient,
-            isCurrentUserSender:
-              msg.sender.toLowerCase() === currentAddress?.toLowerCase(),
-            isCurrentUserRecipient:
-              msg.recipient.toLowerCase() === currentAddress?.toLowerCase()
-          })),
-          currentAddress,
-          recipientAddress
-        });
-
         // 单聊：处理从链上获取的原始消息
         // 使用全局索引来生成唯一 ID，避免 key 重复
         newMessages = rawMessages.map((msg: DMMessage, index: number) => ({
@@ -439,12 +421,6 @@ export default function ChatPage() {
           originalContent: msg.content,
           recipient: msg.recipient
         }));
-
-        console.log('✅ 处理后的消息:', {
-          totalProcessed: newMessages.length,
-          userMessages: newMessages.filter((m) => m.sender === 'user').length,
-          otherMessages: newMessages.filter((m) => m.sender === 'other').length
-        });
       } else if (chatType === 'group') {
         // 群聊：区分邀请消息和正常聊天
         if (invitedMembersMessage) {
@@ -608,13 +584,6 @@ export default function ChatPage() {
     const senderPublicKey = keys[0].publicKey;
 
     // 2. 从链上实时获取对方的公钥（不缓存，保证最新）
-    console.log('📡 正在查询接收者公钥，接收者地址:', recipientAddress);
-    console.log('🔍 调试信息:', {
-      publicClient: publicClient,
-      hasPublicClient: !!publicClient,
-      contractAddress: DIRECT_MESSAGE_CONTRACT_ADDRESS,
-      recipientAddress: recipientAddress
-    });
 
     let recipientPublicKey: string;
     try {
