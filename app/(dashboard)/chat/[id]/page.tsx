@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 // 导入加密功能相关的模块
 import { KeyGenerationModal } from '@/components/chat/KeyGenerationModal';
 import { DecryptionModal } from '@/components/chat/DecryptionModal';
+import { MessageSendModeModal } from '@/components/chat/MessageSendModeModal';
 import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
 import { KeyPair, chatEncryption } from '@/lib/encryption';
 // 导入dayjs用于格式化时间
@@ -333,6 +334,8 @@ export default function ChatPage() {
   const [showPrivateChatSettingsPanel, setShowPrivateChatSettingsPanel] =
     useState(false); // <-- 新增状态变量
   const [isInitialLoad, setIsInitialLoad] = useState(true); // <-- 新增状态变量
+  const [showSendModeModal, setShowSendModeModal] = useState(false); // 群聊发送模式选择弹窗
+  const [pendingGroupMessage, setPendingGroupMessage] = useState(''); // 待发送的群聊消息
 
   // --- Refs 管理 ---
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -586,54 +589,11 @@ export default function ChatPage() {
       return;
     }
 
-    // 群聊发送逻辑（乐观更新）
+    // 群聊发送逻辑：先弹出模式选择弹窗
     if (chatType === 'group') {
-      const messageContent = inputMessage.trim();
-      const tempId = `temp-${Date.now()}`;
-
-      // 1. 乐观更新：立即显示消息
-      const optimisticMessage: Message = {
-        id: tempId,
-        sender: 'user',
-        content: messageContent,
-        timestamp: new Date(),
-        type: 'text',
-        isEncrypted: false,
-        originalContent: messageContent,
-        recipient: groupAddress as Address,
-        status: 'sending' // 标记为发送中
-      };
-
-      setMessages((prev) => [...prev, optimisticMessage]);
+      setPendingGroupMessage(inputMessage.trim());
       setInputMessage(''); // 清空输入框
-
-      // 滚动到底部
-      setTimeout(() => scrollToBottom('smooth'), 100);
-
-      try {
-        // 2. 发送到合约
-        await sendGroupMessage(messageContent);
-
-        // 3. 发送成功，移除 sending 状态
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === tempId ? { ...msg, status: undefined } : msg
-          )
-        );
-
-        // 消息会通过事件监听自动追加，届时会替换临时消息
-      } catch (error) {
-        console.error('❌ [发送群聊消息] 失败:', error);
-
-        // 4. 发送失败，标记为失败状态
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === tempId ? { ...msg, status: 'failed' } : msg
-          )
-        );
-
-        alert('发送消息失败，请重试');
-      }
+      setShowSendModeModal(true); // 显示模式选择弹窗
       return;
     }
 
@@ -973,6 +933,83 @@ export default function ChatPage() {
     setSelectedMessageId(messageId); // <-- 新增：设置被点击的消息ID
     // 直接打开解密弹窗
     setShowDecryptModal(true);
+  };
+
+  // 处理群聊发送模式选择
+  const handleSendModeSelect = async (mode: 'plaintext' | 'encrypted') => {
+    if (!pendingGroupMessage) return;
+
+    const messageContent = pendingGroupMessage;
+    const tempId = `temp-${Date.now()}`;
+    const isEncrypted = mode === 'encrypted';
+
+    // 如果选择密文，需要加密
+    let contentToSend = messageContent;
+    if (isEncrypted) {
+      // 检查用户是否有密钥
+      if (keys.length === 0) {
+        alert('密文发送需要先生成密钥对！');
+        setShowGenerationModal(true);
+        setPendingGroupMessage(''); // 清空待发送消息
+        return;
+      }
+
+      try {
+        // 使用用户的公钥加密（群聊中每个人用自己的私钥解密）
+        const userPublicKey = keys[0].publicKey;
+        contentToSend = encryptMessage(messageContent, userPublicKey);
+        console.log('✅ 群聊消息加密成功');
+      } catch (error) {
+        console.error('❌ 群聊消息加密失败:', error);
+        alert('加密失败，请重试');
+        setPendingGroupMessage(''); // 清空待发送消息
+        return;
+      }
+    }
+
+    // 1. 乐观更新：立即显示消息
+    const optimisticMessage: Message = {
+      id: tempId,
+      sender: 'user',
+      content: isEncrypted ? contentToSend : messageContent, // 显示加密后的内容或明文
+      timestamp: new Date(),
+      type: 'text',
+      isEncrypted: isEncrypted,
+      originalContent: messageContent, // 保存原始明文
+      recipient: groupAddress as Address,
+      status: 'sending' // 标记为发送中
+    };
+
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setPendingGroupMessage(''); // 清空待发送消息
+
+    // 滚动到底部
+    setTimeout(() => scrollToBottom('smooth'), 100);
+
+    try {
+      // 2. 发送到合约 (kind: 0=明文, 1=密文)
+      await sendGroupMessage(contentToSend, isEncrypted ? 1 : 0);
+
+      // 3. 发送成功，移除 sending 状态
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === tempId ? { ...msg, status: undefined } : msg
+        )
+      );
+
+      console.log(`✅ 群聊消息发送成功 (${isEncrypted ? '密文' : '明文'})`);
+    } catch (error) {
+      console.error('❌ [发送群聊消息] 失败:', error);
+
+      // 4. 发送失败，标记为失败状态
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === tempId ? { ...msg, status: 'failed' } : msg
+        )
+      );
+
+      alert('发送消息失败，请重试');
+    }
   };
 
   // 批量解密功能
@@ -1596,6 +1633,17 @@ export default function ChatPage() {
         onKeySelect={handleKeySelect}
         onBatchDecrypt={handleBatchDecrypt}
       />
+
+      {/* 群聊发送模式选择弹窗 */}
+      <MessageSendModeModal
+        isOpen={showSendModeModal}
+        onClose={() => {
+          setShowSendModeModal(false);
+          setPendingGroupMessage(''); // 取消时清空待发送消息
+        }}
+        onSelectMode={handleSendModeSelect}
+      />
+
       {/* 条件性渲染 GroupChatInfoPanel */}
       {showGroupInfoPanel && chatType === 'group' && (
         <GroupChatInfoPanel
