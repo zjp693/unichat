@@ -179,7 +179,7 @@ export default function ChatPage() {
             <p className="text-sm text-gray-400">暂无聊天记录</p>
           </div>
         ) : (
-          <div className="p-2">
+          <div className="p-1">
             {allChats.map((chat) => (
               <ChatListItem
                 key={chat.id}
@@ -353,7 +353,7 @@ function ChatListItem({
       onClick={handleChatClick}
       className={`block ${chat.isGroup && !chat.isJoined ? 'cursor-default' : 'cursor-pointer'}`}
     >
-      <div className="relative flex items-center p-3 bg-white">
+      <div className="relative flex items-center py-3 px-2 bg-white">
         <div className="relative">
           <button
             onClick={(e) => {
@@ -398,6 +398,12 @@ function ChatListItem({
                   chat.name
                 )}
               </h3>
+              {/* 群聊认证标识 */}
+              {chat.isGroup && (
+                <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] px-1 flex-shrink-0">
+                  认证
+                </div>
+              )}
               {/* 群聊加入按钮 - 放在群名后面 */}
               {chat.isGroup && !chat.isJoined && (
                 <Button
@@ -422,7 +428,7 @@ function ChatListItem({
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <p className="text-xs leading-[1.3] text-gray-500 break-all font-mono tracking-tight">
+            <p className="text-sm leading-[1.3] text-gray-500 break-all font-mono tracking-tight">
               {chat.lastMessage}
             </p>
             {!chat.copy && (
