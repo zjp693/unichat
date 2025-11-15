@@ -109,6 +109,16 @@ const DEFAULT_REGION = 'USA';
 const DEFAULT_LEVEL = 1;
 const DEFAULT_AVATAR = '/placeholder-user.jpg';
 
+// 等级对应的群条件金额
+const LEVEL_CONDITIONS: Record<number, string> = {
+  1: '群条件：>100$，才能在本群聊天',
+  2: '群条件：>1000$，才能在本群聊天',
+  3: '群条件：>10000$，才能在本群聊天',
+  4: '群条件：>100000$，才能在本群聊天',
+  5: '群条件：>1000000$，才能在本群聊天',
+  6: '群条件：>10000000$，才能在本群聊天'
+};
+
 // ==================== 子组件 ====================
 
 // 顶部区域组件
@@ -196,11 +206,12 @@ const BottomSection: React.FC<BottomSectionProps> = ({
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
-        {mode === 'group' && chatInfo.memberCount && (
+        {/* 消息数 暂时先不需要 */}
+        {/* {mode === 'group' && chatInfo.memberCount && (
           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 text-xs font-bold">
             {chatInfo.memberCount}
           </div>
-        )}
+        )} */}
       </div>
 
       {/* 中间：聊天信息 */}
@@ -247,7 +258,7 @@ const BottomSection: React.FC<BottomSectionProps> = ({
         </button>
 
         {/* 群条件 */}
-        {mode === 'group' && chatInfo.groupCondition && (
+        {mode === 'group' && chatInfo.level && (
           <div
             className={cn(
               'text-xs mt-0.5 px-2 py-0.5 rounded',
@@ -256,7 +267,7 @@ const BottomSection: React.FC<BottomSectionProps> = ({
                 : 'text-white bg-white/30'
             )}
           >
-            {chatInfo.groupCondition}
+            {LEVEL_CONDITIONS[chatInfo.level] || chatInfo.groupCondition}
           </div>
         )}
       </div>

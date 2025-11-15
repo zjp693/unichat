@@ -65,6 +65,8 @@ import { computeConvoId, Address, isValidEthereumAddress } from '@/lib/utils';
 import { useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel'; // <-- 导入 GroupChatInfoPanel 组件
 import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel'; // <-- 导入 PrivateChatSettingsPanel 组件
+import { useCommunityMessages } from '@/hooks/useCommunityMessages'; // <-- 导入群聊消息 hook
+import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage'; // <-- 导入群聊发送 hook
 
 // 定义消息对象的数据结构
 interface Message {
@@ -162,7 +164,7 @@ export default function ChatPage() {
     chatType === 'private' ? conversationId : ''
   ) as Address;
 
-  // --- 新增：使用封装的钩子获取消息总数和消息列表（仅私聊） ---
+  // --- 私聊：使用封装的钩子获取消息总数和消息列表 ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
     currentAddress as Address,
     recipientAddress, // <-- 使用动态接收者地址
@@ -174,6 +176,25 @@ export default function ChatPage() {
   );
 
   const totalMessages = totalMessagesBigInt ? Number(totalMessagesBigInt) : 0;
+
+  // --- 群聊：使用群聊消息 hooks ---
+  const {
+    messages: groupMessages,
+    totalCount: groupTotalCount,
+    isLoading: isGroupLoading,
+    refetch: refetchGroupMessages
+  } = useCommunityMessages(
+    groupAddress, // 群聊地址
+    currentAddress, // 当前用户地址
+    chatType === 'group' // 仅在群聊时启用
+  );
+
+  const {
+    sendMessage: sendGroupMessage,
+    isPending: isSendingGroupMessage,
+    isConfirmed: isGroupMessageConfirmed,
+    error: groupSendError
+  } = useSendCommunityMessage(groupAddress);
 
   // --- 用于加载范围计算的 Ref ---
   const currentLoadRangeRef = useRef<{ start: number; count: number } | null>(
@@ -320,6 +341,7 @@ export default function ChatPage() {
   const lastProcessedRangeRef = useRef<{ start: number; count: number } | null>(
     null
   ); // 跟踪上次处理的范围
+  const groupMessagesInitializedRef = useRef(false); // 跟踪群聊消息是否已初始化
 
   // --- 辅助函数 ---
   // 滚动到底部的辅助函数
@@ -448,8 +470,22 @@ export default function ChatPage() {
             }
           ];
         } else {
-          // 从聊天列表进入：显示正常群聊内容（暂时为空，等待后续实现群聊消息）
-          newMessages = [];
+          // 从聊天列表进入：只在首次初始化时设置消息
+          // 后续通过 hook 内部的事件监听增量更新
+          if (
+            !groupMessagesInitializedRef.current &&
+            groupMessages.length > 0
+          ) {
+            newMessages = groupMessages;
+            groupMessagesInitializedRef.current = true;
+          } else if (groupMessagesInitializedRef.current) {
+            // 已初始化，直接同步 hook 的状态（hook 内部已处理增量更新）
+            setMessages(groupMessages);
+            return;
+          } else {
+            // 还没有消息，等待
+            return;
+          }
         }
       }
 
@@ -507,7 +543,8 @@ export default function ChatPage() {
     conversationId,
     recipientAddress,
     start,
-    count
+    count,
+    groupMessages // 群聊消息作为依赖，但通过 ref 控制只初始化一次
   ]);
 
   // 4️⃣ 首次加载后滚动到底部
@@ -543,16 +580,64 @@ export default function ChatPage() {
     }
   }, [messages]); // 当 messages 更新时触发
 
-  // 发送新消息（加密 -> 乐观更新UI -> 调用合约上传）
+  // 发送新消息
   const handleSendMessage = async () => {
-    if (chatType === 'group') {
-      alert('此群聊功能暂不支持发送消息。因群聊需要另一个合约。'); // <-- 群聊拦截提示
-      return;
-    }
-
     if (!inputMessage.trim()) {
       return;
     }
+
+    // 群聊发送逻辑（乐观更新）
+    if (chatType === 'group') {
+      const messageContent = inputMessage.trim();
+      const tempId = `temp-${Date.now()}`;
+
+      // 1. 乐观更新：立即显示消息
+      const optimisticMessage: Message = {
+        id: tempId,
+        sender: 'user',
+        content: messageContent,
+        timestamp: new Date(),
+        type: 'text',
+        isEncrypted: false,
+        originalContent: messageContent,
+        recipient: groupAddress as Address,
+        status: 'sending' // 标记为发送中
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
+      setInputMessage(''); // 清空输入框
+
+      // 滚动到底部
+      setTimeout(() => scrollToBottom('smooth'), 100);
+
+      try {
+        // 2. 发送到合约
+        await sendGroupMessage(messageContent);
+
+        // 3. 发送成功，移除 sending 状态
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === tempId ? { ...msg, status: undefined } : msg
+          )
+        );
+
+        // 消息会通过事件监听自动追加，届时会替换临时消息
+      } catch (error) {
+        console.error('❌ [发送群聊消息] 失败:', error);
+
+        // 4. 发送失败，标记为失败状态
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === tempId ? { ...msg, status: 'failed' } : msg
+          )
+        );
+
+        alert('发送消息失败，请重试');
+      }
+      return;
+    }
+
+    // 私聊发送逻辑（保持原有逻辑）
 
     // 检查用户是否拥有密钥
     if (keys.length === 0) {
@@ -1074,7 +1159,7 @@ export default function ChatPage() {
         }}
       >
         <ScrollArea className="flex-1 w-full" ref={scrollAreaRef}>
-          <div className="p-4 space-y-5">
+          <div className="p-4 space-y-5 !pt-12">
             {/* 加载更多消息的指示器 - 现代渐变效果 */}
             {isFetchingMore && (
               <div className="flex justify-center items-center py-4">
@@ -1088,7 +1173,7 @@ export default function ChatPage() {
             )}
 
             {/* 空状态提示（仅群聊从列表进入时显示） */}
-            {messages.length === 0 &&
+            {/* {messages.length === 0 &&
               chatType === 'group' &&
               !invitedMembersMessage && (
                 <div className="flex flex-col items-center justify-center py-20">
@@ -1097,7 +1182,7 @@ export default function ChatPage() {
                     暂不支持发送和接收群聊消息
                   </p>
                 </div>
-              )}
+              )} */}
 
             {messages.map((message) => {
               if (message.type === 'system-time') {
@@ -1416,8 +1501,7 @@ export default function ChatPage() {
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             enterKeyHint="send"
-            placeholder={chatType === 'group' ? '群聊暂不支持发送消息' : ''} // <-- 动态 placeholder
-            disabled={chatType === 'group'} // <-- 群聊禁用输入框
+            placeholder=""
             className="flex-1 bg-white border-none rounded-sm min-h-[32px] max-h-[120px] px-1 py-2 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none overflow-y-auto" // 改为 textarea 样式
             autoComplete="off"
             rows={1}
