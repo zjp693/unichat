@@ -33,6 +33,8 @@ import { useChatListSync } from '@/hooks/useChatListSync';
 import { useCommunitiesWithStatus } from '@/hooks/useCommunities';
 import { useJoinCommunity } from '@/hooks/useJoinCommunity';
 import { CommunityWithStatus } from '@/lib/types/community';
+import { useProfileCheck } from '@/hooks/useProfileCheck';
+import { NewUserSetupModal } from '@/components/profile/NewUserSetupModal';
 
 interface ChatItem {
   id: string;
@@ -77,6 +79,17 @@ export default function ChatPage() {
   const router = useRouter();
   const { address: currentAddress, isConnected } = useAccount();
   const { toast } = useToast();
+
+  // 新用户检测
+  const { isNewUser, isLoading: isCheckingProfile } = useProfileCheck();
+  const [showSetupModal, setShowSetupModal] = useState(false);
+
+  // 检测新用户并显示设置弹窗
+  useEffect(() => {
+    if (isNewUser && !isCheckingProfile) {
+      setShowSetupModal(true);
+    }
+  }, [isNewUser, isCheckingProfile]);
 
   // 获取链上群聊数据
   const {
@@ -191,6 +204,20 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+
+      {/* 新用户设置弹窗 */}
+      <NewUserSetupModal
+        isOpen={showSetupModal}
+        onClose={() => setShowSetupModal(false)}
+        onSuccess={() => {
+          setShowSetupModal(false);
+          toast({
+            title: '欢迎加入 UniChat！',
+            description: '您的个人资料已创建成功',
+            variant: 'success'
+          });
+        }}
+      />
     </div>
   );
 }

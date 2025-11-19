@@ -1,23 +1,13 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import {
-  Wallet,
-  Heart,
-  Camera,
-  Settings,
-  Shield,
-  ChevronRight,
-  ChevronLeft,
-  QrCode,
-  Copy,
-  DollarSign
-} from 'lucide-react';
+import { ChevronRight, QrCode, Copy } from 'lucide-react';
 import Image from 'next/image';
-import { signOut } from '@/lib/auth';
 import { useAccount, useEnsName } from 'wagmi';
 import { useToast } from '@/hooks/use-toast';
+import { useUserProfiles, useProfile } from '@/hooks/useProfileCheck';
+import { getIPFSUrl } from '@/lib/pinata-upload';
 
 interface MenuItem {
   id: string;
@@ -31,9 +21,23 @@ interface MenuItem {
 }
 
 export default function MePage() {
+  const router = useRouter();
   const { address, isConnected, chain } = useAccount();
   const { data: ensName } = useEnsName({ address });
   const { toast } = useToast();
+
+  // 获取用户的 Profile
+  const { tokenIds } = useUserProfiles();
+  const firstTokenId =
+    tokenIds && tokenIds.length > 0 ? tokenIds[0] : undefined;
+  const { profile } = useProfile(firstTokenId);
+
+  // 从 Profile 获取头像和昵称
+  const profileData = profile as any;
+  const userName =
+    profileData?.name || ensName || (isConnected ? '钱包用户' : '未登录');
+  const avatarCid = profileData?.avatarCid || '';
+  const avatarUrl = avatarCid ? getIPFSUrl(avatarCid) : '/me/me.png';
 
   // 动态生成菜单数据
   const menuSections = [
@@ -151,13 +155,14 @@ export default function MePage() {
       {/* 个人信息卡片 */}
       <div className="mb-4 p-5 bg-white">
         <div className="flex items-center space-x-4">
-          <div className="relative">
-            <div className="h-16 w-16 rounded overflow-hidden">
-              <Image
-                src="/me/me.png"
-                alt="me"
-                width={64}
-                height={64}
+          <div
+            className="relative cursor-pointer"
+            onClick={() => router.push('/profile')}
+          >
+            <div className="h-16 w-16 rounded overflow-hidden hover:opacity-80 transition-opacity">
+              <img
+                src={avatarUrl}
+                alt="avatar"
                 className="h-full w-full object-cover"
               />
             </div>
@@ -167,9 +172,12 @@ export default function MePage() {
             )}
           </div>
 
-          <div className="flex-1">
-            <h2 className="text-xl font-semibold">
-              {ensName || (isConnected ? '钱包用户' : 'HANJJI ハンチ')}
+          <div
+            className="flex-1 cursor-pointer"
+            onClick={() => router.push('/profile')}
+          >
+            <h2 className="text-xl font-semibold hover:text-blue-600 transition-colors">
+              {userName}
             </h2>
             <div className="text-sm text-muted-foreground mt-1 flex items-center">
               {isConnected ? (
