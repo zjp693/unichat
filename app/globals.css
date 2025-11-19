@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 /* 确保html和body占满全屏 */
-html, body {
+html,
+body {
   height: 100%;
   width: 100%;
   margin: 0;
@@ -126,7 +127,9 @@ body {
 }
 
 /* 输入框和文本区域可以选择文本 */
-input, textarea, [contenteditable] {
+input,
+textarea,
+[contenteditable] {
   -webkit-user-select: text;
   -moz-user-select: text;
   -ms-user-select: text;
@@ -143,7 +146,8 @@ input, textarea, [contenteditable] {
 }
 
 /* 优化触摸响应 */
-button, .clickable {
+button,
+.clickable {
   touch-action: manipulation;
   -webkit-touch-callout: none;
 }
@@ -217,4 +221,20 @@ html.no-scroll body {
   100% {
     background-position: 200% 0;
   }
+}
+
+/* 底部弹出动画 */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
 }
