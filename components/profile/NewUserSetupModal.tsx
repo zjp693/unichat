@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Upload, Loader2 } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useWaitForTransactionReceipt } from 'wagmi';
 import {
@@ -15,7 +15,6 @@ import {
   buildMintProfileArgs,
   useDefaultAvatarCid
 } from '@/lib/UniChatProfileAbi';
-import { ImageCropModal } from './ImageCropModal';
 
 interface NewUserSetupModalProps {
   isOpen: boolean;
@@ -38,18 +37,13 @@ export function NewUserSetupModal({
   const [avatarPreview, setAvatarPreview] = useState<string>('');
   const [useDefaultAvatar, setUseDefaultAvatar] = useState(true);
 
-  // 裁剪相关状态
-  const [showCropModal, setShowCropModal] = useState(false);
-  const [imageToCrop, setImageToCrop] = useState<string>('');
-
   // 交易确认状态
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
 
   // 等待交易确认
-  const { isLoading: isConfirming, isSuccess: isConfirmed } =
-    useWaitForTransactionReceipt({
-      hash: txHash
-    });
+  const { isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash: txHash
+  });
 
   // 获取默认头像 URL
   const defaultAvatarUrl = defaultAvatarCid
@@ -75,7 +69,7 @@ export function NewUserSetupModal({
     }
   }, [isConfirmed, toast, onSuccess, onClose]);
 
-  // 处理头像选择
+  // 处理头像选择（直接上传，不裁剪）
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -97,40 +91,16 @@ export function NewUserSetupModal({
         return;
       }
 
-      // 读取图片并显示裁剪弹窗
+      // 直接设置文件和预览
+      setAvatarFile(file);
+      setUseDefaultAvatar(false);
+
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImageToCrop(reader.result as string);
-        setShowCropModal(true);
+        setAvatarPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  // 处理裁剪完成
-  const handleCropComplete = (croppedBlob: Blob) => {
-    // 将 Blob 转换为 File
-    const croppedFile = new File([croppedBlob], 'avatar.jpg', {
-      type: 'image/jpeg'
-    });
-
-    setAvatarFile(croppedFile);
-    setUseDefaultAvatar(false);
-
-    // 创建预览
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setAvatarPreview(reader.result as string);
-    };
-    reader.readAsDataURL(croppedFile);
-
-    setShowCropModal(false);
-  };
-
-  const handleUseDefaultAvatar = () => {
-    setAvatarFile(null);
-    setAvatarPreview('');
-    setUseDefaultAvatar(true);
   };
 
   const handleSubmit = async () => {
@@ -256,42 +226,30 @@ export function NewUserSetupModal({
                   <label className="block text-sm font-medium text-gray-700">
                     头像
                   </label>
-                  <div className="flex items-center gap-4">
-                    <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-                      {avatarPreview ? (
-                        <img
-                          src={avatarPreview}
-                          alt="Avatar preview"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <img
-                          src={defaultAvatarUrl}
-                          alt="Default avatar"
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg cursor-pointer hover:bg-blue-600 transition-colors">
-                        <Upload className="h-4 w-4 inline mr-1" />
-                        上传头像
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleAvatarChange}
-                          className="hidden"
-                        />
-                      </label>
-                      {!useDefaultAvatar && (
-                        <button
-                          onClick={handleUseDefaultAvatar}
-                          className="px-4 py-2 border border-gray-300 text-sm rounded-lg hover:bg-gray-50"
-                        >
-                          使用默认头像
-                        </button>
-                      )}
-                    </div>
+                  <div className="flex justify-center">
+                    <label className="cursor-pointer">
+                      <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center hover:opacity-80 transition-opacity">
+                        {avatarPreview ? (
+                          <img
+                            src={avatarPreview}
+                            alt="Avatar preview"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={defaultAvatarUrl}
+                            alt="Default avatar"
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleAvatarChange}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
                 </div>
 
@@ -302,14 +260,25 @@ export function NewUserSetupModal({
                   <input
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="请输入昵称 (1-64字节)"
-                    maxLength={64}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const bytes = new TextEncoder().encode(value).length;
+                      // 如果超过64字节，截断到64字节
+                      if (bytes > 64) {
+                        let truncated = value;
+                        while (
+                          new TextEncoder().encode(truncated).length > 64
+                        ) {
+                          truncated = truncated.slice(0, -1);
+                        }
+                        setName(truncated);
+                      } else {
+                        setName(value);
+                      }
+                    }}
+                    placeholder="请输入昵称"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500">
-                    {new TextEncoder().encode(name).length} / 64 字节
-                  </p>
                 </div>
               </>
             )}
@@ -337,20 +306,12 @@ export function NewUserSetupModal({
                 onClick={handleSubmit}
                 className="flex-1 px-4 py-3 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600"
               >
-                创建 Profile
+                确定
               </button>
             </div>
           )}
         </div>
       </div>
-
-      {/* 图片裁剪弹窗 */}
-      <ImageCropModal
-        isOpen={showCropModal}
-        imageSrc={imageToCrop}
-        onCropComplete={handleCropComplete}
-        onClose={() => setShowCropModal(false)}
-      />
     </>
   );
 }
