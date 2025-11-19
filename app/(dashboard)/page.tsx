@@ -17,13 +17,14 @@ import { TopNavbar } from '@/components/ui/top-navbar';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
 import dayjs from 'dayjs';
 import {
   useGetPeersOf,
   useCountReceivedTodayBetween
 } from '@/lib/DirectMessageAbi';
-import { Address } from 'viem';
+import { Address, Abi } from 'viem';
+import communityABI from '@/contract/abi/community.json';
 import { useToast } from '@/hooks/use-toast';
 import {
   usePeerLastMessage,
@@ -235,6 +236,19 @@ function ChatListItem({
   const { toast } = useToast();
   const { joinCommunity, isJoining } = useJoinCommunity();
 
+  // 获取群聊消息总数（只有已加入的群聊才获取）
+  const { data: groupMessageCountData } = useReadContract({
+    address: chat.isGroup && chat.isJoined ? (chat.id as Address) : undefined,
+    abi: communityABI.abi as Abi,
+    functionName: 'communityMessageCount',
+    query: {
+      enabled: chat.isGroup && chat.isJoined && !!chat.id
+    }
+  });
+  const groupMessageCount = groupMessageCountData
+    ? Number(groupMessageCountData)
+    : 0;
+
   // 获取私聊的最后消息时间
   const { timestamp } = usePeerLastMessage(
     !chat.isGroup && currentAddress ? currentAddress : undefined,
@@ -274,9 +288,11 @@ function ChatListItem({
   const displayTime =
     !chat.isGroup && timestamp ? formatMessageTime(timestamp) : chat.time;
 
-  // 决定显示的消息数：私聊显示今日消息数，群聊显示原有的 unreadCount
+  // 决定显示的消息数：私聊显示今日消息数，群聊显示消息总数（只有已加入的才显示）
   const displayUnreadCount = chat.isGroup
-    ? chat.unreadCount
+    ? chat.isJoined && groupMessageCount > 0
+      ? groupMessageCount
+      : undefined
     : todayCount > 0
       ? todayCount
       : undefined;
