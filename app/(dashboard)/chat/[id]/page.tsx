@@ -32,6 +32,8 @@ import { DecryptionModal } from '@/components/chat/DecryptionModal';
 import { MessageSendModeModal } from '@/components/chat/MessageSendModeModal';
 import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
 import { KeyPair, chatEncryption } from '@/lib/encryption';
+import { usePeerAvatar } from '@/hooks/usePeerProfile';
+import { Skeleton } from '@/components/ui/skeleton';
 // 导入dayjs用于格式化时间
 import dayjs from 'dayjs';
 import {
@@ -68,6 +70,7 @@ import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel'; // <-- �
 import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel'; // <-- 导入 PrivateChatSettingsPanel 组件
 import { useCommunityMessages } from '@/hooks/useCommunityMessages'; // <-- 导入群聊消息 hook
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage'; // <-- 导入群聊发送 hook
+import { GroupMessageAvatar } from '@/components/chat/GroupMessageAvatar'; // <-- 导入群聊头像组件
 
 // 定义消息对象的数据结构
 interface Message {
@@ -81,6 +84,7 @@ interface Message {
   // 从 DMMessage 手动复制的属性
   recipient: Address;
   content: string; // 确保 content 属性存在
+  senderAddress?: Address; // 群聊消息的发送者地址
 }
 
 // 定义布局常量
@@ -164,6 +168,17 @@ export default function ChatPage() {
   const recipientAddress: Address = (
     chatType === 'private' ? conversationId : ''
   ) as Address;
+
+  // 获取对方头像（仅私聊）
+  const {
+    avatarUrl: peerAvatarUrl,
+    name: peerName,
+    isLoading: isPeerAvatarLoading
+  } = usePeerAvatar(chatType === 'private' ? recipientAddress : undefined);
+
+  // 获取当前用户头像
+  const { avatarUrl: myAvatarUrl, isLoading: isMyAvatarLoading } =
+    usePeerAvatar(currentAddress as Address | undefined);
 
   // --- 私聊：使用封装的钩子获取消息总数和消息列表 ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
@@ -1274,16 +1289,50 @@ export default function ChatPage() {
                             );
                           }
                         }}
-                        className="cursor-pointer"
+                        className="cursor-pointer w-10 h-10 rounded-md overflow-hidden flex-shrink-0"
                       >
-                        <Image
-                          src="/placeholder-user.jpg"
-                          alt="Avatar"
-                          width={40}
-                          height={40}
-                          className="rounded-md flex-shrink-0"
-                        />
+                        {message.sender === 'other' ? (
+                          isPeerAvatarLoading ? (
+                            <Skeleton className="w-full h-full" />
+                          ) : (
+                            <Image
+                              src={peerAvatarUrl || '/me/me2.png'}
+                              alt="对方头像"
+                              width={40}
+                              height={40}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.src = '/me/me2.png';
+                              }}
+                            />
+                          )
+                        ) : isMyAvatarLoading ? (
+                          <Skeleton className="w-full h-full" />
+                        ) : (
+                          <Image
+                            src={myAvatarUrl || '/me/me1.png'}
+                            alt="我的头像"
+                            width={40}
+                            height={40}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = '/me/me1.png';
+                            }}
+                          />
+                        )}
                       </button>
+                    ) : // 群聊：根据消息的 senderAddress 动态获取头像
+                    message.senderAddress ? (
+                      <GroupMessageAvatar
+                        senderAddress={message.senderAddress}
+                        isCurrentUser={message.sender === 'user'}
+                        onClick={() => {
+                          // 点击头像跳转到成员资料页
+                          router.push(
+                            `/contacts/profile/${message.senderAddress}?type=nonfriend`
+                          );
+                        }}
+                      />
                     ) : (
                       <Image
                         src="/placeholder-user.jpg"
@@ -1307,30 +1356,32 @@ export default function ChatPage() {
                       {(message.isEncrypted || message.originalContent) && (
                         <div className="flex items-center justify-between mt-2 min-w-[12rem]">
                           <div className="flex items-center gap-2">
-                            {/* 解密按钮 - 只对接收者显示 */}
-                            {message.sender !== 'user' && (
-                              <button
-                                onClick={() => {
-                                  handleDecryptClick(message.id);
-                                }}
-                                disabled={!message.isEncrypted}
-                                className={cn(
-                                  'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
-                                  'bg-[#fef0ee]',
-                                  message.isEncrypted && 'hover:bg-black/20',
-                                  'disabled:opacity-80 disabled:cursor-not-allowed'
-                                )}
-                              >
-                                <Image
-                                  src="/chats/keyIcon.png"
-                                  alt="解密"
-                                  width={14}
-                                  height={14}
-                                  className="mr-1"
-                                />
-                                {message.isEncrypted ? '解密' : '已解密'}
-                              </button>
-                            )}
+                            {/* 解密按钮 - 只对接收者显示，且只在私聊或群聊密文时显示 */}
+                            {message.sender !== 'user' &&
+                              (chatType === 'private' ||
+                                message.isEncrypted) && (
+                                <button
+                                  onClick={() => {
+                                    handleDecryptClick(message.id);
+                                  }}
+                                  disabled={!message.isEncrypted}
+                                  className={cn(
+                                    'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                                    'bg-[#fef0ee]',
+                                    message.isEncrypted && 'hover:bg-black/20',
+                                    'disabled:opacity-80 disabled:cursor-not-allowed'
+                                  )}
+                                >
+                                  <Image
+                                    src="/chats/keyIcon.png"
+                                    alt="解密"
+                                    width={14}
+                                    height={14}
+                                    className="mr-1"
+                                  />
+                                  {message.isEncrypted ? '解密' : '已解密'}
+                                </button>
+                              )}
                             {/* 计数器按钮 */}
                             <div
                               className={cn(

@@ -22,6 +22,7 @@ interface Message {
   originalContent: string;
   isGroupMessage: boolean;
   status?: 'sending' | 'failed'; // 添加状态字段
+  senderAddress: Address; // 发送者地址（用于显示头像）
 }
 
 // 辅助函数：获取单条消息内容
@@ -113,7 +114,8 @@ export function useCommunityMessages(
           recipient: communityAddress as Address,
           isEncrypted: false,
           originalContent: msg.content,
-          isGroupMessage: true
+          isGroupMessage: true,
+          senderAddress: msg.sender // 添加发送者地址
         };
       }
     );
@@ -189,7 +191,8 @@ export function useCommunityMessages(
                 recipient: communityAddress as Address,
                 isEncrypted: false,
                 originalContent: '',
-                isGroupMessage: true
+                isGroupMessage: true,
+                senderAddress: sender as Address // 添加发送者地址
               };
               return [...prev, placeholderMessage];
             }
@@ -239,7 +242,8 @@ export function useCommunityMessages(
             recipient: communityAddress as Address,
             isEncrypted: false,
             originalContent: '',
-            isGroupMessage: true
+            isGroupMessage: true,
+            senderAddress: sender as Address // 添加发送者地址
           };
 
           console.log('➕ [群聊消息] 追加占位消息:', messageId);
