@@ -1,0 +1,154 @@
+/**
+ * 获取对方用户的 Profile 信息（包含头像）
+ * 使用 wagmi 的 useReadContract 自动缓存
+ */
+
+import { Address, Abi } from 'viem';
+import { useMemo, useEffect } from 'react';
+import { useReadContract } from 'wagmi';
+import {
+  UNICHAT_PROFILE_ADDRESS,
+  type ProfileView,
+  useDefaultAvatarCid
+} from '@/lib/UniChatProfileAbi';
+import UniChatProfileABI from '@/contract/abi/UniChatProfile.json';
+
+/**
+ * 获取单个对方的 Profile（两步查询）
+ * @param peerAddress 对方地址
+ * @returns Profile 信息（包含头像）
+ */
+export function usePeerProfile(peerAddress?: Address) {
+  // 第一步：获取对方的 tokenId 数组
+  const {
+    data: tokenIds,
+    isLoading: isLoadingTokenIds,
+    error: tokenIdsError
+  } = useReadContract({
+    address: UNICHAT_PROFILE_ADDRESS,
+    abi: UniChatProfileABI.abi as Abi,
+    functionName: 'getProfilesOf',
+    args: peerAddress ? [peerAddress] : undefined,
+    query: {
+      enabled: !!peerAddress,
+      staleTime: 0, // 临时设置为 0，强制每次都刷新
+      gcTime: 60 * 60 * 1000, // 60分钟
+      refetchOnWindowFocus: true, // 启用窗口聚焦刷新
+      refetchOnReconnect: true // 启用重连刷新
+    }
+  });
+
+  // 提取第一个 tokenId
+  const firstTokenId = useMemo(() => {
+    if (!tokenIds || !Array.isArray(tokenIds) || tokenIds.length === 0) {
+      return undefined;
+    }
+    return tokenIds[0] as bigint;
+  }, [tokenIds]);
+
+  // 第二步：获取 Profile 详情
+  const {
+    data: profile,
+    isLoading: isLoadingProfile,
+    error: profileError
+  } = useReadContract({
+    address: UNICHAT_PROFILE_ADDRESS,
+    abi: UniChatProfileABI.abi as Abi,
+    functionName: 'getProfile',
+    args: firstTokenId !== undefined ? [firstTokenId] : undefined,
+    query: {
+      enabled: firstTokenId !== undefined,
+      staleTime: 0, // 临时设置为 0，强制每次都刷新
+      gcTime: 60 * 60 * 1000, // 60分钟
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true
+    }
+  });
+
+  return {
+    profile: profile as ProfileView | undefined,
+    isLoading: isLoadingTokenIds || isLoadingProfile,
+    error: tokenIdsError || profileError,
+    hasProfile: !!profile
+  };
+}
+
+/**
+ * 在组件中批量获取多个对方的 Profile
+ * 注意：这个 hook 会为每个地址创建独立的查询
+ * @param peerAddress 单个对方地址
+ * @returns 包含头像 URL 的简化信息
+ */
+export function usePeerAvatar(peerAddress?: Address) {
+  const { profile, isLoading, error } = usePeerProfile(peerAddress);
+
+  // 获取合约的默认头像 CID
+  const { data: defaultAvatarCid } = useDefaultAvatarCid();
+
+  // // 调试日志
+  // useEffect(() => {
+  //   if (peerAddress) {
+  //     console.log('🔍 [usePeerAvatar] 查询头像:', {
+  //       peerAddress,
+  //       profile,
+  //       avatarCid: profile?.avatarCid,
+  //       isLoading,
+  //       error
+  //     });
+  //   }
+  // }, [peerAddress, profile, isLoading, error]);
+
+  // 构建 IPFS 头像 URL
+  const avatarUrl = useMemo(() => {
+    try {
+      // 如果有 Profile 且有头像，使用 Profile 头像
+      if (profile && profile.avatarCid && profile.avatarCid.trim()) {
+        const cid = profile.avatarCid.trim();
+
+        // 如果已经是完整 URL，直接返回
+        if (cid.startsWith('http://') || cid.startsWith('https://')) {
+          return cid;
+        }
+
+        // 如果是相对路径，直接返回
+        if (cid.startsWith('/')) {
+          return cid;
+        }
+
+        // 否则当作 IPFS CID，直接拼接 Pinata 网关
+        return `https://gateway.pinata.cloud/ipfs/${cid}`;
+      }
+
+      // 如果没有 Profile 或没有头像，使用合约默认头像
+      if (
+        defaultAvatarCid &&
+        typeof defaultAvatarCid === 'string' &&
+        defaultAvatarCid.trim()
+      ) {
+        const cid = defaultAvatarCid.trim();
+
+        if (
+          cid.startsWith('http://') ||
+          cid.startsWith('https://') ||
+          cid.startsWith('/')
+        ) {
+          return cid;
+        }
+
+        return `https://gateway.pinata.cloud/ipfs/${cid}`;
+      }
+    } catch (err) {
+      console.error('❌ [usePeerAvatar] 构建头像 URL 失败:', err);
+    }
+
+    // 最后的降级方案：本地默认头像
+    return '/me/me2.png';
+  }, [profile, defaultAvatarCid]);
+
+  return {
+    avatarUrl,
+    name: profile?.name,
+    isLoading,
+    error
+  };
+}

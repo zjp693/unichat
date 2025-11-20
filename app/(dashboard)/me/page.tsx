@@ -47,39 +47,51 @@ export default function MePage() {
           id: 'serve',
           title: 'Serve',
           icon: (
-            <Image src="/me/serve.png" alt="serve" width={30} height={30} />
+            <Image src="/me/serve.png" alt="serve" width={26} height={26} />
           ),
           type: 'group'
         },
         {
-          id: 'supply',
-          title: 'My supply',
-          icon: <Image src="/me/star.png" alt="star" width={30} height={30} />
-        },
-        {
-          id: 'collect',
-          title: 'collect',
-          icon: (
-            <Image src="/me/collect.png" alt="collect" width={30} height={30} />
-          )
-        },
-        {
-          id: 'video',
-          title: 'Video number',
+          id: 'detectionandDeauthorization',
+          title: 'Detection and Deauthorization',
           icon: (
             <Image
-              src="/me/video-call.png"
-              alt="video"
-              width={30}
-              height={30}
+              src="/me/detection.png"
+              alt="Deauthorization"
+              width={26}
+              height={26}
             />
           )
         },
         {
-          id: 'privateKey',
-          title: '私钥地址',
+          id: 'batchTransferCoins',
+          title: 'Batch Transfer Coins',
           icon: (
-            <Image src="/me/address.png" alt="address" width={30} height={30} />
+            <Image
+              src="/me/batch.png"
+              alt="Batch Transfer Coins"
+              width={26}
+              height={26}
+            />
+          )
+        },
+        {
+          id: 'muteGroupChatsList',
+          title: 'Muted Group Chats List',
+          icon: (
+            <Image
+              src="/me/muted.png"
+              alt="Muted Group Chats List"
+              width={26}
+              height={26}
+            />
+          )
+        },
+        {
+          id: 'keyStorage',
+          title: 'Key Storage',
+          icon: (
+            <Image src="/me/key.png" alt="address" width={26} height={26} />
           ),
           type: 'group'
         },
@@ -87,8 +99,9 @@ export default function MePage() {
           id: 'settings',
           title: 'Set up',
           icon: (
-            <Image src="/me/setting.png" alt="setting" width={30} height={30} />
-          )
+            <Image src="/me/setup.png" alt="setting" width={26} height={26} />
+          ),
+          type: 'group'
         }
       ]
     }
@@ -235,7 +248,7 @@ function MenuListItem({ item, isLast }: { item: MenuItem; isLast: boolean }) {
 
       <div className="flex-1">
         <div className="flex items-center justify-between">
-          <h3 className="font-medium text-sm">{item.title}</h3>
+          <h3 className="font-medium text-base">{item.title}</h3>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </div>
         {item.description && (
@@ -244,7 +257,7 @@ function MenuListItem({ item, isLast }: { item: MenuItem; isLast: boolean }) {
       </div>
       {/* 下边框 */}
       {!item.type && (
-        <div className="border-t w-[calc(100%-3.5rem)] border-border absolute bottom-0 right-0"></div>
+        <div className="border-t w-[calc(100%)] border-[#e9e9e9] absolute bottom-0 right-0"></div>
       )}
     </div>
   );
