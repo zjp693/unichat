@@ -36,6 +36,8 @@ import { useJoinCommunity } from '@/hooks/useJoinCommunity';
 import { CommunityWithStatus } from '@/lib/types/community';
 import { useProfileCheck } from '@/hooks/useProfileCheck';
 import { NewUserSetupModal } from '@/components/profile/NewUserSetupModal';
+import { usePeerAvatar } from '@/hooks/usePeerProfile';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ChatItem {
   id: string;
@@ -132,13 +134,14 @@ export default function ChatPage() {
   );
 
   // 将对端地址转换为 ChatItem
+  // 注意：头像将在 ChatListItem 组件中动态获取
   const privateChats: ChatItem[] = useMemo(() => {
     if (!peers || !Array.isArray(peers)) return [];
 
     return peers.map((peerAddress: Address) => ({
       id: peerAddress,
       name: `${peerAddress.slice(0, 6)}...${peerAddress.slice(-4)}`,
-      avatar: '/me/me2.png',
+      avatar: '/me/me2.png', // 默认头像，将在 ChatListItem 中被替换
       lastMessage: peerAddress, // 直接显示完整钱包地址
       time: '-',
       unreadCount: undefined, // 将由 ChatListItem 组件通过 useCountReceivedTodayBetween 动态获取
@@ -235,6 +238,36 @@ function ChatListItem({
   const router = useRouter();
   const { toast } = useToast();
   const { joinCommunity, isJoining } = useJoinCommunity();
+
+  // 获取对方头像（仅私聊）
+  const {
+    avatarUrl,
+    name: peerName,
+    isLoading: isLoadingAvatar
+  } = usePeerAvatar(!chat.isGroup ? (chat.id as Address) : undefined);
+
+  // 决定显示的头像和名称（确保始终有有效值）
+  const displayAvatar = useMemo(() => {
+    if (chat.isGroup) {
+      return chat.avatar || '/me/me1.png';
+    }
+    // 加载中显示默认头像，加载完成后显示真实头像
+    const finalAvatar = avatarUrl || chat.avatar || '/me/me2.png';
+    // console.log('🖼️ [displayAvatar]', {
+    //   chatId: chat.id,
+    //   avatarUrl,
+    //   finalAvatar,
+    //   isLoading: isLoadingAvatar
+    // });
+    return finalAvatar;
+  }, [chat.isGroup, chat.avatar, avatarUrl, chat.id, isLoadingAvatar]);
+
+  const displayName = useMemo(() => {
+    if (chat.isGroup) {
+      return chat.name;
+    }
+    return peerName || chat.name;
+  }, [chat.isGroup, chat.name, peerName]);
 
   // 获取群聊消息总数（只有已加入的群聊才获取）
   const { data: groupMessageCountData } = useReadContract({
@@ -416,13 +449,22 @@ function ChatListItem({
                 {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
               </Badge>
             )}
-            <Image
-              src={chat.avatar}
-              alt={chat.name}
-              width={48}
-              height={48}
-              className="h-full w-full object-cover"
-            />
+            {!chat.isGroup && isLoadingAvatar ? (
+              <Skeleton className="h-full w-full" />
+            ) : (
+              <Image
+                src={displayAvatar}
+                alt={displayName}
+                width={48}
+                height={48}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  console.error('❌ [Image] 加载失败:', displayAvatar);
+                  // 加载失败时使用默认头像
+                  e.currentTarget.src = '/me/me2.png';
+                }}
+              />
+            )}
           </button>
           {chat.isOnline && (
             <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-white rounded-full" />
@@ -432,15 +474,19 @@ function ChatListItem({
         <div className="flex-1 ml-3 min-w-0">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <h3 className="font-medium text-sm truncate">
-                {chat.isGroup ? (
-                  <>
-                    {chat.name} Lv{chat.level}
-                  </>
-                ) : (
-                  chat.name
-                )}
-              </h3>
+              {!chat.isGroup && isLoadingAvatar ? (
+                <Skeleton className="h-4 w-24" />
+              ) : (
+                <h3 className="font-medium text-sm truncate">
+                  {chat.isGroup ? (
+                    <>
+                      {chat.name} Lv{chat.level}
+                    </>
+                  ) : (
+                    displayName
+                  )}
+                </h3>
+              )}
               {/* 群聊认证标识 */}
               {chat.isGroup && (
                 <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] px-1 flex-shrink-0">
