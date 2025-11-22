@@ -506,15 +506,40 @@ export default function ChatPage() {
         } else {
           // 从聊天列表进入：只在首次初始化时设置消息
           // 后续通过 hook 内部的事件监听增量更新
-          if (
-            !groupMessagesInitializedRef.current &&
-            groupMessages.length > 0
-          ) {
+          if (!groupMessagesInitializedRef.current) {
+            // 首次初始化
             newMessages = groupMessages;
             groupMessagesInitializedRef.current = true;
           } else if (groupMessagesInitializedRef.current) {
-            // 已初始化，直接同步 hook 的状态（hook 内部已处理增量更新）
-            setMessages(groupMessages);
+            // 已初始化，合并 hook 的状态和本地状态（保留 status 字段和临时消息）
+            setMessages((prev) => {
+              // 创建一个 Map 来快速查找本地消息的 status
+              const localStatusMap = new Map<
+                string,
+                'sending' | 'failed' | undefined
+              >();
+              const tempMessages: Message[] = [];
+
+              prev.forEach((msg) => {
+                // 保存 status
+                if (msg.status) {
+                  localStatusMap.set(msg.id, msg.status);
+                }
+                // 保存临时消息（ID 以 temp- 开头的，还在发送中）
+                if (msg.id.startsWith('temp-') && msg.status) {
+                  tempMessages.push(msg);
+                }
+              });
+
+              // 合并 groupMessages，保留本地的 status
+              const merged = groupMessages.map((msg) => {
+                const localStatus = localStatusMap.get(msg.id);
+                return localStatus ? { ...msg, status: localStatus } : msg;
+              });
+
+              // 追加临时消息（避免丢失正在发送的消息）
+              return [...merged, ...tempMessages];
+            });
             return;
           } else {
             // 还没有消息，等待
@@ -822,24 +847,100 @@ export default function ChatPage() {
   // 处理交易确认后的状态更新
   useEffect(() => {
     if (isConfirmed && writeHash) {
-      // 消息已上链，更新UI状态
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === writeHash ? { ...msg, status: undefined } : msg
-        )
-      ); // 假设id是hash，实际需要更精确匹配
-      // TODO: 考虑如何精确匹配乐观更新的消息和链上确认的消息。
-      // 可以考虑在乐观更新时使用临时ID，然后通过事件监听匹配链上实际ID。
+      console.log('✅ 交易确认成功，hash:', writeHash);
+      // 消息已上链，找到最后一条 sending 状态的消息并更新
+      setMessages((prev) => {
+        const lastSendingIndex = prev.findLastIndex(
+          (msg) => msg.status === 'sending'
+        );
+        if (lastSendingIndex !== -1) {
+          console.log('✅ 更新消息状态为成功:', prev[lastSendingIndex].id);
+          return prev.map((msg, idx) =>
+            idx === lastSendingIndex ? { ...msg, status: undefined } : msg
+          );
+        }
+        return prev;
+      });
     }
     if (isReceiptError && writeHash) {
-      // 交易失败
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === writeHash ? { ...msg, status: 'failed' } : msg
-        )
-      );
+      console.log('❌ 交易上链失败，hash:', writeHash);
+      // 交易失败，找到最后一条 sending 状态的消息并标记为失败
+      setMessages((prev) => {
+        const lastSendingIndex = prev.findLastIndex(
+          (msg) => msg.status === 'sending'
+        );
+        if (lastSendingIndex !== -1) {
+          return prev.map((msg, idx) =>
+            idx === lastSendingIndex ? { ...msg, status: 'failed' } : msg
+          );
+        }
+        return prev;
+      });
     }
   }, [isConfirmed, isReceiptError, writeHash]);
+
+  // 🆕 监听私聊发送错误（包括用户取消交易）
+  useEffect(() => {
+    if (sendError && sendErrorMessage) {
+      console.log('❌ 交易发送失败或用户取消:', sendErrorMessage);
+
+      // 找到最后一条 sending 状态的消息，标记为失败
+      setMessages((prev) => {
+        const lastSendingIndex = prev.findLastIndex(
+          (msg) => msg.status === 'sending'
+        );
+        if (lastSendingIndex !== -1) {
+          return prev.map((msg, idx) =>
+            idx === lastSendingIndex ? { ...msg, status: 'failed' } : msg
+          );
+        }
+        return prev;
+      });
+    }
+  }, [sendError, sendErrorMessage]);
+
+  // 🆕 监听群聊交易确认
+  useEffect(() => {
+    if (chatType === 'group' && isGroupMessageConfirmed) {
+      console.log('✅ [群聊] 交易确认成功');
+      // 消息已上链，找到最后一条 sending 状态的消息并更新
+      setMessages((prev) => {
+        const lastSendingIndex = prev.findLastIndex(
+          (msg) => msg.status === 'sending'
+        );
+        if (lastSendingIndex !== -1) {
+          console.log(
+            '✅ [群聊] 更新消息状态为成功:',
+            prev[lastSendingIndex].id
+          );
+          return prev.map((msg, idx) =>
+            idx === lastSendingIndex ? { ...msg, status: undefined } : msg
+          );
+        }
+        return prev;
+      });
+    }
+  }, [chatType, isGroupMessageConfirmed]);
+
+  // 🆕 监听群聊发送错误（包括用户取消交易）
+  useEffect(() => {
+    if (chatType === 'group' && groupSendError) {
+      console.log('❌ [群聊] 交易发送失败或用户取消:', groupSendError);
+
+      // 找到最后一条 sending 状态的消息，标记为失败
+      setMessages((prev) => {
+        const lastSendingIndex = prev.findLastIndex(
+          (msg) => msg.status === 'sending'
+        );
+        if (lastSendingIndex !== -1) {
+          return prev.map((msg, idx) =>
+            idx === lastSendingIndex ? { ...msg, status: 'failed' } : msg
+          );
+        }
+        return prev;
+      });
+    }
+  }, [chatType, groupSendError]);
 
   // --- 其他交互逻辑 (useEffect, handlers) ---
 
@@ -1008,10 +1109,23 @@ export default function ChatPage() {
       isEncrypted: isEncrypted,
       originalContent: messageContent, // 保存原始明文
       recipient: groupAddress as Address,
-      status: 'sending' // 标记为发送中
+      status: 'sending', // 🆕 标记为发送中
+      senderAddress: currentAddress as Address // 🆕 群聊需要发送者地址
     };
 
-    setMessages((prev) => [...prev, optimisticMessage]);
+    console.log('🔵 [群聊] 创建乐观消息:', {
+      id: optimisticMessage.id,
+      sender: optimisticMessage.sender,
+      status: optimisticMessage.status,
+      senderAddress: optimisticMessage.senderAddress
+    });
+
+    setMessages((prev) => {
+      console.log('🔵 [群聊] 添加消息前 prev 数量:', prev.length);
+      const newMessages = [...prev, optimisticMessage];
+      console.log('🔵 [群聊] 添加消息后数量:', newMessages.length);
+      return newMessages;
+    });
     setPendingGroupMessage(''); // 清空待发送消息
 
     // 滚动到底部
@@ -1021,14 +1135,11 @@ export default function ChatPage() {
       // 2. 发送到合约 (kind: 0=明文, 1=密文)
       await sendGroupMessage(contentToSend, isEncrypted ? 1 : 0);
 
-      // 3. 发送成功，移除 sending 状态
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === tempId ? { ...msg, status: undefined } : msg
-        )
+      // 注意：不要立即移除 sending 状态
+      // 状态会在交易确认后通过 useEffect 自动更新
+      console.log(
+        `📤 群聊消息已提交到区块链 (${isEncrypted ? '密文' : '明文'})`
       );
-
-      console.log(`✅ 群聊消息发送成功 (${isEncrypted ? '密文' : '明文'})`);
     } catch (error) {
       console.error('❌ [发送群聊消息] 失败:', error);
 
@@ -1119,6 +1230,98 @@ export default function ChatPage() {
   const handleKeyGenerated = (key: KeyPair) => {
     // 仅保存密钥，不触发解密操作
     setShowGenerationModal(false);
+  };
+
+  // 🆕 重发失败的消息
+  const handleRetryMessage = async (failedMessage: Message) => {
+    console.log('🔄 [重发] 开始重发消息:', {
+      id: failedMessage.id,
+      chatType,
+      content: failedMessage.content.substring(0, 20)
+    });
+
+    // 1. 更新状态为发送中
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === failedMessage.id ? { ...msg, status: 'sending' } : msg
+      )
+    );
+
+    // 2. 根据聊天类型重新发送
+    if (chatType === 'private') {
+      // 私聊：重新调用发送逻辑
+      try {
+        if (!currentAddress || !recipientAddress) {
+          throw new Error('地址无效');
+        }
+
+        // 获取对方公钥
+        let recipientPublicKey: string;
+        if (!publicClient) {
+          throw new Error('Public client 未初始化');
+        }
+
+        const result = await publicClient.readContract({
+          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+          abi: DirectMessageAbi,
+          functionName: 'getPublicKeyOrDefault',
+          args: [recipientAddress as Address]
+        });
+
+        if (!result || (typeof result === 'string' && result.length === 0)) {
+          throw new Error('获取公钥失败');
+        }
+
+        recipientPublicKey = result as string;
+
+        // 加密消息（使用原始内容）
+        const encryptedContent = encryptMessage(
+          failedMessage.originalContent || failedMessage.content,
+          recipientPublicKey
+        );
+
+        // 发送到合约
+        writeContract({
+          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+          abi: DirectMessageAbi,
+          functionName: 'sendMessage',
+          args: [recipientAddress, encryptedContent],
+          account: currentAddress
+        });
+
+        console.log('✅ 重发消息已提交');
+      } catch (error: any) {
+        console.error('❌ 重发消息失败:', error);
+        // 失败后再次标记为 failed
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === failedMessage.id ? { ...msg, status: 'failed' } : msg
+          )
+        );
+        alert(`重发失败: ${error.message || '未知错误'}`);
+      }
+    } else {
+      // 群聊：重新调用群聊发送
+      try {
+        const isEncrypted = failedMessage.isEncrypted;
+        const contentToSend = isEncrypted
+          ? failedMessage.content
+          : failedMessage.originalContent || failedMessage.content;
+
+        await sendGroupMessage(contentToSend, isEncrypted ? 1 : 0);
+
+        // 注意：不要在这里立即清除 status！
+        // 如果交易成功，会通过区块链事件或其他方式清除
+        // 如果交易失败，会通过错误监听来设置为 failed
+      } catch (error: any) {
+        // 重发失败，设置状态为 failed
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === failedMessage.id ? { ...msg, status: 'failed' } : msg
+          )
+        );
+      }
+    }
   };
 
   // 处理滚动事件 - 使用 useEffect 监听 viewport 滚动
@@ -1372,88 +1575,125 @@ export default function ChatPage() {
                         className="rounded-md flex-shrink-0"
                       />
                     )}
-                    <div className="flex flex-col max-w-[75%]">
+
+                    <div className="flex flex-col max-w-[78%]">
                       {/* 群聊消息：显示发送者名称 */}
                       {chatType === 'group' &&
                         message.senderAddress &&
                         message.sender !== 'user' && (
                           <SenderName senderAddress={message.senderAddress} />
                         )}
+
+                      {/* 消息气泡和状态图标的容器 */}
                       <div
                         className={cn(
-                          'rounded-lg px-3 py-2 text-sm shadow-sm',
-                          message.sender === 'user'
-                            ? 'bg-[#5637f5] text-white'
-                            : 'bg-white text-black'
+                          'flex items-end gap-1',
+                          message.sender === 'user' ? 'flex-row' : 'flex-row'
                         )}
                       >
-                        <p className="whitespace-pre-wrap break-all">
-                          {message.content}
-                        </p>
-                        {(message.isEncrypted || message.originalContent) && (
-                          <div className="flex items-center justify-between mt-2 min-w-[12rem]">
-                            <div className="flex items-center gap-2">
-                              {/* 解密按钮 - 只对接收者显示，且只在私聊或群聊密文时显示 */}
-                              {message.sender !== 'user' &&
-                                (chatType === 'private' ||
-                                  message.isEncrypted) && (
-                                  <button
-                                    onClick={() => {
-                                      handleDecryptClick(message.id);
-                                    }}
-                                    disabled={!message.isEncrypted}
-                                    className={cn(
-                                      'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
-                                      'bg-[#fef0ee]',
-                                      message.isEncrypted &&
-                                        'hover:bg-black/20',
-                                      'disabled:opacity-80 disabled:cursor-not-allowed'
-                                    )}
-                                  >
-                                    <Image
-                                      src="/chats/keyIcon.png"
-                                      alt="解密"
-                                      width={14}
-                                      height={14}
-                                      className="mr-1"
-                                    />
-                                    {message.isEncrypted ? '解密' : '已解密'}
-                                  </button>
-                                )}
-                              {/* 计数器按钮 */}
-                              <div
-                                className={cn(
-                                  'flex items-center rounded-md px-2 py-1 text-xs font-medium',
-                                  message.sender === 'user'
-                                    ? 'bg-[#785ff7]'
-                                    : 'bg-[#e9f9ee]'
-                                )}
+                        {/* 🆕 消息状态图标占位 - 始终保留空间，避免布局跳动 */}
+                        {message.sender === 'user' && (
+                          <div className="flex items-end pb-0.5 flex-shrink-0 w-5 h-5">
+                            {/* 状态图标渲染 */}
+
+                            {message.status === 'sending' && (
+                              <Loader2 className="h-5 w-5 animate-spin text-gray-400 flex-shrink-0" />
+                            )}
+
+                            {message.status === 'failed' && (
+                              <button
+                                onClick={() => handleRetryMessage(message)}
+                                className="cursor-pointer hover:opacity-80 transition-opacity"
+                                title="点击重新发送"
                               >
                                 <Image
-                                  src="/chats/news.png"
-                                  alt="计数"
-                                  width={14}
-                                  height={14}
-                                  className="mr-1"
+                                  src="/chats/Sigh.png"
+                                  alt="发送失败"
+                                  width={20}
+                                  height={20}
+                                  className="flex-shrink-0"
                                 />
-                                156
-                              </div>
-                            </div>
-                            {/* 时间戳 */}
-                            <span
-                              className={cn(
-                                'text-xs pl-2',
-                                message.sender === 'user'
-                                  ? 'text-purple-200'
-                                  : 'text-gray-400'
-                              )}
-                            >
-                              {dayjs(message.timestamp).format(
-                                'MM/DD HH:mm:ss'
-                              )}
-                            </span>
+                              </button>
+                            )}
                           </div>
                         )}
+
+                        <div
+                          className={cn(
+                            'rounded-lg px-3 py-2 text-sm shadow-sm',
+                            message.sender === 'user'
+                              ? 'bg-[#5637f5] text-white'
+                              : 'bg-white text-black'
+                          )}
+                        >
+                          <p className="whitespace-pre-wrap break-all">
+                            {message.content}
+                          </p>
+                          {(message.isEncrypted || message.originalContent) && (
+                            <div className="flex items-center justify-between mt-2 min-w-[12rem]">
+                              <div className="flex items-center gap-2">
+                                {/* 解密按钮 - 只对接收者显示，且只在私聊或群聊密文时显示 */}
+                                {message.sender !== 'user' &&
+                                  (chatType === 'private' ||
+                                    message.isEncrypted) && (
+                                    <button
+                                      onClick={() => {
+                                        handleDecryptClick(message.id);
+                                      }}
+                                      disabled={!message.isEncrypted}
+                                      className={cn(
+                                        'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                                        'bg-[#fef0ee]',
+                                        message.isEncrypted &&
+                                          'hover:bg-black/20',
+                                        'disabled:opacity-80 disabled:cursor-not-allowed'
+                                      )}
+                                    >
+                                      <Image
+                                        src="/chats/keyIcon.png"
+                                        alt="解密"
+                                        width={14}
+                                        height={14}
+                                        className="mr-1"
+                                      />
+                                      {message.isEncrypted ? '解密' : '已解密'}
+                                    </button>
+                                  )}
+                                {/* 计数器按钮 */}
+                                <div
+                                  className={cn(
+                                    'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                                    message.sender === 'user'
+                                      ? 'bg-[#785ff7]'
+                                      : 'bg-[#e9f9ee]'
+                                  )}
+                                >
+                                  <Image
+                                    src="/chats/news.png"
+                                    alt="计数"
+                                    width={14}
+                                    height={14}
+                                    className="mr-1"
+                                  />
+                                  156
+                                </div>
+                              </div>
+                              {/* 时间戳 */}
+                              <span
+                                className={cn(
+                                  'text-xs pl-2',
+                                  message.sender === 'user'
+                                    ? 'text-purple-200'
+                                    : 'text-gray-400'
+                                )}
+                              >
+                                {dayjs(message.timestamp).format(
+                                  'MM/DD HH:mm:ss'
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
