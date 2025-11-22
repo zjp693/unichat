@@ -98,6 +98,19 @@ const MESSAGES_PER_LOAD = 15; // 每次加载15条消息
 
 // 已废弃：改为动态使用 conversationId 作为接收者地址
 // const CONTRACT_RECIPIENT_FOR_WAGMI: Address =
+
+// 发送者名称组件（用于群聊消息）
+function SenderName({ senderAddress }: { senderAddress: Address }) {
+  const { name } = usePeerAvatar(senderAddress);
+
+  const formatAddress = (addr: Address) => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
+  const displayName = name || formatAddress(senderAddress);
+
+  return <span className="text-xs text-gray-500 mb-1 px-1">{displayName}</span>;
+}
 //   '0xdDF2B78d9Cd8E2219d6a15bC9A3455f0aC056678';
 
 export default function ChatPage() {
@@ -162,6 +175,9 @@ export default function ChatPage() {
     ? decodeURIComponent(searchParams.get('name') as string)
     : null;
   const groupAddress = searchParams.get('address') || conversationId;
+  const groupAvatar = searchParams.get('avatar')
+    ? decodeURIComponent(searchParams.get('avatar') as string)
+    : null;
 
   // 验证并使用 conversationId 作为接收者地址（私聊时）
   // 群聊时使用空字符串，避免调用合约（空字符串会让钩子的 enabled 条件为 false）
@@ -1160,41 +1176,55 @@ export default function ChatPage() {
 
   return (
     // 根容器
-    <div className="bg-gray-100 w-full h-full relative">
+    <div className="bg-gray-100 w-full h-full relative ">
       {/* 固定的头部区域 */}
-      <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
-        {/* 使用新的聊天导航栏组件 */}
-        <ChatNavigationBar
-          mode={chatType}
-          chatInfo={{
-            name:
-              chatType === 'private'
-                ? `${recipientAddress.slice(0, 6)}...${recipientAddress.slice(-4)}`
-                : groupName || '未知群聊',
-            address: chatType === 'private' ? recipientAddress : groupAddress,
-            level: chatType === 'group' ? groupLevel : undefined,
-            memberCount: chatType === 'group' ? memberCount : undefined,
-            avatar: '/placeholder-user.jpg',
-            groupCondition: chatType === 'group' ? groupCondition : undefined
-          }}
-          topSection={{
-            regionCode: 'USA',
-            regionFlag: '/top/usa.png',
-            showWalletButton: true
-          }}
-          onBack={() => router.back()}
-          onMenuClick={() => {
-            if (chatType === 'group') {
-              setShowGroupInfoPanel(true);
-            } else if (chatType === 'private') {
-              setShowPrivateChatSettingsPanel(true);
-            }
-          }}
-          onAddressCopy={(address) => {
-            // 可以添加 toast 提示
-            console.log('地址已复制:', address);
-          }}
-        />
+      <div className="fixed top-0 left-0 right-0 bg-white z-10 shadow-sm">
+        {/* 群聊导航栏 - 只在群聊时显示 */}
+        {chatType === 'group' && (
+          <ChatNavigationBar
+            mode={chatType}
+            chatInfo={{
+              name: groupName || '未知群聊',
+              address: groupAddress,
+              level: groupLevel,
+              memberCount: memberCount,
+              avatar: groupAvatar || '/me/me1.png',
+              groupCondition: groupCondition
+            }}
+            topSection={{
+              regionCode: 'USA',
+              regionFlag: '/top/usa.png',
+              showWalletButton: true
+            }}
+            onBack={() => router.back()}
+            onMenuClick={() => setShowGroupInfoPanel(true)}
+            onAddressCopy={(address) => {
+              console.log('地址已复制:', address);
+            }}
+          />
+        )}
+
+        {/* 私聊导航栏 - 复用 ChatNavigationBar */}
+        {chatType === 'private' && (
+          <ChatNavigationBar
+            mode="private"
+            chatInfo={{
+              name: peerName || '未知用户',
+              address: recipientAddress,
+              avatar: peerAvatarUrl
+            }}
+            topSection={{
+              regionCode: 'USA',
+              regionFlag: '/top/usa.png',
+              showWalletButton: true
+            }}
+            onBack={() => router.back()}
+            onMenuClick={() => setShowPrivateChatSettingsPanel(true)}
+            onAddressCopy={(address) => {
+              console.log('地址已复制:', address);
+            }}
+          />
+        )}
       </div>
 
       {/* 滚动的内容区域 */}
@@ -1342,78 +1372,89 @@ export default function ChatPage() {
                         className="rounded-md flex-shrink-0"
                       />
                     )}
-                    <div
-                      className={cn(
-                        'max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm',
-                        message.sender === 'user'
-                          ? 'bg-[#5637f5] text-white'
-                          : 'bg-white text-black'
-                      )}
-                    >
-                      <p className="whitespace-pre-wrap break-all">
-                        {message.content}
-                      </p>
-                      {(message.isEncrypted || message.originalContent) && (
-                        <div className="flex items-center justify-between mt-2 min-w-[12rem]">
-                          <div className="flex items-center gap-2">
-                            {/* 解密按钮 - 只对接收者显示，且只在私聊或群聊密文时显示 */}
-                            {message.sender !== 'user' &&
-                              (chatType === 'private' ||
-                                message.isEncrypted) && (
-                                <button
-                                  onClick={() => {
-                                    handleDecryptClick(message.id);
-                                  }}
-                                  disabled={!message.isEncrypted}
-                                  className={cn(
-                                    'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
-                                    'bg-[#fef0ee]',
-                                    message.isEncrypted && 'hover:bg-black/20',
-                                    'disabled:opacity-80 disabled:cursor-not-allowed'
-                                  )}
-                                >
-                                  <Image
-                                    src="/chats/keyIcon.png"
-                                    alt="解密"
-                                    width={14}
-                                    height={14}
-                                    className="mr-1"
-                                  />
-                                  {message.isEncrypted ? '解密' : '已解密'}
-                                </button>
-                              )}
-                            {/* 计数器按钮 */}
-                            <div
+                    <div className="flex flex-col max-w-[75%]">
+                      {/* 群聊消息：显示发送者名称 */}
+                      {chatType === 'group' &&
+                        message.senderAddress &&
+                        message.sender !== 'user' && (
+                          <SenderName senderAddress={message.senderAddress} />
+                        )}
+                      <div
+                        className={cn(
+                          'rounded-lg px-3 py-2 text-sm shadow-sm',
+                          message.sender === 'user'
+                            ? 'bg-[#5637f5] text-white'
+                            : 'bg-white text-black'
+                        )}
+                      >
+                        <p className="whitespace-pre-wrap break-all">
+                          {message.content}
+                        </p>
+                        {(message.isEncrypted || message.originalContent) && (
+                          <div className="flex items-center justify-between mt-2 min-w-[12rem]">
+                            <div className="flex items-center gap-2">
+                              {/* 解密按钮 - 只对接收者显示，且只在私聊或群聊密文时显示 */}
+                              {message.sender !== 'user' &&
+                                (chatType === 'private' ||
+                                  message.isEncrypted) && (
+                                  <button
+                                    onClick={() => {
+                                      handleDecryptClick(message.id);
+                                    }}
+                                    disabled={!message.isEncrypted}
+                                    className={cn(
+                                      'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                                      'bg-[#fef0ee]',
+                                      message.isEncrypted &&
+                                        'hover:bg-black/20',
+                                      'disabled:opacity-80 disabled:cursor-not-allowed'
+                                    )}
+                                  >
+                                    <Image
+                                      src="/chats/keyIcon.png"
+                                      alt="解密"
+                                      width={14}
+                                      height={14}
+                                      className="mr-1"
+                                    />
+                                    {message.isEncrypted ? '解密' : '已解密'}
+                                  </button>
+                                )}
+                              {/* 计数器按钮 */}
+                              <div
+                                className={cn(
+                                  'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                                  message.sender === 'user'
+                                    ? 'bg-[#785ff7]'
+                                    : 'bg-[#e9f9ee]'
+                                )}
+                              >
+                                <Image
+                                  src="/chats/news.png"
+                                  alt="计数"
+                                  width={14}
+                                  height={14}
+                                  className="mr-1"
+                                />
+                                156
+                              </div>
+                            </div>
+                            {/* 时间戳 */}
+                            <span
                               className={cn(
-                                'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                                'text-xs pl-2',
                                 message.sender === 'user'
-                                  ? 'bg-[#785ff7]'
-                                  : 'bg-[#e9f9ee]'
+                                  ? 'text-purple-200'
+                                  : 'text-gray-400'
                               )}
                             >
-                              <Image
-                                src="/chats/news.png"
-                                alt="计数"
-                                width={14}
-                                height={14}
-                                className="mr-1"
-                              />
-                              156
-                            </div>
+                              {dayjs(message.timestamp).format(
+                                'MM/DD HH:mm:ss'
+                              )}
+                            </span>
                           </div>
-                          {/* 时间戳 */}
-                          <span
-                            className={cn(
-                              'text-xs pl-2',
-                              message.sender === 'user'
-                                ? 'text-purple-200'
-                                : 'text-gray-400'
-                            )}
-                          >
-                            {dayjs(message.timestamp).format('MM/DD HH:mm:ss')}
-                          </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

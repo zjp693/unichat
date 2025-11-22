@@ -187,7 +187,8 @@ export default function ChatPage() {
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
           </div>
-        ) : isPeersLoading || isCommunitiesLoading ? (
+        ) : (isPeersLoading || isCommunitiesLoading) &&
+          allChats.length === 0 ? (
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">加载中...</p>
           </div>
@@ -346,7 +347,8 @@ function ChatListItem({
         ...(chat.memberCount && { memberCount: chat.memberCount.toString() }),
         ...(chat.groupCondition && {
           groupCondition: encodeURIComponent(chat.groupCondition)
-        })
+        }),
+        ...(chat.avatar && { avatar: encodeURIComponent(chat.avatar) })
       });
       router.push(`/chat/${chat.id}?${params.toString()}`);
     } else {

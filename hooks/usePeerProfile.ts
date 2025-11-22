@@ -31,10 +31,10 @@ export function usePeerProfile(peerAddress?: Address) {
     args: peerAddress ? [peerAddress] : undefined,
     query: {
       enabled: !!peerAddress,
-      staleTime: 0, // 临时设置为 0，强制每次都刷新
-      gcTime: 60 * 60 * 1000, // 60分钟
-      refetchOnWindowFocus: true, // 启用窗口聚焦刷新
-      refetchOnReconnect: true // 启用重连刷新
+      staleTime: 24 * 60 * 60 * 1000, // 24小时内数据新鲜
+      gcTime: 7 * 24 * 60 * 60 * 1000, // 缓存保留7天
+      refetchOnWindowFocus: false, // 禁用窗口聚焦刷新
+      refetchOnReconnect: false // 禁用重连刷新
     }
   });
 
@@ -58,10 +58,10 @@ export function usePeerProfile(peerAddress?: Address) {
     args: firstTokenId !== undefined ? [firstTokenId] : undefined,
     query: {
       enabled: firstTokenId !== undefined,
-      staleTime: 0, // 临时设置为 0，强制每次都刷新
-      gcTime: 60 * 60 * 1000, // 60分钟
-      refetchOnWindowFocus: true,
-      refetchOnReconnect: true
+      staleTime: 24 * 60 * 60 * 1000, // 24小时内数据新鲜
+      gcTime: 7 * 24 * 60 * 60 * 1000, // 缓存保留7天
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
     }
   });
 

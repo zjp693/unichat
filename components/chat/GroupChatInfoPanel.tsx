@@ -22,33 +22,59 @@ export default function GroupChatInfoPanel({
   conversationId,
   chatType,
   memberCount,
-  onClose,
+  onClose
 }: GroupChatInfoPanelProps) {
   // 模拟数据
-  const groupName = conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊';
+  const groupName =
+    conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊';
   const members = [
     { id: 'u1', name: 'keyle', avatar: '/placeholder-user.jpg' },
     { id: 'u2', name: 'ktrt', avatar: '/placeholder-user.jpg' },
     { id: 'u3', name: 'kelno', avatar: '/placeholder-user.jpg' },
     { id: 'u4', name: 'ktty', avatar: '/placeholder-user.jpg' },
-    { id: 'u5', name: '你', avatar: '/placeholder-user.jpg' },
+    { id: 'u5', name: '你', avatar: '/placeholder-user.jpg' }
   ];
 
   // 新增：模拟 "我的群聊" 数据
   const myGroupsData = [
-    { id: 'g1', name: '闲聊吹水群', avatars: ['/placeholder-user.jpg', '/placeholder-user.jpg', '/placeholder-user.jpg'] },
-    { id: 'g2', name: '张总XX业务群', avatars: ['/placeholder-user.jpg', '/placeholder-user.jpg'] },
+    {
+      id: 'g1',
+      name: '闲聊吹水群',
+      avatars: [
+        '/placeholder-user.jpg',
+        '/placeholder-user.jpg',
+        '/placeholder-user.jpg'
+      ]
+    },
+    {
+      id: 'g2',
+      name: '张总XX业务群',
+      avatars: ['/placeholder-user.jpg', '/placeholder-user.jpg']
+    },
     { id: 'g3', name: '刘总XX业务群', avatars: ['/placeholder-user.jpg'] },
-    { id: 'g4', name: '何光XX业务群', avatars: ['/placeholder-user.jpg', '/placeholder-user.jpg', '/placeholder-user.jpg', '/placeholder-user.jpg'] },
+    {
+      id: 'g4',
+      name: '何光XX业务群',
+      avatars: [
+        '/placeholder-user.jpg',
+        '/placeholder-user.jpg',
+        '/placeholder-user.jpg',
+        '/placeholder-user.jpg'
+      ]
+    },
     { id: 'g5', name: '项目讨论群', avatars: ['/placeholder-user.jpg'] },
-    { id: 'g6', name: '家人群', avatars: ['/placeholder-user.jpg', '/placeholder-user.jpg'] },
+    {
+      id: 'g6',
+      name: '家人群',
+      avatars: ['/placeholder-user.jpg', '/placeholder-user.jpg']
+    }
   ];
 
   const [showAllMyGroups, setShowAllMyGroups] = React.useState(false); // 控制 "我的群聊" 列表展开/收起状态
   const displayedMyGroups = showAllMyGroups ? myGroupsData : []; // 修正：收起时一个也不展示
 
   return (
-    <div className="bg-gray-100 w-full h-full relative">
+    <div className="bg-gray-100 w-full h-full relative z-20">
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-20 bg-white shadow-sm">
         {/* 顶部钱包栏 - 简化，如果需要可以抽象为通用组件 */}
@@ -57,10 +83,16 @@ export default function GroupChatInfoPanel({
           style={{ height: `${TOP_BAR_HEIGHT}px` }}
         >
           <div className="flex items-center gap-2">
-            <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">BNB Chain</button>
+            <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">
+              BNB Chain
+            </button>
           </div>
-          <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">Connect wallet</button>
-          <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">🇺🇸 USA</button>
+          <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">
+            Connect wallet
+          </button>
+          <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">
+            🇺🇸 USA
+          </button>
         </div>
 
         {/* 页面标题栏 */}
@@ -68,7 +100,9 @@ export default function GroupChatInfoPanel({
           className="flex items-center justify-between px-4"
           style={{ height: `${NAV_BAR_HEIGHT}px` }}
         >
-          <Button variant="ghost" onClick={onClose}> {/* 修改返回按钮，调用 onClose */}
+          <Button variant="ghost" onClick={onClose}>
+            {' '}
+            {/* 修改返回按钮，调用 onClose */}
             <svg
               width="24"
               height="24"
@@ -97,18 +131,28 @@ export default function GroupChatInfoPanel({
         className="absolute w-full overflow-y-auto bg-white"
         style={{
           top: `${TOTAL_HEADER_HEIGHT}px`,
-          bottom: 0,
+          bottom: 0
         }}
       >
         <div className="p-4 space-y-4">
           {/* 群成员 */}
           <div className="bg-white rounded-lg p-4 shadow-sm">
-            <h2 className="text-lg font-semibold mb-3">群成员 ({memberCount})</h2>
+            <h2 className="text-lg font-semibold mb-3">
+              群成员 ({memberCount})
+            </h2>
             <div className="grid grid-cols-5 gap-y-4 text-center">
               {members.slice(0, 9).map((member) => (
                 <div key={member.id} className="flex flex-col items-center">
-                  <Image src={member.avatar} alt={member.name} width={40} height={40} className="rounded-md" />
-                  <span className="text-xs mt-1 truncate w-10">{member.name}</span>
+                  <Image
+                    src={member.avatar}
+                    alt={member.name}
+                    width={40}
+                    height={40}
+                    className="rounded-md"
+                  />
+                  <span className="text-xs mt-1 truncate w-10">
+                    {member.name}
+                  </span>
                 </div>
               ))}
               {memberCount > 9 && (
@@ -143,8 +187,13 @@ export default function GroupChatInfoPanel({
             </div>
             <div className="py-2">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-gray-700">我的群聊 ({myGroupsData.length})</span>
-                <button className="text-blue-500" onClick={() => setShowAllMyGroups(!showAllMyGroups)}>
+                <span className="text-gray-700">
+                  我的群聊 ({myGroupsData.length})
+                </span>
+                <button
+                  className="text-blue-500"
+                  onClick={() => setShowAllMyGroups(!showAllMyGroups)}
+                >
                   {showAllMyGroups ? '收起' : '展开所有群聊'}
                 </button>
               </div>
@@ -182,6 +231,7 @@ export default function GroupChatInfoPanel({
           </div>
 
           {/* 支付设置 */}
+
           <div className="bg-white rounded-lg p-4 shadow-sm space-y-4">
             <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
               <span className="text-gray-700">Group digital currency</span>

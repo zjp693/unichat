@@ -14,32 +14,44 @@ interface GroupMessageAvatarProps {
   onClick?: () => void;
 }
 
+// 格式化地址显示（前6位...后4位）
+export const formatAddress = (addr: Address) => {
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+};
+
+// 获取显示名称的 hook
+export const useDisplayName = (senderAddress: Address) => {
+  const { name } = usePeerAvatar(senderAddress);
+  return name || formatAddress(senderAddress);
+};
+
 export function GroupMessageAvatar({
   senderAddress,
   isCurrentUser,
   onClick
 }: GroupMessageAvatarProps) {
-  const { avatarUrl, isLoading } = usePeerAvatar(senderAddress);
+  const { avatarUrl, name, isLoading } = usePeerAvatar(senderAddress);
 
-  // 调试日志
-  // console.log('🖼️ [GroupMessageAvatar]', {
-  //   senderAddress,
-  //   avatarUrl,
-  //   isLoading,
-  //   isCurrentUser
-  // });
+  // 格式化地址显示（前6位...后4位）
+  const formatAddress = (addr: Address) => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
+  // 显示名称：优先使用 Profile 名称，否则显示格式化的地址
+  const displayName = name || formatAddress(senderAddress);
 
   return (
     <button
       onClick={onClick}
       className="cursor-pointer w-10 h-10 rounded-md overflow-hidden flex-shrink-0"
+      title={displayName}
     >
       {isLoading ? (
         <Skeleton className="w-full h-full" />
       ) : (
         <Image
           src={avatarUrl || (isCurrentUser ? '/me/me1.png' : '/me/me2.png')}
-          alt={isCurrentUser ? '我的头像' : '群成员头像'}
+          alt={displayName}
           width={40}
           height={40}
           className="w-full h-full object-cover"

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { ChevronLeft, MoreVertical, Copy } from 'lucide-react';
+import { ChevronLeft, MoreVertical, Copy, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
@@ -197,89 +197,123 @@ const BottomSection: React.FC<BottomSectionProps> = ({
         levelTheme.textColor
       )}
     >
-      {/* 左侧：返回按钮 + 成员数 */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={handleBack}
-          aria-label="返回聊天列表"
-          className="flex items-center justify-center w-10 h-10 rounded-full active:scale-95 transition-all duration-200"
-        >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-        {/* 消息数 暂时先不需要 */}
-        {/* {mode === 'group' && chatInfo.memberCount && (
+      {mode === 'private' ? (
+        <>
+          {/* 私聊模式布局 */}
+          <div className="flex-1 flex items-center justify-between">
+            {/* 左侧：返回按钮 */}
+            <button
+              onClick={handleBack}
+              aria-label="返回"
+              className="w-10 h-10 flex items-center justify-centen active:scale-95 transition-all"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+
+            {/* 中间：对方名称 */}
+            <div className="font-bold text-lg truncate px-4">
+              {chatInfo.name}
+            </div>
+
+            {/* 右侧：... 菜单 (私聊样式) */}
+            <button
+              // onClick={handleMenu}
+              aria-label="菜单"
+              className="w-10 h-10 flex items-center justify-center active:scale-95 transition-all"
+            >
+              <MoreHorizontal className="w-6 h-6" />
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* 群聊模式布局 (原有逻辑) */}
+          {/* 左侧：返回按钮 + 成员数 */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBack}
+              aria-label="返回聊天列表"
+              className="flex items-center justify-center w-10 h-10 rounded-full active:scale-95 transition-all duration-200"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            {/* 消息数 暂时先不需要 */}
+            {/* {mode === 'group' && chatInfo.memberCount && (
           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 text-xs font-bold">
             {chatInfo.memberCount}
           </div>
         )} */}
-      </div>
-
-      {/* 中间：聊天信息 */}
-      <div className="flex-1 flex flex-col items-center justify-center px-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          {/* 头像 */}
-          <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
-            <Image
-              src={
-                avatarError ? DEFAULT_AVATAR : chatInfo.avatar || DEFAULT_AVATAR
-              }
-              alt={chatInfo.name}
-              width={32}
-              height={32}
-              className="w-full h-full object-cover"
-              onError={() => setAvatarError(true)}
-            />
           </div>
 
-          {/* 名称 + 等级徽章 */}
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-bold truncate max-w-[150px]">
-              {chatInfo.name}
-            </span>
+          {/* 中间：聊天信息 */}
+          <div className="flex-1 flex flex-col items-center justify-center px-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              {/* 头像 */}
+              <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
+                <Image
+                  src={
+                    avatarError
+                      ? DEFAULT_AVATAR
+                      : chatInfo.avatar || DEFAULT_AVATAR
+                  }
+                  alt={chatInfo.name}
+                  width={32}
+                  height={32}
+                  className="w-full h-full object-cover"
+                  onError={() => setAvatarError(true)}
+                />
+              </div>
+
+              {/* 名称 + 等级徽章 */}
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm font-bold truncate max-w-[150px]">
+                  {chatInfo.name}
+                </span>
+                {mode === 'group' && chatInfo.level && (
+                  <div className="flex text-sm px-2 py-0.5">
+                    LV{chatInfo.level}(11)
+                    <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] ml-1 px-1">
+                      认证
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 钱包地址 */}
+            <button
+              onClick={handleAddressCopy}
+              aria-label={`复制地址 ${chatInfo.address}`}
+              className="flex items-center gap-1 text-xs font-mono tracking-tighter"
+            >
+              <span>{chatInfo.address}</span>
+              <Copy className="w-3 h-3" />
+            </button>
+
+            {/* 群条件 */}
             {mode === 'group' && chatInfo.level && (
-              <div className="flex text-sm px-2 py-0.5">
-                LV{chatInfo.level}(11)
-                <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] ml-1 px-1">
-                  认证
-                </div>
+              <div
+                className={cn(
+                  'text-xs mt-0.5 px-2 py-0.5 rounded',
+                  chatInfo.level === 1 || chatInfo.level === 4
+                    ? 'text-[#303133] bg-white/50'
+                    : 'text-white bg-white/30'
+                )}
+              >
+                {LEVEL_CONDITIONS[chatInfo.level] || chatInfo.groupCondition}
               </div>
             )}
           </div>
-        </div>
 
-        {/* 钱包地址 */}
-        <button
-          onClick={handleAddressCopy}
-          aria-label={`复制地址 ${chatInfo.address}`}
-          className="flex items-center gap-1 text-xs font-mono tracking-tighter"
-        >
-          <span>{chatInfo.address}</span>
-          <Copy className="w-3 h-3" />
-        </button>
-
-        {/* 群条件 */}
-        {mode === 'group' && chatInfo.level && (
-          <div
-            className={cn(
-              'text-xs mt-0.5 px-2 py-0.5 rounded',
-              chatInfo.level === 1 || chatInfo.level === 4
-                ? 'text-[#303133] bg-white/50'
-                : 'text-white bg-white/30'
-            )}
+          <button
+            onClick={handleMenu}
+            aria-label="打开菜单"
+            className="flex items-center justify-center w-10 h-10 rounded-full active:scale-95 transition-all duration-200"
           >
-            {LEVEL_CONDITIONS[chatInfo.level] || chatInfo.groupCondition}
-          </div>
-        )}
-      </div>
-
-      {/* 右侧：菜单按钮 */}
-      <button
-        onClick={handleMenu}
-        aria-label="打开菜单"
-        className="flex items-center justify-center w-10 h-10 rounded-full active:scale-95 transition-all duration-200"
-      >
-        <MoreVertical className="w-6 h-6 rotate-90" />
-      </button>
+            <MoreVertical className="w-6 h-6 rotate-90" />
+          </button>
+        </>
+      )}
     </div>
   );
 };
@@ -309,13 +343,18 @@ export const ChatNavigationBar = React.memo<ChatNavigationBarProps>(
     const showWalletButton = topSection?.showWalletButton ?? true;
 
     // 背景样式
-    const backgroundStyle = levelTheme.backgroundImage
-      ? {
-          backgroundImage: `url(${levelTheme.backgroundImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }
-      : { backgroundColor: levelTheme.backgroundColor };
+    const backgroundStyle = useMemo(() => {
+      if (mode === 'private') {
+        return { backgroundColor: '#ffffff' };
+      }
+      return levelTheme.backgroundImage
+        ? {
+            backgroundImage: `url(${levelTheme.backgroundImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }
+        : { backgroundColor: levelTheme.backgroundColor };
+    }, [mode, levelTheme]);
 
     return (
       <div className={cn('w-full', className)} style={backgroundStyle}>

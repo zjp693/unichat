@@ -55,17 +55,17 @@ export function NewUserSetupModal({
     if (isConfirmed) {
       toast({
         title: '设置成功！',
-        description: '您的 Profile 已创建',
+        description: '您的 NTF头像 已创建',
         variant: 'success'
       });
 
       onSuccess();
       onClose();
 
-      // 刷新页面以显示最新数据
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      // // 刷新页面以显示最新数据
+      // setTimeout(() => {
+      //   window.location.reload();
+      // }, 500);
     }
   }, [isConfirmed, toast, onSuccess, onClose]);
 
