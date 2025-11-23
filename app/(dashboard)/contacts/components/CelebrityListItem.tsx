@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import { Contact, formatNetWorth } from '@/lib/contacts';
-import { AvatarWithSkeleton } from './AvatarWithSkeleton';
 import type { CelebrityFromContract } from '@/lib/contacts';
 import { setSelectedCelebrityDirect } from '@/hooks/useSelectedCelebrity';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface CelebrityListItemProps {
   contact: Contact;
@@ -27,13 +27,11 @@ export function CelebrityListItem({
       ? contractData[dataIndex]
       : null;
 
-  // 构建头像URL：使用IPFS CID
-  const avatarUrl = originalData?.cid
-    ? `https://aqua-biological-spider-837.mypinata.cloud/ipfs/${originalData.cid}`
-    : contact.avatar; // 如果没有CID，使用默认头像
+  // 获取头像 CID
+  const avatarCid = originalData?.cid || '';
 
   // 构建带参数的跳转URL - 添加钱包地址参数
-  const detailUrl = `/celebrity/${contact.id}?name=${encodeURIComponent(contact.name)}&avatar=${encodeURIComponent(avatarUrl)}&address=${encodeURIComponent(contact.walletAddress)}`;
+  const detailUrl = `/celebrity/${contact.id}?name=${encodeURIComponent(contact.name)}&cid=${encodeURIComponent(avatarCid)}&address=${encodeURIComponent(contact.walletAddress)}`;
 
   const handleClick = () => {
     setSelectedCelebrityDirect(contact);
@@ -46,10 +44,13 @@ export function CelebrityListItem({
       >
         {/* 头像 */}
         <div className="w-12 h-12 rounded-lg mr-3 relative flex-shrink-0">
-          <AvatarWithSkeleton
-            src={avatarUrl}
+          <IPFSImg
+            src={avatarCid}
+            fallbackSrc={contact.avatar || '/me/default.png'}
             alt={contact.name}
-            className="w-full h-full"
+            className="w-full h-full rounded-lg object-cover"
+            enableLogging={false}
+            maxRetries={5}
           />
           {/* 认证徽章 */}
           <div className="absolute -bottom-1 -right-1">

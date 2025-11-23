@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   CommunityMetadata,
   UserCommunityStatus,
@@ -6,146 +6,90 @@ import {
   CommunitiesListResponse,
   UserStatusResponse
 } from '@/lib/types/community';
+import { useMemo } from 'react';
 
 /**
  * 获取所有群聊列表
  */
 export function useCommunitiesList() {
-  const [communities, setCommunities] = useState<CommunityMetadata[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: communities = [],
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['communities-list'],
+    queryFn: async () => {
+      console.log('🔍 [群聊列表] 开始获取群聊列表...');
+      const response = await fetch('/api/communities/list');
+      const result: CommunitiesListResponse = await response.json();
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function fetchCommunities() {
-      try {
-        console.log('🔍 [群聊列表] 开始获取群聊列表...');
-        setIsLoading(true);
-        const response = await fetch('/api/communities/list');
-        const result: CommunitiesListResponse = await response.json();
-
-        if (isCancelled) {
-          console.log('⚠️ [群聊列表] 请求已取消');
-          return;
-        }
-
-        console.log('📦 [群聊列表] API 返回结果:', {
-          success: result.success,
-          total: result.data?.total,
-          communities: result.data?.communities
-        });
-
-        if (result.success && result.data) {
-          console.log(
-            '✅ [群聊列表] 成功获取群聊列表:',
-            result.data.communities.length,
-            '个群聊'
-          );
-          setCommunities(result.data.communities);
-        } else {
-          console.error('❌ [群聊列表] 获取失败:', result.error);
-          setError(result.error || '获取群聊列表失败');
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          console.error('❌ [群聊列表] 网络错误:', err);
-          setError(err instanceof Error ? err.message : '网络错误');
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+      if (result.success && result.data) {
+        console.log(
+          '✅ [群聊列表] 成功获取群聊列表:',
+          result.data.communities.length,
+          '个群聊'
+        );
+        return result.data.communities;
+      } else {
+        console.error('❌ [群聊列表] 获取失败:', result.error);
+        throw new Error(result.error || '获取群聊列表失败');
       }
-    }
+    },
+    staleTime: 1000 * 60 * 5, // 5分钟缓存
+    refetchOnWindowFocus: false // 窗口聚焦时不自动刷新，避免频繁闪烁
+  });
 
-    fetchCommunities();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
-
-  return { communities, isLoading, error };
+  return {
+    communities,
+    isLoading,
+    error: error ? String(error) : null,
+    refetch
+  };
 }
 
 /**
  * 获取用户对所有群聊的状态（资格和加入状态）
  */
 export function useUserCommunityStatus(userAddress?: string) {
-  const [userStatus, setUserStatus] = useState<UserCommunityStatus[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const {
+    data: userStatus = [],
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['user-community-status', userAddress],
+    queryFn: async () => {
+      if (!userAddress) return [];
 
-  // 手动刷新函数
-  const refetch = () => {
-    console.log('🔄 [用户状态] 手动触发刷新');
-    setRefreshTrigger((prev) => prev + 1);
-  };
+      console.log('🔍 [用户状态] 开始查询用户状态:', userAddress);
+      const response = await fetch(
+        `/api/communities/user-status?address=${userAddress}`
+      );
+      const result: UserStatusResponse = await response.json();
 
-  useEffect(() => {
-    if (!userAddress) {
-      console.log('⚠️ [用户状态] 未连接钱包，跳过查询');
-      setUserStatus([]);
-      return;
-    }
-
-    // 使用标志位防止重复请求
-    let isCancelled = false;
-
-    async function fetchUserStatus() {
-      try {
-        console.log('🔍 [用户状态] 开始查询用户状态:', userAddress);
-        setIsLoading(true);
-        const response = await fetch(
-          `/api/communities/user-status?address=${userAddress}`
+      if (result.success && result.data) {
+        console.log(
+          '✅ [用户状态] 成功获取用户状态:',
+          result.data.communities.length,
+          '个群聊'
         );
-        const result: UserStatusResponse = await response.json();
-
-        // 如果组件已卸载或地址已变化，不更新状态
-        if (isCancelled) {
-          console.log('⚠️ [用户状态] 请求已取消');
-          return;
-        }
-
-        console.log('📦 [用户状态] API 返回结果:', {
-          success: result.success,
-          communities: result.data?.communities
-        });
-
-        if (result.success && result.data) {
-          console.log(
-            '✅ [用户状态] 成功获取用户状态:',
-            result.data.communities.length,
-            '个群聊'
-          );
-          setUserStatus(result.data.communities);
-        } else {
-          console.error('❌ [用户状态] 获取失败:', result.error);
-          setError(result.error || '获取用户状态失败');
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          console.error('❌ [用户状态] 网络错误:', err);
-          setError(err instanceof Error ? err.message : '网络错误');
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
+        return result.data.communities;
+      } else {
+        console.error('❌ [用户状态] 获取失败:', result.error);
+        throw new Error(result.error || '获取用户状态失败');
       }
-    }
+    },
+    enabled: !!userAddress,
+    staleTime: 1000 * 30 // 30秒缓存
+  });
 
-    fetchUserStatus();
-
-    // 清理函数：组件卸载或地址变化时取消请求
-    return () => {
-      isCancelled = true;
-    };
-  }, [userAddress, refreshTrigger]);
-
-  return { userStatus, isLoading, error, refetch };
+  return {
+    userStatus,
+    isLoading,
+    error: error ? String(error) : null,
+    refetch
+  };
 }
 
 /**
@@ -160,26 +104,19 @@ export function useCommunitiesWithStatus(userAddress?: string): {
   const {
     communities,
     isLoading: isCommunitiesLoading,
-    error: communitiesError
+    error: communitiesError,
+    refetch: refetchCommunities
   } = useCommunitiesList();
 
   const {
     userStatus,
     isLoading: isStatusLoading,
     error: statusError,
-    refetch
+    refetch: refetchStatus
   } = useUserCommunityStatus(userAddress);
 
-  const [communitiesWithStatus, setCommunitiesWithStatus] = useState<
-    CommunityWithStatus[]
-  >([]);
-
-  useEffect(() => {
-    if (!communities.length) {
-      console.log('⚠️ [合并数据] 群聊列表为空');
-      setCommunitiesWithStatus([]);
-      return;
-    }
+  const communitiesWithStatus = useMemo(() => {
+    if (!communities.length) return [];
 
     // 合并数据
     const merged = communities.map((community) => {
@@ -189,15 +126,6 @@ export function useCommunitiesWithStatus(userAddress?: string): {
           community.communityAddress.toLowerCase()
       );
 
-      // console.log(`🔍 [合并数据] 处理群聊 ${community.name}:`, {
-      //   communityAddress: community.communityAddress,
-      //   hasStatus: !!status,
-      //   canJoin: status?.canJoin,
-      //   isJoined: status?.isJoined,
-      //   hasProofData: !!status?.proofData,
-      //   proofLength: status?.proofData?.proof?.length
-      // });
-
       return {
         ...community,
         canJoin: status?.canJoin || false,
@@ -206,16 +134,13 @@ export function useCommunitiesWithStatus(userAddress?: string): {
       };
     });
 
-    console.log('✅ [合并数据] 合并完成，总共', merged.length, '个群聊');
-    console.log('   - 可加入:', merged.filter((c) => c.canJoin).length, '个');
-    console.log('   - 已加入:', merged.filter((c) => c.isJoined).length, '个');
-    console.log(
-      '   - 无资格:',
-      merged.filter((c) => !c.canJoin && !c.isJoined).length,
-      '个'
-    );
-    setCommunitiesWithStatus(merged);
+    return merged;
   }, [communities, userStatus]);
+
+  const refetch = () => {
+    refetchCommunities();
+    refetchStatus();
+  };
 
   return {
     communities: communitiesWithStatus,

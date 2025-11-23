@@ -7,14 +7,14 @@ import { useWaitForTransactionReceipt } from 'wagmi';
 import {
   uploadImageToPinata,
   uploadMetadataToPinata,
-  createNFTMetadata,
-  getIPFSUrl
+  createNFTMetadata
 } from '@/lib/pinata-upload';
 import {
   useUniChatProfileWrite,
   buildMintProfileArgs,
   useDefaultAvatarCid
 } from '@/lib/UniChatProfileAbi';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface NewUserSetupModalProps {
   isOpen: boolean;
@@ -45,27 +45,27 @@ export function NewUserSetupModal({
     hash: txHash
   });
 
-  // 获取默认头像 URL
-  const defaultAvatarUrl = defaultAvatarCid
-    ? getIPFSUrl(defaultAvatarCid as string)
-    : '/me/default.jpg';
+  // 获取默认头像 CID
+  const defaultAvatarCidStr = defaultAvatarCid
+    ? (defaultAvatarCid as string)
+    : '';
 
   // 监听交易确认
   useEffect(() => {
     if (isConfirmed) {
       toast({
         title: '设置成功！',
-        description: '您的 Profile 已创建',
+        description: '您的 NTF头像 已创建',
         variant: 'success'
       });
 
       onSuccess();
       onClose();
 
-      // 刷新页面以显示最新数据
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
+      // // 刷新页面以显示最新数据
+      // setTimeout(() => {
+      //   window.location.reload();
+      // }, 500);
     }
   }, [isConfirmed, toast, onSuccess, onClose]);
 
@@ -236,10 +236,13 @@ export function NewUserSetupModal({
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <img
-                            src={defaultAvatarUrl}
+                          <IPFSImg
+                            src={defaultAvatarCidStr}
+                            fallbackSrc="/me/default.jpg"
                             alt="Default avatar"
                             className="w-full h-full object-cover"
+                            enableLogging={false}
+                            maxRetries={5}
                           />
                         )}
                       </div>

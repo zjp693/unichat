@@ -4,7 +4,7 @@
  */
 
 import { Address, Abi } from 'viem';
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useReadContract } from 'wagmi';
 import {
   UNICHAT_PROFILE_ADDRESS,
@@ -12,6 +12,7 @@ import {
   useDefaultAvatarCid
 } from '@/lib/UniChatProfileAbi';
 import UniChatProfileABI from '@/contract/abi/UniChatProfile.json';
+import { buildIPFSUrl } from '@/lib/ipfs-gateways';
 
 /**
  * 获取单个对方的 Profile（两步查询）
@@ -31,10 +32,10 @@ export function usePeerProfile(peerAddress?: Address) {
     args: peerAddress ? [peerAddress] : undefined,
     query: {
       enabled: !!peerAddress,
-      staleTime: 0, // 临时设置为 0，强制每次都刷新
-      gcTime: 60 * 60 * 1000, // 60分钟
-      refetchOnWindowFocus: true, // 启用窗口聚焦刷新
-      refetchOnReconnect: true // 启用重连刷新
+      staleTime: 24 * 60 * 60 * 1000, // 24小时内数据新鲜
+      gcTime: 7 * 24 * 60 * 60 * 1000, // 缓存保留7天
+      refetchOnWindowFocus: false, // 禁用窗口聚焦刷新
+      refetchOnReconnect: false // 禁用重连刷新
     }
   });
 
@@ -58,10 +59,10 @@ export function usePeerProfile(peerAddress?: Address) {
     args: firstTokenId !== undefined ? [firstTokenId] : undefined,
     query: {
       enabled: firstTokenId !== undefined,
-      staleTime: 0, // 临时设置为 0，强制每次都刷新
-      gcTime: 60 * 60 * 1000, // 60分钟
-      refetchOnWindowFocus: true,
-      refetchOnReconnect: true
+      staleTime: 24 * 60 * 60 * 1000, // 24小时内数据新鲜
+      gcTime: 7 * 24 * 60 * 60 * 1000, // 缓存保留7天
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
     }
   });
 
@@ -77,7 +78,7 @@ export function usePeerProfile(peerAddress?: Address) {
  * 在组件中批量获取多个对方的 Profile
  * 注意：这个 hook 会为每个地址创建独立的查询
  * @param peerAddress 单个对方地址
- * @returns 包含头像 URL 的简化信息
+ * @returns 包含头像 CID 和 URL 的简化信息
  */
 export function usePeerAvatar(peerAddress?: Address) {
   const { profile, isLoading, error } = usePeerProfile(peerAddress);
@@ -85,38 +86,12 @@ export function usePeerAvatar(peerAddress?: Address) {
   // 获取合约的默认头像 CID
   const { data: defaultAvatarCid } = useDefaultAvatarCid();
 
-  // // 调试日志
-  // useEffect(() => {
-  //   if (peerAddress) {
-  //     console.log('🔍 [usePeerAvatar] 查询头像:', {
-  //       peerAddress,
-  //       profile,
-  //       avatarCid: profile?.avatarCid,
-  //       isLoading,
-  //       error
-  //     });
-  //   }
-  // }, [peerAddress, profile, isLoading, error]);
-
-  // 构建 IPFS 头像 URL
-  const avatarUrl = useMemo(() => {
+  // 获取头像 CID
+  const avatarCid = useMemo(() => {
     try {
       // 如果有 Profile 且有头像，使用 Profile 头像
       if (profile && profile.avatarCid && profile.avatarCid.trim()) {
-        const cid = profile.avatarCid.trim();
-
-        // 如果已经是完整 URL，直接返回
-        if (cid.startsWith('http://') || cid.startsWith('https://')) {
-          return cid;
-        }
-
-        // 如果是相对路径，直接返回
-        if (cid.startsWith('/')) {
-          return cid;
-        }
-
-        // 否则当作 IPFS CID，直接拼接 Pinata 网关
-        return `https://gateway.pinata.cloud/ipfs/${cid}`;
+        return profile.avatarCid.trim();
       }
 
       // 如果没有 Profile 或没有头像，使用合约默认头像
@@ -125,27 +100,25 @@ export function usePeerAvatar(peerAddress?: Address) {
         typeof defaultAvatarCid === 'string' &&
         defaultAvatarCid.trim()
       ) {
-        const cid = defaultAvatarCid.trim();
-
-        if (
-          cid.startsWith('http://') ||
-          cid.startsWith('https://') ||
-          cid.startsWith('/')
-        ) {
-          return cid;
-        }
-
-        return `https://gateway.pinata.cloud/ipfs/${cid}`;
+        return defaultAvatarCid.trim();
       }
     } catch (err) {
-      console.error('❌ [usePeerAvatar] 构建头像 URL 失败:', err);
+      console.error('❌ [usePeerAvatar] 获取头像 CID 失败:', err);
     }
 
-    // 最后的降级方案：本地默认头像
-    return '/me/me2.png';
+    return '';
   }, [profile, defaultAvatarCid]);
 
+  // 构建 IPFS 头像 URL（用于向后兼容）
+  const avatarUrl = useMemo(() => {
+    if (avatarCid) {
+      return buildIPFSUrl(avatarCid);
+    }
+    return '/me/me2.png';
+  }, [avatarCid]);
+
   return {
+    avatarCid,
     avatarUrl,
     name: profile?.name,
     isLoading,
