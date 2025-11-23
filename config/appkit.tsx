@@ -6,6 +6,7 @@ import {
   // bsc
 } from '@reown/appkit/networks';
 import type { Chain } from 'viem';
+import { http, fallback } from 'viem';
 
 // 从环境变量读取项目 ID
 export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
@@ -28,12 +29,30 @@ export const networks: [Chain, ...Chain[]] = [
   // bsc
 ];
 
+// 🔧 配置多个RPC节点（已验证可用，中国大陆可访问）
+const arbitrumRpcUrls = [
+  'https://arb1.arbitrum.io/rpc', // Arbitrum官方RPC（已验证可用）
+  'https://arbitrum-one.publicnode.com' // PublicNode（已验证可用）
+];
+
 // 创建 Wagmi 适配器实例
 export const wagmiAdapter = new WagmiAdapter({
   storage: createStorage({ storage: cookieStorage }), // 使用 cookieStorage 支持 SSR
   ssr: true, // 启用 SSR 支持
   projectId,
   networks, // 传递显式类型化的网络数组
+  // 🔧 配置自定义传输层（使用多个RPC节点，自动故障转移）
+  transports: {
+    [arbitrum.id]: fallback(
+      arbitrumRpcUrls.map((url) =>
+        http(url, {
+          batch: true, // 启用批量请求
+          retryCount: 3, // 失败重试3次
+          timeout: 10_000 // 10秒超时
+        })
+      )
+    )
+  },
   pollingInterval: 8_000 // 设置全局轮询间隔为 8 秒
 });
 
