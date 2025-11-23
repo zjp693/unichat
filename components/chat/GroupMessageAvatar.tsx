@@ -5,8 +5,8 @@
 
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { Skeleton } from '@/components/ui/skeleton';
-import Image from 'next/image';
 import { Address } from 'viem';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface GroupMessageAvatarProps {
   senderAddress: Address;
@@ -30,7 +30,7 @@ export function GroupMessageAvatar({
   isCurrentUser,
   onClick
 }: GroupMessageAvatarProps) {
-  const { avatarUrl, name, isLoading } = usePeerAvatar(senderAddress);
+  const { avatarCid, name, isLoading } = usePeerAvatar(senderAddress);
 
   // 格式化地址显示（前6位...后4位）
   const formatAddress = (addr: Address) => {
@@ -39,6 +39,8 @@ export function GroupMessageAvatar({
 
   // 显示名称：优先使用 Profile 名称，否则显示格式化的地址
   const displayName = name || formatAddress(senderAddress);
+
+  const fallbackSrc = isCurrentUser ? '/me/me1.png' : '/me/me2.png';
 
   return (
     <button
@@ -49,15 +51,13 @@ export function GroupMessageAvatar({
       {isLoading ? (
         <Skeleton className="w-full h-full" />
       ) : (
-        <Image
-          src={avatarUrl || (isCurrentUser ? '/me/me1.png' : '/me/me2.png')}
+        <IPFSImg
+          src={avatarCid}
+          fallbackSrc={fallbackSrc}
           alt={displayName}
-          width={40}
-          height={40}
           className="w-full h-full object-cover"
-          onError={(e) => {
-            e.currentTarget.src = isCurrentUser ? '/me/me1.png' : '/me/me2.png';
-          }}
+          enableLogging={false}
+          maxRetries={5}
         />
       )}
     </button>

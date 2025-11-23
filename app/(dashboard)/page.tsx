@@ -36,8 +36,9 @@ import { useJoinCommunity } from '@/hooks/useJoinCommunity';
 import { CommunityWithStatus } from '@/lib/types/community';
 import { useProfileCheck } from '@/hooks/useProfileCheck';
 import { NewUserSetupModal } from '@/components/profile/NewUserSetupModal';
-import { usePeerAvatar } from '@/hooks/usePeerProfile';
+import { usePeerProfile } from '@/hooks/usePeerProfile';
 import { Skeleton } from '@/components/ui/skeleton';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface ChatItem {
   id: string;
@@ -240,35 +241,25 @@ function ChatListItem({
   const { toast } = useToast();
   const { joinCommunity, isJoining } = useJoinCommunity();
 
-  // 获取对方头像（仅私聊）
-  const {
-    avatarUrl,
-    name: peerName,
-    isLoading: isLoadingAvatar
-  } = usePeerAvatar(!chat.isGroup ? (chat.id as Address) : undefined);
+  // 获取对方 Profile（仅私聊）
+  const { profile, isLoading: isLoadingProfile } = usePeerProfile(
+    !chat.isGroup ? (chat.id as Address) : undefined
+  );
 
-  // 决定显示的头像和名称（确保始终有有效值）
-  const displayAvatar = useMemo(() => {
+  // 提取头像 CID 和名称
+  const avatarCid = useMemo(() => {
     if (chat.isGroup) {
-      return chat.avatar || '/me/me1.png';
+      return chat.avatar || '';
     }
-    // 加载中显示默认头像，加载完成后显示真实头像
-    const finalAvatar = avatarUrl || chat.avatar || '/me/me2.png';
-    // console.log('🖼️ [displayAvatar]', {
-    //   chatId: chat.id,
-    //   avatarUrl,
-    //   finalAvatar,
-    //   isLoading: isLoadingAvatar
-    // });
-    return finalAvatar;
-  }, [chat.isGroup, chat.avatar, avatarUrl, chat.id, isLoadingAvatar]);
+    return (profile as any)?.avatarCid || '';
+  }, [chat.isGroup, chat.avatar, profile]);
 
   const displayName = useMemo(() => {
     if (chat.isGroup) {
       return chat.name;
     }
-    return peerName || chat.name;
-  }, [chat.isGroup, chat.name, peerName]);
+    return (profile as any)?.name || chat.name;
+  }, [chat.isGroup, chat.name, profile]);
 
   // 获取群聊消息总数（只有已加入的群聊才获取）
   const { data: groupMessageCountData } = useReadContract({
@@ -451,20 +442,26 @@ function ChatListItem({
                 {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
               </Badge>
             )}
-            {!chat.isGroup && isLoadingAvatar ? (
+            {!chat.isGroup && isLoadingProfile ? (
               <Skeleton className="h-full w-full" />
-            ) : (
+            ) : chat.isGroup ? (
               <Image
-                src={displayAvatar}
+                src={chat.avatar || '/me/me1.png'}
                 alt={displayName}
                 width={48}
                 height={48}
                 className="h-full w-full object-cover"
-                onError={(e) => {
-                  console.error('❌ [Image] 加载失败:', displayAvatar);
-                  // 加载失败时使用默认头像
-                  e.currentTarget.src = '/me/me2.png';
-                }}
+              />
+            ) : (
+              <IPFSImg
+                src={avatarCid}
+                fallbackSrc="/me/me2.png"
+                alt={displayName}
+                className="h-full w-full object-cover"
+                width={48}
+                height={48}
+                enableLogging={true}
+                maxRetries={5}
               />
             )}
           </button>
@@ -476,7 +473,7 @@ function ChatListItem({
         <div className="flex-1 ml-3 min-w-0">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              {!chat.isGroup && isLoadingAvatar ? (
+              {!chat.isGroup && isLoadingProfile ? (
                 <Skeleton className="h-4 w-24" />
               ) : (
                 <h3 className="font-medium text-sm truncate">

@@ -8,11 +8,11 @@ import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import { useAccount, useWaitForTransactionReceipt } from 'wagmi';
 import { useUserProfiles, useProfile } from '@/hooks/useProfileCheck';
-import { getIPFSUrl } from '@/lib/pinata-upload';
 import {
   useUniChatProfileWrite,
   buildUpdateProfileArgs
 } from '@/lib/UniChatProfileAbi';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -34,7 +34,6 @@ export default function ProfilePage() {
   const profileData = profile as any;
   const userName = profileData?.name || '未设置';
   const avatarCid = profileData?.avatarCid || '';
-  const avatarUrl = avatarCid ? getIPFSUrl(avatarCid) : '/me/default.jpg';
 
   // 昵称编辑状态
   const [isEditingName, setIsEditingName] = useState(false);
@@ -398,10 +397,13 @@ export default function ProfilePage() {
                     <span className="text-xs text-gray-400">加载中...</span>
                   </div>
                 ) : (
-                  <img
-                    src={avatarUrl}
+                  <IPFSImg
+                    src={avatarCid}
+                    fallbackSrc="/me/default.jpg"
                     alt="NFT Avatar"
                     className="w-full h-full object-cover"
+                    enableLogging={true}
+                    maxRetries={5}
                   />
                 )}
               </div>
@@ -660,10 +662,13 @@ export default function ProfilePage() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <img
-                        src={avatarUrl}
+                      <IPFSImg
+                        src={avatarCid}
+                        fallbackSrc="/me/default.jpg"
                         alt="Current avatar"
                         className="w-full h-full object-cover"
+                        enableLogging={true}
+                        maxRetries={5}
                       />
                     )}
                   </div>

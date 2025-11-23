@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { useAccount, useEnsName } from 'wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { useUserProfiles, useProfile } from '@/hooks/useProfileCheck';
-import { getIPFSUrl } from '@/lib/pinata-upload';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface MenuItem {
   id: string;
@@ -37,7 +37,6 @@ export default function MePage() {
   const userName =
     profileData?.name || ensName || (isConnected ? '钱包用户' : '未登录');
   const avatarCid = profileData?.avatarCid || '';
-  const avatarUrl = avatarCid ? getIPFSUrl(avatarCid) : '/me/me.png';
 
   // 动态生成菜单数据
   const menuSections = [
@@ -173,10 +172,13 @@ export default function MePage() {
             onClick={() => router.push('/profile')}
           >
             <div className="h-16 w-16 rounded overflow-hidden hover:opacity-80 transition-opacity">
-              <img
-                src={avatarUrl}
+              <IPFSImg
+                src={avatarCid}
+                fallbackSrc="/me/me.png"
                 alt="avatar"
                 className="h-full w-full object-cover"
+                enableLogging={false}
+                maxRetries={5}
               />
             </div>
             {/* 连接状态指示器 */}

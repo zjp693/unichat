@@ -34,6 +34,7 @@ import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
 import { KeyPair, chatEncryption } from '@/lib/encryption';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { Skeleton } from '@/components/ui/skeleton';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 // 导入dayjs用于格式化时间
 import dayjs from 'dayjs';
 import {
@@ -187,14 +188,18 @@ export default function ChatPage() {
 
   // 获取对方头像（仅私聊）
   const {
+    avatarCid: peerAvatarCid,
     avatarUrl: peerAvatarUrl,
     name: peerName,
     isLoading: isPeerAvatarLoading
   } = usePeerAvatar(chatType === 'private' ? recipientAddress : undefined);
 
   // 获取当前用户头像
-  const { avatarUrl: myAvatarUrl, isLoading: isMyAvatarLoading } =
-    usePeerAvatar(currentAddress as Address | undefined);
+  const {
+    avatarCid: myAvatarCid,
+    avatarUrl: myAvatarUrl,
+    isLoading: isMyAvatarLoading
+  } = usePeerAvatar(currentAddress as Address | undefined);
 
   // --- 私聊：使用封装的钩子获取消息总数和消息列表 ---
   const { data: totalMessagesBigInt } = useGetMessageCount(
@@ -1528,29 +1533,25 @@ export default function ChatPage() {
                           isPeerAvatarLoading ? (
                             <Skeleton className="w-full h-full" />
                           ) : (
-                            <Image
-                              src={peerAvatarUrl || '/me/me2.png'}
+                            <IPFSImg
+                              src={peerAvatarCid}
+                              fallbackSrc="/me/me2.png"
                               alt="对方头像"
-                              width={40}
-                              height={40}
                               className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.src = '/me/me2.png';
-                              }}
+                              enableLogging={false}
+                              maxRetries={5}
                             />
                           )
                         ) : isMyAvatarLoading ? (
                           <Skeleton className="w-full h-full" />
                         ) : (
-                          <Image
-                            src={myAvatarUrl || '/me/me1.png'}
+                          <IPFSImg
+                            src={myAvatarCid}
+                            fallbackSrc="/me/me1.png"
                             alt="我的头像"
-                            width={40}
-                            height={40}
                             className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = '/me/me1.png';
-                            }}
+                            enableLogging={false}
+                            maxRetries={5}
                           />
                         )}
                       </button>

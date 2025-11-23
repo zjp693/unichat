@@ -6,12 +6,12 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useMoralisChain } from '@/hooks/use-moralis-chain';
-import { AvatarWithSkeleton } from './components/AvatarWithSkeleton';
 import { TokenListItem } from './components/TokenListItem';
 import { NetWorthDisplay } from './components/NetWorthDisplay';
 import { TokenListHeader } from './components/TokenListHeader';
 import { SmoothSearchModal } from './components/SmoothSearchModal';
 import { searchDexScreener } from './lib/celebrity-utils';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface TokenData {
   symbol: string;
@@ -43,9 +43,9 @@ export default function CelebrityDetailPage() {
   const { moralisChain, dexScreenerChain } = useMoralisChain();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // 从URL参数获取名字、头像和钱包地址
+  // 从URL参数获取名字、头像CID和钱包地址
   const celebrityName = searchParams.get('name') || '';
-  const celebrityAvatar = searchParams.get('avatar') || '/me/default.jpg';
+  const celebrityAvatarCid = searchParams.get('cid') || '';
   const passedWalletAddress = searchParams.get('address');
 
   const walletAddress = useMemo(() => {
@@ -53,7 +53,7 @@ export default function CelebrityDetailPage() {
     if (passedWalletAddress && passedWalletAddress.startsWith('0x')) {
       return passedWalletAddress;
     }
-    
+
     // 回退到从ID解析
     const id = params?.id as string | undefined;
     if (id && id.startsWith('0x') && id.length >= 10) return id;
@@ -64,18 +64,25 @@ export default function CelebrityDetailPage() {
     queryKey: ['wallet-tokens', walletAddress, moralisChain],
     enabled: Boolean(walletAddress),
     queryFn: async () => {
-      const res = await fetch(`/api/moralis?address=${encodeURIComponent(walletAddress || '')}&chain=${moralisChain}`, {
-        cache: 'no-store'
-      });
+      const res = await fetch(
+        `/api/moralis?address=${encodeURIComponent(walletAddress || '')}&chain=${moralisChain}`,
+        {
+          cache: 'no-store'
+        }
+      );
       if (!res.ok) return { result: [] };
       return res.json();
     },
     select: (json: any) => {
-      const list: MoralisTokenItem[] = Array.isArray(json?.result) ? json.result : [];
+      const list: MoralisTokenItem[] = Array.isArray(json?.result)
+        ? json.result
+        : [];
       const mapped: TokenData[] = list
         .filter((item) => {
           // 过滤掉地址为 0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee 的代币
-          return item.token_address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+          return (
+            item.token_address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+          );
         })
         .map((item) => {
           const pct = item.usd_price_24hr_percent_change ?? 0;
@@ -85,7 +92,9 @@ export default function CelebrityDetailPage() {
           const price = amountNum > 0 ? totalUsd / amountNum : 0;
           return {
             symbol: (item.symbol || 'UNKNOWN').toUpperCase(),
-            amount: item.balance_formatted ? String(item.balance_formatted) : '0',
+            amount: item.balance_formatted
+              ? String(item.balance_formatted)
+              : '0',
             value: formatNumber(item.usd_value ?? 0),
             change: `${pct >= 0 ? '+' : ''}${formatNumber(Math.abs(pct), 2)}%`,
             usdValue: `$${formatNumber(item.usd_value ?? 0)}`,
@@ -103,9 +112,12 @@ export default function CelebrityDetailPage() {
     queryKey: ['wallet-net-worth', walletAddress, moralisChain],
     enabled: Boolean(walletAddress),
     queryFn: async () => {
-      const res = await fetch(`/api/moralis/net-worth?address=${encodeURIComponent(walletAddress || '')}&chain=${moralisChain}`, {
-        cache: 'no-store'
-      });
+      const res = await fetch(
+        `/api/moralis/net-worth?address=${encodeURIComponent(walletAddress || '')}&chain=${moralisChain}`,
+        {
+          cache: 'no-store'
+        }
+      );
       if (!res.ok) return null;
       const data = await res.json();
       if (!data || typeof data.total_networth_usd === 'undefined') return null;
@@ -134,8 +146,16 @@ export default function CelebrityDetailPage() {
       {/* 顶部导航栏 */}
       <div className="flex justify-between items-center py-3 px-4 bg-white border-gray-100">
         <Link href="/contacts">
-          <Button variant="ghost" size="sm" className="p-2 flex items-center justify-center">
-            <img src="/contacts/arrow_left.png" alt="" className="h-4 object-cover" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="p-2 flex items-center justify-center"
+          >
+            <img
+              src="/contacts/arrow_left.png"
+              alt=""
+              className="h-4 object-cover"
+            />
           </Button>
         </Link>
 
@@ -148,23 +168,24 @@ export default function CelebrityDetailPage() {
       <div className="flex flex-col items-center py-6 px-4 bg-white border-gray-100">
         {/* 头像 */}
         <div className="relative mb-2">
-          <AvatarWithSkeleton
-            src={celebrityAvatar}
+          <IPFSImg
+            src={celebrityAvatarCid}
+            fallbackSrc="/me/default.jpg"
             alt={celebrityName}
-            className="w-16 h-16 rounded-full overflow-hidden"
+            className="w-16 h-16 rounded-full object-cover"
+            enableLogging={false}
+            maxRetries={5}
           />
           {/* 认证徽章 */}
           <div className="absolute -bottom-1 right-1">
-            <img
-              src="/contacts/badge.png"
-              alt="认证徽章"
-              className="w-4 h-4"
-            />
+            <img src="/contacts/badge.png" alt="认证徽章" className="w-4 h-4" />
           </div>
         </div>
 
         {/* 名字 */}
-        <h2 className="text-base font-medium text-gray-900 mb-3">{celebrityName}</h2>
+        <h2 className="text-base font-medium text-gray-900 mb-3">
+          {celebrityName}
+        </h2>
 
         {/* 总资产 */}
         <NetWorthDisplay
@@ -216,12 +237,14 @@ export default function CelebrityDetailPage() {
             token={token}
             isLast={index === (tokensQuery.data || []).length - 1}
             onClick={() => {
-                // 传递完整的 token 信息
-                router.push(`/token/${token.symbol}?thumbnail=${encodeURIComponent(token.thumbnail || '')}&tokenAddress=${encodeURIComponent(token.tokenAddress || '')}&amount=${encodeURIComponent(token.amount || '')}&usdValue=${encodeURIComponent(token.usdValue || '')}`);
+              // 传递完整的 token 信息
+              router.push(
+                `/token/${token.symbol}?thumbnail=${encodeURIComponent(token.thumbnail || '')}&tokenAddress=${encodeURIComponent(token.tokenAddress || '')}&amount=${encodeURIComponent(token.amount || '')}&usdValue=${encodeURIComponent(token.usdValue || '')}`
+              );
             }}
           />
         ))}
-        {(!tokensQuery.isLoading && (tokensQuery.data || []).length === 0) && (
+        {!tokensQuery.isLoading && (tokensQuery.data || []).length === 0 && (
           <div className="h-full flex items-center justify-center py-12">
             <div className="text-gray-500 text-sm">暂无数据</div>
           </div>

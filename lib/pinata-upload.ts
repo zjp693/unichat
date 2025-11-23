@@ -1,8 +1,10 @@
 /**
  * Pinata 上传工具函数
  * 用于上传头像和 NFT metadata 到 IPFS
- * 使用 Pinata 公共网关: https://gateway.pinata.cloud/ipfs/<CID>
+ * 使用多网关轮询机制提高可用性
  */
+
+import { buildIPFSUrl } from './ipfs-gateways';
 
 // 客户端必须使用 NEXT_PUBLIC_ 前缀的环境变量
 const PINATA_JWT = process.env.NEXT_PUBLIC_PINATA_JWT;
@@ -115,9 +117,7 @@ export function createNFTMetadata(
   description: string,
   avatarCid: string
 ) {
-  const imageUrl = avatarCid
-    ? `https://gateway.pinata.cloud/ipfs/${avatarCid}`
-    : '';
+  const imageUrl = avatarCid ? buildIPFSUrl(avatarCid) : '';
 
   let metadata: Record<string, any> = {
     name: name,
@@ -139,5 +139,5 @@ export function createNFTMetadata(
  */
 export function getIPFSUrl(cid: string): string {
   if (!cid) return '';
-  return `https://gateway.pinata.cloud/ipfs/${cid}`;
+  return buildIPFSUrl(cid);
 }
