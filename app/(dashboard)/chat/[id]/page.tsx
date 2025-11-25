@@ -72,6 +72,8 @@ import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel
 import { useCommunityMessages } from '@/hooks/useCommunityMessages'; // <-- 导入群聊消息 hook
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage'; // <-- 导入群聊发送 hook
 import { GroupMessageAvatar } from '@/components/chat/GroupMessageAvatar'; // <-- 导入群聊头像组件
+import { SendRedPacketModal } from '@/components/chat/red-packet/SendRedPacketModal';
+import { RedPacketConfig } from '@/components/chat/red-packet/types';
 
 // 定义消息对象的数据结构
 interface Message {
@@ -643,6 +645,26 @@ export default function ChatPage() {
       }
     }
   }, [messages]); // 当 messages 更新时触发
+
+  const handleSendRedPacket = (config: RedPacketConfig) => {
+    console.log('Sending Red Packet:', config);
+    setIsActionsOpen(false);
+    // TODO: Implement actual contract call or message sending logic
+    // For now, just add a local message to show it works
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      sender: 'user',
+      timestamp: new Date(),
+      type: 'text', // We should probably add a 'red-packet' type later
+      content: `[Red Packet] ${config.type === 'LUCKY' ? '拼手气' : '普通'}红包: ${config.amount} ${config.tokenSymbol}`,
+      isEncrypted: false,
+      originalContent: null,
+      recipient: recipientAddress,
+      status: 'sending'
+    };
+    setMessages((prev) => [...prev, newMessage]);
+    setTimeout(() => scrollToBottom('smooth'), 100);
+  };
 
   // 发送新消息
   const handleSendMessage = async () => {
@@ -1714,6 +1736,74 @@ export default function ChatPage() {
           transition: 'all 0.3s ease-in-out'
         }}
       >
+        {/* 输入框栏 */}
+        <div
+          className="p-2 flex items-center bg-gray-100 border-t border-gray-300"
+          style={{
+            minHeight: `${FOOTER_HEIGHT}px`
+          }}
+        >
+          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
+            <Image
+              src="/chats/voice.png"
+              alt="Voice"
+              width={24}
+              height={24}
+              className="text-gray-500"
+            />
+          </Button>
+          <textarea
+            ref={inputRef}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onClick={() => setIsActionsOpen(false)} // 点击输入框时隐藏功能面板
+            enterKeyHint="send"
+            placeholder=""
+            className="flex-1 bg-white border-none rounded-sm min-h-[32px] max-h-[120px] px-1 py-2 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none overflow-y-auto" // 改为 textarea 样式
+            autoComplete="off"
+            rows={1}
+          />
+          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
+            <Image
+              src="/chats/face.png"
+              alt="Face"
+              width={24}
+              height={24}
+              className="text-gray-500"
+            />
+          </Button>
+          {/* 发送按钮 */}
+          <Button
+            onClick={handleSendMessage}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
+            style={{
+              backgroundColor: '#5436f1',
+              color: 'white',
+              fontSize: '14px'
+            }} // 应用发送按钮样式
+          >
+            发送
+          </Button>
+
+          {/* 加号按钮 */}
+          <Button
+            variant="ghost"
+            onClick={handleOpenActions}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
+          >
+            <Image
+              src="/chats/plus.png"
+              alt="Plus"
+              width={24}
+              height={24}
+              className="text-gray-600"
+            />
+          </Button>
+        </div>
+
         {/* 功能面板 */}
         <div
           className={cn('bg-gray-100 overflow-hidden')}
@@ -1786,21 +1876,27 @@ export default function ChatPage() {
               </div>
               <span className="text-xs text-gray-500">AI</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Redenvelope.png"
-                  alt="Red envelope"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Red envelope</span>
-            </div>
+            <SendRedPacketModal
+              onSend={handleSendRedPacket}
+              chatType={chatType}
+              trigger={
+                <div
+                  onClick={() => setIsActionsOpen(false)}
+                  className="flex flex-col items-center gap-1"
+                >
+                  <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                    <Image
+                      src="/chats/Redenvelope.png"
+                      alt="Red Packet"
+                      fill
+                      sizes="56px"
+                      className="object-cover"
+                    />
+                  </div>
+                  <span className="text-xs text-gray-500">Red envelope</span>
+                </div>
+              }
+            />
             <div
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
@@ -1847,73 +1943,6 @@ export default function ChatPage() {
               <span className="text-xs text-gray-500">Vote</span>
             </div>
           </div>
-        </div>
-
-        {/* 输入框栏 */}
-        <div
-          className="p-2 flex items-center bg-gray-100 border-t border-gray-300"
-          style={{
-            minHeight: `${FOOTER_HEIGHT}px`
-          }}
-        >
-          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
-            <Image
-              src="/chats/voice.png"
-              alt="Voice"
-              width={24}
-              height={24}
-              className="text-gray-500"
-            />
-          </Button>
-          <textarea
-            ref={inputRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            enterKeyHint="send"
-            placeholder=""
-            className="flex-1 bg-white border-none rounded-sm min-h-[32px] max-h-[120px] px-1 py-2 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none overflow-y-auto" // 改为 textarea 样式
-            autoComplete="off"
-            rows={1}
-          />
-          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
-            <Image
-              src="/chats/face.png"
-              alt="Face"
-              width={24}
-              height={24}
-              className="text-gray-500"
-            />
-          </Button>
-          {/* 发送按钮 */}
-          <Button
-            onClick={handleSendMessage}
-            className={`rounded-lg transition-all duration-300 ease-in-out
-              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
-            style={{
-              backgroundColor: '#5436f1',
-              color: 'white',
-              fontSize: '14px'
-            }} // 应用发送按钮样式
-          >
-            发送
-          </Button>
-
-          {/* 加号按钮 */}
-          <Button
-            variant="ghost"
-            onClick={handleOpenActions}
-            className={`rounded-lg transition-all duration-300 ease-in-out
-              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
-          >
-            <Image
-              src="/chats/plus.png"
-              alt="Plus"
-              width={24}
-              height={24}
-              className="text-gray-600"
-            />
-          </Button>
         </div>
       </div>
 
