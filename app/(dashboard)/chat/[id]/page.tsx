@@ -78,6 +78,7 @@ import { RedPacketMessage } from '@/components/chat/red-packet/RedPacketMessage'
 import { RedPacketClaimMessage } from '@/components/chat/red-packet/RedPacketClaimMessage';
 import { OpenRedPacketModalNew } from '@/components/chat/red-packet/OpenRedPacketModal';
 import { RedPacketDetailsModal } from '@/components/chat/red-packet/RedPacketDetailsModal';
+import { ChatActionsPanel } from '@/components/chat/ChatActionsPanel';
 
 // 定义消息对象的数据结构
 interface Message {
@@ -2029,145 +2030,14 @@ export default function ChatPage() {
         </div>
 
         {/* 功能面板 */}
-        <div
-          className={cn('bg-gray-100 overflow-hidden')}
-          style={{
-            height: isActionsOpen ? `${panelHeight}px` : '0px',
-            transition: 'height 0.3s ease-in-out'
-          }}
-        >
-          <div
-            ref={actionsPanelContentRef}
-            className="p-2 pt-4 grid grid-cols-4 gap-y-6 gap-x-4 text-center"
-          >
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Album.png"
-                  alt="Album"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Album</span>
-            </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Photography.png"
-                  alt="Photography"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Photography</span>
-            </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Voicecall.png"
-                  alt="Voice call"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Voice call</span>
-            </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/AI.png"
-                  alt="AI"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">AI</span>
-            </div>
-            <SendRedPacketModal
-              onSend={handleSendRedPacket}
-              chatType={chatType}
-              trigger={
-                <div
-                  onClick={() => setIsActionsOpen(false)}
-                  className="flex flex-col items-center gap-1"
-                >
-                  <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                    <Image
-                      src="/chats/fuRedenvelope.png"
-                      alt="Red Packet"
-                      fill
-                      sizes="56px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <span className="text-xs text-gray-500">Red envelope</span>
-                </div>
-              }
-            />
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Transfer.png"
-                  alt="Transfer"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Transfer</span>
-            </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Sendgoods.png"
-                  alt="Send goods"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Send goods</span>
-            </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Vote.png"
-                  alt="Vote"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Vote</span>
-            </div>
-          </div>
-        </div>
+        <ChatActionsPanel
+          isOpen={isActionsOpen}
+          onClose={handleCloseActions}
+          onSendRedPacket={handleSendRedPacket}
+          chatType={chatType}
+          panelHeight={panelHeight}
+          contentRef={actionsPanelContentRef}
+        />
       </div>
 
       {/* 密钥管理弹窗 */}
