@@ -72,13 +72,25 @@ import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel
 import { useCommunityMessages } from '@/hooks/useCommunityMessages'; // <-- 导入群聊消息 hook
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage'; // <-- 导入群聊发送 hook
 import { GroupMessageAvatar } from '@/components/chat/GroupMessageAvatar'; // <-- 导入群聊头像组件
+import { SendRedPacketModal } from '@/components/chat/red-packet/SendRedPacketModal';
+import { RedPacketConfig } from '@/components/chat/red-packet/types';
+import { RedPacketMessage } from '@/components/chat/red-packet/RedPacketMessage';
+import { RedPacketClaimMessage } from '@/components/chat/red-packet/RedPacketClaimMessage';
+import { OpenRedPacketModalNew } from '@/components/chat/red-packet/OpenRedPacketModal';
+import { RedPacketDetailsModal } from '@/components/chat/red-packet/RedPacketDetailsModal';
 
 // 定义消息对象的数据结构
 interface Message {
   id: string;
-  sender: 'user' | 'other';
+  sender: 'user' | 'other' | 'system';
   timestamp: Date | string; // 允许字符串以便从API接收
-  type: 'text' | 'image' | 'system' | 'system-time'; // <-- 添加 'system-time' 类型
+  type:
+    | 'text'
+    | 'image'
+    | 'system'
+    | 'system-time'
+    | 'red-packet'
+    | 'red-packet-claim'; // <-- 添加 'system-time' 类型
   isEncrypted?: boolean;
   originalContent: string | null; // 修正为 string 或 null
   status?: 'sending' | 'failed'; // 用于UI反馈发送状态
@@ -140,6 +152,13 @@ export default function ChatPage() {
     previousHeight: number;
     previousTop: number;
   } | null>(null); // 用于保存待调整的滚动信息
+
+  const [selectedRedPacket, setSelectedRedPacket] = useState<Message | null>(
+    null
+  ); // State for opening red packet modal
+  const [detailsRedPacket, setDetailsRedPacket] = useState<Message | null>(
+    null
+  ); // State for viewing red packet details
 
   // --- Wagmi 钩子 --- //
   const { address: currentAddress, isConnected } = useAccount();
@@ -643,6 +662,199 @@ export default function ChatPage() {
       }
     }
   }, [messages]); // 当 messages 更新时触发
+
+  // 辅助函数：生成模拟的红包分配方案
+  const generateDistribution = (
+    type: 'LUCKY' | 'NORMAL',
+    totalAmount: number,
+    count: number
+  ): number[] => {
+    if (count <= 0) return [];
+    if (type === 'NORMAL') {
+      // 普通红包：直接均分总金额
+      const perAmount = totalAmount / count;
+      return Array(count).fill(perAmount);
+    } else {
+      // 拼手气红包逻辑 (模拟二倍均值法)
+      // 核心思想：每次随机金额的上限是 (剩余金额 / 剩余人数) * 2
+      // 这样可以保证每个人抢到的期望值是相等的
+      let remaining = totalAmount;
+      const result = [];
+      for (let i = 0; i < count - 1; i++) {
+        // 随机范围：0.01 到 (剩余金额 / 剩余人数 * 2)
+        const max = (remaining / (count - i)) * 2;
+        const amount = Math.max(0.01, Math.random() * max);
+        const fixedAmount = parseFloat(amount.toFixed(2)); // 保留两位小数
+        result.push(fixedAmount);
+        remaining -= fixedAmount;
+      }
+      // 最后一个红包直接拿走剩下的所有金额，确保总额准确
+      result.push(parseFloat(remaining.toFixed(2)));
+      return result;
+    }
+  };
+
+  const handleSendRedPacket = (config: RedPacketConfig) => {
+    console.log('Sending Red Packet:', config);
+    setIsActionsOpen(false);
+
+    const totalAmount = parseFloat(config.amount);
+    const count = config.count;
+
+    // Generate mock distribution
+    const distribution = generateDistribution(config.type, totalAmount, count);
+
+    const redPacketData = {
+      ...config,
+      senderName: 'James', // TODO: Fetch real user name
+      senderAvatar: '/me/me2.png', // TODO: Fetch real user avatar
+      status: 'active', // Initial status for the red packet itself
+      distribution: distribution, // Store the pool of amounts
+      claimedList: [], // Track who claimed what
+      remainingCount: count
+    };
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      sender: 'user',
+      timestamp: new Date(),
+      type: 'red-packet',
+      content: JSON.stringify(redPacketData),
+      originalContent: null,
+      recipient: recipientAddress,
+      status: 'sending'
+    };
+
+    setMessages((prev) => [...prev, newMessage]);
+    setTimeout(() => scrollToBottom('smooth'), 100);
+
+    // Simulate sending completion after 1 second
+    setTimeout(() => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === newMessage.id ? { ...msg, status: undefined } : msg
+        )
+      );
+    }, 1000);
+  };
+
+  const handleOpenRedPacket = (message: Message) => {
+    try {
+      const config = JSON.parse(message.content);
+      // Check if already claimed by current user
+      // We check both the 'claimed' status flag and the claimedList for '你'
+      const isClaimed =
+        config.status === 'claimed' ||
+        config.claimedList?.some((item: any) => item.name === '你');
+
+      if (isClaimed) {
+        setDetailsRedPacket(message);
+      } else {
+        setSelectedRedPacket(message);
+      }
+    } catch (e) {
+      console.error('Error checking red packet status', e);
+      setSelectedRedPacket(message);
+    }
+  };
+
+  const handleClaimRedPacket = () => {
+    if (!selectedRedPacket) return;
+    const message = selectedRedPacket;
+
+    try {
+      const config = JSON.parse(message.content);
+
+      // If already claimed by current user (in a real app check userId), or if status is claimed locally
+      if (config.status === 'claimed') {
+        // Just close modal or show details
+        setSelectedRedPacket(null);
+        setDetailsRedPacket(message);
+        return;
+      }
+
+      if (config.remainingCount <= 0) {
+        alert('Red packet is empty!');
+        setSelectedRedPacket(null);
+        return;
+      }
+
+      // Claim logic
+      let claimAmount = 0;
+      if (config.distribution && Array.isArray(config.distribution)) {
+        const index = config.distribution.length - config.remainingCount;
+        if (index >= 0 && index < config.distribution.length) {
+          claimAmount = config.distribution[index];
+        }
+      }
+
+      // Fallback if distribution is missing or invalid
+      if (!claimAmount && claimAmount !== 0) {
+        const total = parseFloat(config.amount) || 0;
+        const count = config.count || 1;
+        if (config.type === 'NORMAL') {
+          claimAmount = parseFloat((total / count).toFixed(2));
+        } else {
+          // Simple random fallback for LUCKY type
+          claimAmount = parseFloat(
+            (Math.random() * ((total / count) * 2)).toFixed(2)
+          );
+          if (claimAmount <= 0) claimAmount = 0.01;
+        }
+      }
+
+      const newRemainingCount = config.remainingCount - 1;
+
+      // Update config
+      const newConfig = {
+        ...config,
+        status: 'claimed', // Mark as claimed for THIS user
+        remainingCount: newRemainingCount,
+        claimedList: [
+          ...(config.claimedList || []),
+          { name: '你', amount: claimAmount }
+        ]
+      };
+
+      // Update message
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === message.id
+            ? { ...msg, content: JSON.stringify(newConfig) }
+            : msg
+        )
+      );
+
+      console.log(`Claimed ${claimAmount}!`);
+
+      // Add claim notification message
+      const claimMessage: Message = {
+        id: Date.now().toString() + '_claim',
+        sender: 'system', // System message
+        timestamp: new Date(),
+        type: 'red-packet-claim',
+        content: JSON.stringify({
+          claimerName: '你',
+          ownerName: message.sender === 'user' ? '自己' : '李四', // Mock owner name
+          isCurrentUserClaimer: true
+        }),
+        originalContent: null,
+        recipient: recipientAddress,
+        status: undefined
+      };
+      setMessages((prev) => [...prev, claimMessage]);
+      setTimeout(() => scrollToBottom('smooth'), 100);
+
+      // Close modal and show details
+      setSelectedRedPacket(null);
+
+      // We need to pass the UPDATED message to details
+      const updatedMessage = { ...message, content: JSON.stringify(newConfig) };
+      setDetailsRedPacket(updatedMessage);
+    } catch (e) {
+      console.error('Failed to open red packet', e);
+    }
+  };
 
   // 发送新消息
   const handleSendMessage = async () => {
@@ -1309,9 +1521,10 @@ export default function ChatPage() {
       // 群聊：重新调用群聊发送
       try {
         const isEncrypted = failedMessage.isEncrypted;
-        const contentToSend = isEncrypted
-          ? failedMessage.content
-          : failedMessage.originalContent || failedMessage.content;
+        const contentToSend =
+          failedMessage.type === 'red-packet'
+            ? failedMessage.content
+            : failedMessage.originalContent || failedMessage.content;
 
         await sendGroupMessage(contentToSend, isEncrypted ? 1 : 0);
 
@@ -1486,6 +1699,20 @@ export default function ChatPage() {
                     </span>
                   </div>
                 );
+              } else if (message.type === 'red-packet-claim') {
+                try {
+                  const claimData = JSON.parse(message.content);
+                  return (
+                    <RedPacketClaimMessage
+                      key={message.id}
+                      claimerName={claimData.claimerName}
+                      ownerName={claimData.ownerName}
+                      isCurrentUserClaimer={claimData.isCurrentUserClaimer}
+                    />
+                  );
+                } catch (e) {
+                  return null;
+                }
               } else if (message.type === 'system') {
                 return (
                   <div
@@ -1498,7 +1725,7 @@ export default function ChatPage() {
                   </div>
                 );
               } else {
-                // 普通消息行 (type === 'text' || type === 'image')
+                // 普通消息行 (type === 'text' || type === 'image' || type === 'red-packet')
                 return (
                   <div
                     key={message.id}
@@ -1619,82 +1846,101 @@ export default function ChatPage() {
                           </div>
                         )}
 
-                        <div
-                          className={cn(
-                            'rounded-lg px-3 py-2 text-sm shadow-sm',
-                            message.sender === 'user'
-                              ? 'bg-[#5637f5] text-white'
-                              : 'bg-white text-black'
-                          )}
-                        >
-                          <p className="whitespace-pre-wrap break-all">
-                            {message.content}
-                          </p>
-                          {(message.isEncrypted || message.originalContent) && (
-                            <div className="flex items-center justify-between mt-2 min-w-[12rem]">
-                              <div className="flex items-center gap-2">
-                                {/* 解密按钮 - 只对接收者显示，且只在私聊或群聊密文时显示 */}
-                                {message.sender !== 'user' &&
-                                  (chatType === 'private' ||
-                                    message.isEncrypted) && (
-                                    <button
-                                      onClick={() => {
-                                        handleDecryptClick(message.id);
-                                      }}
-                                      disabled={!message.isEncrypted}
-                                      className={cn(
-                                        'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
-                                        'bg-[#fef0ee]',
-                                        message.isEncrypted &&
-                                          'hover:bg-black/20',
-                                        'disabled:opacity-80 disabled:cursor-not-allowed'
-                                      )}
-                                    >
-                                      <Image
-                                        src="/chats/keyIcon.png"
-                                        alt="解密"
-                                        width={14}
-                                        height={14}
-                                        className="mr-1"
-                                      />
-                                      {message.isEncrypted ? '解密' : '已解密'}
-                                    </button>
-                                  )}
-                                {/* 计数器按钮 */}
-                                <div
+                        {message.type === 'red-packet' ? (
+                          (() => {
+                            try {
+                              const config = JSON.parse(message.content);
+                              return (
+                                <RedPacketMessage
+                                  config={config}
+                                  status={config.status || 'active'}
+                                  onClick={() => handleOpenRedPacket(message)}
+                                />
+                              );
+                            } catch (e) {
+                              return <p>Invalid Red Packet</p>;
+                            }
+                          })()
+                        ) : (
+                          <div
+                            className={cn(
+                              'rounded-lg px-3 py-2 text-sm shadow-sm',
+                              message.sender === 'user'
+                                ? 'bg-[#5637f5] text-white'
+                                : 'bg-white text-black'
+                            )}
+                          >
+                            <p className="whitespace-pre-wrap break-all">
+                              {message.content}
+                            </p>
+                            {(message.isEncrypted ||
+                              message.originalContent) && (
+                              <div className="flex items-center justify-between mt-2 min-w-[12rem]">
+                                <div className="flex items-center gap-2">
+                                  {/* 解密按钮 - 只对接收者显示，且只在私聊或群聊密文时显示 */}
+                                  {message.sender !== 'user' &&
+                                    (chatType === 'private' ||
+                                      message.isEncrypted) && (
+                                      <button
+                                        onClick={() => {
+                                          handleDecryptClick(message.id);
+                                        }}
+                                        disabled={!message.isEncrypted}
+                                        className={cn(
+                                          'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                                          'bg-[#fef0ee]',
+                                          message.isEncrypted &&
+                                            'hover:bg-black/20',
+                                          'disabled:opacity-80 disabled:cursor-not-allowed'
+                                        )}
+                                      >
+                                        <Image
+                                          src="/chats/keyIcon.png"
+                                          alt="解密"
+                                          width={14}
+                                          height={14}
+                                          className="mr-1"
+                                        />
+                                        {message.isEncrypted
+                                          ? '解密'
+                                          : '已解密'}
+                                      </button>
+                                    )}
+                                  {/* 计数器按钮 */}
+                                  <div
+                                    className={cn(
+                                      'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                                      message.sender === 'user'
+                                        ? 'bg-[#785ff7]'
+                                        : 'bg-[#e9f9ee]'
+                                    )}
+                                  >
+                                    <Image
+                                      src="/chats/news.png"
+                                      alt="计数"
+                                      width={14}
+                                      height={14}
+                                      className="mr-1"
+                                    />
+                                    {message.isEncrypted ? '1' : '0'}
+                                  </div>
+                                </div>
+                                <span
                                   className={cn(
-                                    'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                                    'text-xs',
                                     message.sender === 'user'
-                                      ? 'bg-[#785ff7]'
-                                      : 'bg-[#e9f9ee]'
+                                      ? 'text-white/70'
+                                      : 'text-gray-400'
                                   )}
                                 >
-                                  <Image
-                                    src="/chats/news.png"
-                                    alt="计数"
-                                    width={14}
-                                    height={14}
-                                    className="mr-1"
-                                  />
-                                  156
-                                </div>
+                                  {dayjs(message.timestamp).format(
+                                    'MM/DD HH:mm:ss'
+                                  )}
+                                </span>
                               </div>
-                              {/* 时间戳 */}
-                              <span
-                                className={cn(
-                                  'text-xs pl-2',
-                                  message.sender === 'user'
-                                    ? 'text-purple-200'
-                                    : 'text-gray-400'
-                                )}
-                              >
-                                {dayjs(message.timestamp).format(
-                                  'MM/DD HH:mm:ss'
-                                )}
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1714,6 +1960,74 @@ export default function ChatPage() {
           transition: 'all 0.3s ease-in-out'
         }}
       >
+        {/* 输入框栏 */}
+        <div
+          className="p-2 flex items-center bg-gray-100 border-t border-gray-300"
+          style={{
+            minHeight: `${FOOTER_HEIGHT}px`
+          }}
+        >
+          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
+            <Image
+              src="/chats/voice.png"
+              alt="Voice"
+              width={24}
+              height={24}
+              className="text-gray-500"
+            />
+          </Button>
+          <textarea
+            ref={inputRef}
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onClick={() => setIsActionsOpen(false)} // 点击输入框时隐藏功能面板
+            enterKeyHint="send"
+            placeholder=""
+            className="flex-1 bg-white border-none rounded-sm min-h-[32px] max-h-[120px] px-1 py-2 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none overflow-y-auto" // 改为 textarea 样式
+            autoComplete="off"
+            rows={1}
+          />
+          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
+            <Image
+              src="/chats/face.png"
+              alt="Face"
+              width={24}
+              height={24}
+              className="text-gray-500"
+            />
+          </Button>
+          {/* 发送按钮 */}
+          <Button
+            onClick={handleSendMessage}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
+            style={{
+              backgroundColor: '#5436f1',
+              color: 'white',
+              fontSize: '14px'
+            }} // 应用发送按钮样式
+          >
+            发送
+          </Button>
+
+          {/* 加号按钮 */}
+          <Button
+            variant="ghost"
+            onClick={handleOpenActions}
+            className={`rounded-lg transition-all duration-300 ease-in-out
+              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
+          >
+            <Image
+              src="/chats/plus.png"
+              alt="Plus"
+              width={24}
+              height={24}
+              className="text-gray-600"
+            />
+          </Button>
+        </div>
+
         {/* 功能面板 */}
         <div
           className={cn('bg-gray-100 overflow-hidden')}
@@ -1786,21 +2100,27 @@ export default function ChatPage() {
               </div>
               <span className="text-xs text-gray-500">AI</span>
             </div>
-            <div
-              onClick={() => setIsActionsOpen(false)}
-              className="flex flex-col items-center gap-1"
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
-                <Image
-                  src="/chats/Redenvelope.png"
-                  alt="Red envelope"
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                />
-              </div>
-              <span className="text-xs text-gray-500">Red envelope</span>
-            </div>
+            <SendRedPacketModal
+              onSend={handleSendRedPacket}
+              chatType={chatType}
+              trigger={
+                <div
+                  onClick={() => setIsActionsOpen(false)}
+                  className="flex flex-col items-center gap-1"
+                >
+                  <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
+                    <Image
+                      src="/chats/fuRedenvelope.png"
+                      alt="Red Packet"
+                      fill
+                      sizes="56px"
+                      className="object-cover"
+                    />
+                  </div>
+                  <span className="text-xs text-gray-500">Red envelope</span>
+                </div>
+              }
+            />
             <div
               onClick={() => setIsActionsOpen(false)}
               className="flex flex-col items-center gap-1"
@@ -1847,73 +2167,6 @@ export default function ChatPage() {
               <span className="text-xs text-gray-500">Vote</span>
             </div>
           </div>
-        </div>
-
-        {/* 输入框栏 */}
-        <div
-          className="p-2 flex items-center bg-gray-100 border-t border-gray-300"
-          style={{
-            minHeight: `${FOOTER_HEIGHT}px`
-          }}
-        >
-          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
-            <Image
-              src="/chats/voice.png"
-              alt="Voice"
-              width={24}
-              height={24}
-              className="text-gray-500"
-            />
-          </Button>
-          <textarea
-            ref={inputRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            enterKeyHint="send"
-            placeholder=""
-            className="flex-1 bg-white border-none rounded-sm min-h-[32px] max-h-[120px] px-1 py-2 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none overflow-y-auto" // 改为 textarea 样式
-            autoComplete="off"
-            rows={1}
-          />
-          <Button variant="ghost" className="flex-shrink-0 px-2 py-0">
-            <Image
-              src="/chats/face.png"
-              alt="Face"
-              width={24}
-              height={24}
-              className="text-gray-500"
-            />
-          </Button>
-          {/* 发送按钮 */}
-          <Button
-            onClick={handleSendMessage}
-            className={`rounded-lg transition-all duration-300 ease-in-out
-              ${inputMessage.trim() !== '' ? 'opacity-100 h-4 w-6 py-4 px-6 pointer-events-auto' : 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none'}`}
-            style={{
-              backgroundColor: '#5436f1',
-              color: 'white',
-              fontSize: '14px'
-            }} // 应用发送按钮样式
-          >
-            发送
-          </Button>
-
-          {/* 加号按钮 */}
-          <Button
-            variant="ghost"
-            onClick={handleOpenActions}
-            className={`rounded-lg transition-all duration-300 ease-in-out
-              ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
-          >
-            <Image
-              src="/chats/plus.png"
-              alt="Plus"
-              width={24}
-              height={24}
-              className="text-gray-600"
-            />
-          </Button>
         </div>
       </div>
 
@@ -1995,6 +2248,103 @@ export default function ChatPage() {
           // topOffset={TOP_BAR_HEIGHT} // 移除此行
         />
       )}
+      {/* Red Packet Open Modal */}
+      {selectedRedPacket &&
+        (() => {
+          try {
+            const config = JSON.parse(selectedRedPacket.content);
+            const derivedStatus =
+              config.status === 'claimed'
+                ? 'claimed'
+                : config.remainingCount <= 0
+                  ? 'empty'
+                  : config.status || 'active';
+
+            return (
+              <OpenRedPacketModalNew
+                isOpen={!!selectedRedPacket}
+                onClose={() => setSelectedRedPacket(null)}
+                onOpen={handleClaimRedPacket}
+                onDetails={() => {
+                  setSelectedRedPacket(null);
+                  setDetailsRedPacket(selectedRedPacket);
+                }}
+                senderName={config.senderName || '未知用户'}
+                senderAvatar={config.senderAvatar}
+                message={config.message}
+                status={derivedStatus}
+              />
+            );
+          } catch (e) {
+            return null;
+          }
+        })()}
+
+      {/* Red Packet Details Modal */}
+      {detailsRedPacket &&
+        (() => {
+          try {
+            const config = JSON.parse(detailsRedPacket.content);
+            const totalAmount = parseFloat(config.amount);
+            const claimedList = config.claimedList || [];
+
+            // 计算已领取金额
+            const claimedAmountVal = claimedList.reduce(
+              (acc: number, item: any) => acc + item.amount,
+              0
+            );
+            const claimedAmount = claimedAmountVal.toFixed(2);
+
+            // 查找我的领取金额（假设 '你' 代表当前用户）
+            const myClaim = claimedList.find((item: any) => item.name === '你');
+            const myAmount = myClaim ? myClaim.amount.toFixed(2) : undefined;
+
+            // 格式化列表以供组件使用
+            const formattedList = claimedList.map((item: any) => ({
+              name: item.name,
+              avatar: item.avatar, // undefined 将显示占位符
+              address:
+                item.address ||
+                `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`.slice(
+                  0,
+                  42
+                ),
+              amount:
+                typeof item.amount === 'number'
+                  ? item.amount.toFixed(2)
+                  : item.amount,
+              isBest: item.isBest
+            }));
+
+            return (
+              <RedPacketDetailsModal
+                isOpen={!!detailsRedPacket}
+                onClose={() => setDetailsRedPacket(null)}
+                senderName={
+                  config.senderName ||
+                  (detailsRedPacket.sender === 'user' ? '自己' : '李四')
+                }
+                senderAvatar={
+                  config.senderAvatar ||
+                  (detailsRedPacket.sender === 'user'
+                    ? '/me/me2.png'
+                    : undefined)
+                }
+                message={config.message}
+                type={config.type}
+                myAmount={myAmount}
+                tokenSymbol={config.tokenSymbol}
+                totalCount={config.count}
+                claimedCount={claimedList.length}
+                totalAmount={config.amount}
+                claimedAmount={claimedAmountVal.toFixed(2)}
+                claimedList={formattedList}
+              />
+            );
+          } catch (e) {
+            return null;
+          }
+        })()}
     </div>
   );
 }
