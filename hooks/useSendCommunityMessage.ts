@@ -3,7 +3,12 @@ import communityABI from '@/contract/abi/community.json';
 import { Abi } from 'viem';
 
 export function useSendCommunityMessage(communityAddress: string) {
-  const { writeContract, data: hash, isPending, error } = useWriteContract();
+  const {
+    writeContractAsync,
+    data: hash,
+    isPending,
+    error
+  } = useWriteContract();
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } =
     useWaitForTransactionReceipt({
@@ -22,7 +27,7 @@ export function useSendCommunityMessage(communityAddress: string) {
       length: content.length
     });
 
-    await writeContract({
+    await writeContractAsync({
       address: communityAddress as `0x${string}`,
       abi: communityABI.abi as Abi,
       functionName: 'sendCommunityMessage',
