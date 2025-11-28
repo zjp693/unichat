@@ -1,7 +1,9 @@
 import { useCallback } from 'react';
 import type { Message } from '@/lib/chat/types';
 import type { KeyPair } from '@/lib/encryption';
-import type { Address } from 'viem';
+import type { Address, Abi } from 'viem';
+import type { ChatInputAreaRef } from '@/components/chat/ChatInputArea';
+import communityABI from '@/contract/abi/community.json';
 
 interface UseEncryptionActionsProps {
   // State setters
@@ -20,6 +22,7 @@ interface UseEncryptionActionsProps {
   pendingGroupMessage: string;
   currentAddress: Address | undefined;
   groupAddress: string | null;
+  publicClient: any;
 
   // Functions
   decryptMessages: (
@@ -29,7 +32,7 @@ interface UseEncryptionActionsProps {
   encryptMessage: (content: string, publicKey: string) => string;
   sendGroupMessage: (content: string, kind?: 0 | 1) => Promise<void>;
   scrollToBottom: (behavior?: 'smooth' | 'auto') => void;
-  setInputMessage: (msg: string) => void;
+  inputRef: React.RefObject<ChatInputAreaRef | null>;
 }
 
 /**
@@ -54,7 +57,8 @@ export function useEncryptionActions({
   encryptMessage,
   sendGroupMessage,
   scrollToBottom,
-  setInputMessage
+  inputRef,
+  publicClient
 }: UseEncryptionActionsProps) {
   // 打开密钥生成弹窗
   const handleOpenKeyGeneration = useCallback(() => {
@@ -231,7 +235,7 @@ export function useEncryptionActions({
         return newMessages;
       });
       setPendingGroupMessage(''); // 清空待发送消息
-      setInputMessage(''); // 清空输入框
+      inputRef.current?.setValue(''); // 清空输入框
 
       // 滚动到底部
       setTimeout(() => scrollToBottom('smooth'), 100);
@@ -245,6 +249,62 @@ export function useEncryptionActions({
         console.log(
           `📤 群聊消息已提交到区块链 (${isEncrypted ? '密文' : '明文'})`
         );
+
+        // 3. 手动拉取最新消息作为兜底 (防止事件监听失败)
+        try {
+          if (!isEncrypted && publicClient && groupAddress) {
+            console.log('🔄 [兜底] 尝试手动拉取最新消息...');
+            // 等待一小会儿让节点同步
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            // 获取消息总数
+            const count = await publicClient.readContract({
+              address: groupAddress as Address,
+              abi: communityABI.abi as Abi,
+              functionName: 'communityMessageCount'
+            });
+
+            if (count && Number(count) > 0) {
+              const lastSeq = Number(count) - 1;
+              // 获取最后一条消息
+              const result = await publicClient.readContract({
+                address: groupAddress as Address,
+                abi: communityABI.abi as Abi,
+                functionName: 'getPlaintextMessages',
+                args: [BigInt(lastSeq), BigInt(1)]
+              });
+
+              if (result && Array.isArray(result) && result.length > 0) {
+                const lastMsg = result[0];
+                // 检查内容是否匹配
+                if (lastMsg.content === contentToSend) {
+                  console.log('✅ [兜底] 手动拉取成功，更新消息状态');
+                  const realId = `${lastMsg.ts}-${lastMsg.sender}-${lastSeq}`;
+
+                  setMessages((prev) => {
+                    const pendingIndex = prev.findIndex(
+                      (msg) => msg.id === tempId
+                    );
+                    if (pendingIndex !== -1) {
+                      const newPrev = [...prev];
+                      newPrev[pendingIndex] = {
+                        ...newPrev[pendingIndex],
+                        id: realId,
+                        status: undefined, // 清除 sending 状态
+                        timestamp: new Date(Number(lastMsg.ts) * 1000),
+                        senderAddress: lastMsg.sender
+                      };
+                      return newPrev;
+                    }
+                    return prev;
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('⚠️ [兜底] 手动拉取失败 (非致命):', err);
+        }
       } catch (error) {
         console.error('❌ [发送群聊消息] 失败:', error);
 
@@ -266,7 +326,8 @@ export function useEncryptionActions({
       currentAddress,
       setMessages,
       scrollToBottom,
-      sendGroupMessage
+      sendGroupMessage,
+      publicClient
     ]
   );
 

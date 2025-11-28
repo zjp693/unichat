@@ -12,6 +12,7 @@ interface UseRedPacketActionsProps {
   setDetailsRedPacket: (message: Message | null) => void;
   selectedRedPacket: Message | null;
   scrollToBottom: (behavior?: 'smooth' | 'auto') => void;
+  currentAddress: Address;
 }
 
 /**
@@ -25,7 +26,8 @@ export function useRedPacketActions({
   setSelectedRedPacket,
   setDetailsRedPacket,
   selectedRedPacket,
-  scrollToBottom
+  scrollToBottom,
+  currentAddress
 }: UseRedPacketActionsProps) {
   /**
    * 发送红包
@@ -164,7 +166,7 @@ export function useRedPacketActions({
         remainingCount: newRemainingCount,
         claimedList: [
           ...(config.claimedList || []),
-          { name: '你', amount: claimAmount }
+          { name: '你', amount: claimAmount, address: currentAddress }
         ]
       };
 

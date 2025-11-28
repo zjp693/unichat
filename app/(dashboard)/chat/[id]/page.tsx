@@ -1,23 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  useAccount,
-  useConnect,
-  useDisconnect,
-  useSwitchChain,
-  useChainId,
-  useChains,
-  usePublicClient
-} from 'wagmi';
+import { useDispatch, useSelector } from 'react-redux';
+import { useAccount, useChainId, useChains, usePublicClient } from 'wagmi';
 import { Address } from 'viem';
 
 import { ChatNavigationBar } from '@/components/chat/chat-navigation-bar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
-import { useGetDefaultPublicKey, useSendMessage } from '@/lib/DirectMessageAbi';
+import { useSendMessage } from '@/lib/DirectMessageAbi';
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage';
 import { useChatParams } from '@/hooks/chat/data/useChatParams';
 import { useChatRefs } from '@/hooks/chat/state/useChatRefs';
@@ -27,16 +20,51 @@ import { useRedPacketActions } from '@/hooks/chat/actions/useRedPacketActions';
 import { useEncryptionActions } from '@/hooks/chat/actions/useEncryptionActions';
 import { useMessageActions } from '@/hooks/chat/actions/useMessageActions';
 import { useMessageLoader } from '@/hooks/chat/data/useMessageLoader';
-import { ChatInputArea } from '@/components/chat/ChatInputArea';
+import {
+  ChatInputArea,
+  ChatInputAreaRef
+} from '@/components/chat/ChatInputArea';
 import { ChatModals } from '@/components/chat/ChatModals';
 import { MessageList } from '@/components/chat/MessageList';
 import { ChatActionsPanel } from '@/components/chat/ChatActionsPanel';
 import { OpenRedPacketModalNew } from '@/components/chat/red-packet/OpenRedPacketModal';
 import { RedPacketDetailsModal } from '@/components/chat/red-packet/RedPacketDetailsModal';
-import type { Message } from '@/lib/chat/types';
 import { NAV_BAR_HEIGHT, FOOTER_HEIGHT } from '@/lib/chat/constants';
+import {
+  setIsActionsOpen,
+  setPanelHeight,
+  setShowKeyModal,
+  setShowGenerationModal,
+  setShowDecryptModal,
+  setShowSendModeModal,
+  setPendingGroupMessage,
+  setSelectedMessageId,
+  setShowGroupInfoPanel,
+  setShowPrivateChatSettingsPanel,
+  resetChatState
+} from '@/lib/chatSlice';
+import type { RootState } from '@/lib/store';
+import type { Message } from '@/lib/chat/types';
 
 export default function ChatPage() {
+  const dispatch = useDispatch();
+
+  // --- Redux State ---
+  const { isActionsOpen, panelHeight, selectedMessageId, pendingGroupMessage } =
+    useSelector((state: RootState) => state.chat);
+
+  // --- Local State ---
+  const [isClient, setIsClient] = useState(false);
+  const [selectedRedPacket, setSelectedRedPacket] = useState<Message | null>(
+    null
+  );
+  const [detailsRedPacket, setDetailsRedPacket] = useState<Message | null>(
+    null
+  );
+
+  // --- Refs ---
+  const chatInputAreaRef = useRef<ChatInputAreaRef>(null);
+
   // --- URL 参数解析 ---
   const {
     conversationId,
@@ -57,12 +85,10 @@ export default function ChatPage() {
     useKeyManagementRedux();
 
   // --- Wagmi 钩子 ---
-  const { address: currentAddress, isConnected } = useAccount();
+  const { address: currentAddress } = useAccount();
   const chainId = useChainId();
   const chains = useChains();
   const publicClient = usePublicClient();
-
-  const currentChain = chains.find((chain) => chain.id === chainId);
 
   // --- 头像获取 ---
   const {
@@ -72,38 +98,19 @@ export default function ChatPage() {
     isLoading: isPeerAvatarLoading
   } = usePeerAvatar(chatType === 'private' ? recipientAddress : undefined);
 
-  const { avatarCid: myAvatarCid, isLoading: isMyAvatarLoading } =
-    usePeerAvatar(currentAddress as Address | undefined);
+  const {
+    avatarCid: myAvatarCid,
+    avatarUrl: myAvatarUrl,
+    isLoading: isMyAvatarLoading
+  } = usePeerAvatar(currentAddress as Address | undefined);
 
   // --- Refs 管理 ---
   const { inputRef, scrollAreaRef, actionsPanelContentRef } = useChatRefs();
 
-  // --- State 管理 (UI Only) ---
-  const [inputMessage, setInputMessage] = useState('');
-  const [showKeyModal, setShowKeyModal] = useState(false);
-  const [showDecryptModal, setShowDecryptModal] = useState(false);
-  const [showGenerationModal, setShowGenerationModal] = useState(false);
-  const [selectedMessageId, setSelectedMessageId] = useState<string>('');
-  const [isClient, setIsClient] = useState(false);
-  const [isActionsOpen, setIsActionsOpen] = useState(false);
-  const [panelHeight, setPanelHeight] = useState(0);
-  const [showGroupInfoPanel, setShowGroupInfoPanel] = useState(false);
-  const [showPrivateChatSettingsPanel, setShowPrivateChatSettingsPanel] =
-    useState(false);
-  const [showSendModeModal, setShowSendModeModal] = useState(false);
-  const [pendingGroupMessage, setPendingGroupMessage] = useState('');
-
-  const [selectedRedPacket, setSelectedRedPacket] = useState<Message | null>(
-    null
-  );
-  const [detailsRedPacket, setDetailsRedPacket] = useState<Message | null>(
-    null
-  );
-
   // --- 辅助函数 ---
   const { scrollToBottom } = useScrollManager({
     scrollAreaRef,
-    setPanelHeight
+    setPanelHeight: (h) => dispatch(setPanelHeight(h))
   });
 
   useKeyboardManager({
@@ -111,11 +118,7 @@ export default function ChatPage() {
     isClient,
     panelHeight,
     isActionsOpen,
-    setPanelHeight,
-    groupAddress,
-    keys,
-    scrollAreaRef: scrollAreaRef as React.RefObject<HTMLDivElement>,
-    invitedMembersMessage: invitedMembersMessage as string | undefined,
+    setPanelHeight: (h) => dispatch(setPanelHeight(h)),
     scrollToBottom
   });
 
@@ -146,11 +149,12 @@ export default function ChatPage() {
     useRedPacketActions({
       recipientAddress,
       setMessages,
-      setIsActionsOpen,
+      setIsActionsOpen: (open) => dispatch(setIsActionsOpen(open)),
       setSelectedRedPacket,
       setDetailsRedPacket,
       selectedRedPacket,
-      scrollToBottom
+      scrollToBottom,
+      currentAddress: currentAddress as Address
     });
 
   // 加密操作
@@ -163,14 +167,14 @@ export default function ChatPage() {
     handleBatchDecrypt,
     handleKeyGenerated
   } = useEncryptionActions({
-    setShowKeyModal,
-    setShowGenerationModal,
-    setShowDecryptModal,
-    setShowSendModeModal,
-    setPendingGroupMessage,
-    setSelectedMessageId,
+    setShowKeyModal: (open) => dispatch(setShowKeyModal(open)),
+    setShowGenerationModal: (open) => dispatch(setShowGenerationModal(open)),
+    setShowDecryptModal: (open) => dispatch(setShowDecryptModal(open)),
+    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open)),
+    setPendingGroupMessage: (msg) => dispatch(setPendingGroupMessage(msg)),
+    setSelectedMessageId: (id) => dispatch(setSelectedMessageId(id)),
     setMessages,
-    selectedMessageId,
+    selectedMessageId: selectedMessageId || '',
     messages,
     keys,
     pendingGroupMessage,
@@ -180,13 +184,12 @@ export default function ChatPage() {
     encryptMessage,
     sendGroupMessage,
     scrollToBottom,
-    setInputMessage
+    inputRef: chatInputAreaRef,
+    publicClient
   });
 
   // 消息操作
   const { handleSendMessage, handleRetryMessage } = useMessageActions({
-    inputMessage,
-    setInputMessage,
     chatType,
     currentAddress: currentAddress as Address,
     recipientAddress,
@@ -198,15 +201,18 @@ export default function ChatPage() {
     writeContract: writeContractAsync,
     sendGroupMessage,
     encryptMessage,
-    setPendingGroupMessage,
-    setShowSendModeModal
+    setPendingGroupMessage: (msg) => dispatch(setPendingGroupMessage(msg)),
+    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open))
   });
 
   // --- Effects ---
   useEffect(() => {
     loadKeysFromStorage();
     setIsClient(true);
-  }, [loadKeysFromStorage]);
+    return () => {
+      dispatch(resetChatState());
+    };
+  }, [loadKeysFromStorage, dispatch]);
 
   // --- Render ---
   return (
@@ -214,7 +220,7 @@ export default function ChatPage() {
       <div
         className="flex-1 flex flex-col relative overflow-hidden"
         style={{
-          height: `calc(100vh - ${NAV_BAR_HEIGHT}px - ${FOOTER_HEIGHT}px)`,
+          height: `calc(100vh - ${NAV_BAR_HEIGHT}px)`,
           marginTop: '0px'
         }}
       >
@@ -225,15 +231,17 @@ export default function ChatPage() {
               chatType === 'private'
                 ? peerName || formatAddress(recipientAddress)
                 : groupName || 'Group Chat',
-            avatar: chatType === 'private' ? peerAvatarUrl : groupAvatar,
+            avatar:
+              (chatType === 'private' ? peerAvatarUrl : groupAvatar) ||
+              undefined,
             level: groupLevel as any,
             address: chatType === 'private' ? recipientAddress : groupAddress,
             memberCount: memberCount,
             groupCondition: groupCondition
           }}
           onMenuClick={() => {
-            if (chatType === 'group') setShowGroupInfoPanel(true);
-            else setShowPrivateChatSettingsPanel(true);
+            if (chatType === 'group') dispatch(setShowGroupInfoPanel(true));
+            else dispatch(setShowPrivateChatSettingsPanel(true));
           }}
           onBack={() => router.back()}
         />
@@ -264,40 +272,52 @@ export default function ChatPage() {
         <div
           className="bg-gray-100 border-t border-gray-300 transition-all duration-300 ease-in-out z-20"
           style={{
-            paddingBottom: isActionsOpen ? `${panelHeight}px` : '0px',
             minHeight: `${FOOTER_HEIGHT}px`
           }}
         >
           <ChatInputArea
+            ref={chatInputAreaRef}
             inputRef={inputRef}
-            inputMessage={inputMessage}
-            setInputMessage={setInputMessage}
             handleKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSendMessage();
+                // handleSendMessage is now called by ChatInputArea internally with content
+                // But here we are handling keydown.
+                // ChatInputArea handles keydown internally too.
+                // Wait, ChatInputArea calls onSend() on Enter.
+                // And calls handleKeyDown(e) otherwise.
+                // So we don't need to handle Enter here if ChatInputArea does it.
+                // But ChatInputArea code:
+                /*
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    onSend();
+                  } else {
+                    handleKeyDown(e);
+                  }
+                }}
+                */
+                // So handleKeyDown prop is only for NON-Enter keys (or Shift+Enter).
+                // So this prop is fine.
               }
             }}
             handleSendMessage={handleSendMessage}
             handleOpenActions={() => {
-              setIsActionsOpen(!isActionsOpen);
+              dispatch(setIsActionsOpen(!isActionsOpen));
               if (!isActionsOpen) {
-                setPanelHeight(250);
-                setTimeout(() => scrollToBottom('smooth'), 100);
+                dispatch(setPanelHeight(230));
+                setTimeout(() => scrollToBottom('smooth'), 350);
               } else {
-                setPanelHeight(0);
+                dispatch(setPanelHeight(0));
               }
             }}
-            setIsActionsOpen={setIsActionsOpen}
           />
 
           {/* 功能面板内容 */}
           <ChatActionsPanel
-            isOpen={isActionsOpen}
-            onClose={() => {}}
             onSendRedPacket={handleSendRedPacket}
             chatType={chatType}
-            panelHeight={250}
             contentRef={actionsPanelContentRef}
           />
         </div>
@@ -305,24 +325,13 @@ export default function ChatPage() {
 
       {/* 弹窗组件 */}
       <ChatModals
-        showGenerationModal={showGenerationModal}
-        setShowGenerationModal={setShowGenerationModal}
         handleKeyGenerated={handleKeyGenerated}
-        showDecryptModal={showDecryptModal}
-        setShowDecryptModal={setShowDecryptModal}
         handleKeySelect={handleKeySelect}
         handleBatchDecrypt={handleBatchDecrypt}
-        showSendModeModal={showSendModeModal}
-        setShowSendModeModal={setShowSendModeModal}
-        setPendingGroupMessage={setPendingGroupMessage}
         handleSendModeSelect={handleSendModeSelect}
-        showGroupInfoPanel={showGroupInfoPanel}
-        setShowGroupInfoPanel={setShowGroupInfoPanel}
         chatType={chatType}
         conversationId={conversationId as string}
         memberCount={memberCount}
-        showPrivateChatSettingsPanel={showPrivateChatSettingsPanel}
-        setShowPrivateChatSettingsPanel={setShowPrivateChatSettingsPanel}
       />
 
       <OpenRedPacketModalNew
@@ -339,8 +348,8 @@ export default function ChatPage() {
         }
         senderAvatar={
           selectedRedPacket?.sender === 'user'
-            ? myAvatarCid || undefined
-            : peerAvatarCid || undefined
+            ? myAvatarUrl || undefined
+            : peerAvatarUrl || undefined
         }
         status={
           selectedRedPacket?.content.includes('"claimed":true')
@@ -387,8 +396,8 @@ export default function ChatPage() {
               }
               senderAvatar={
                 detailsRedPacket.sender === 'user'
-                  ? myAvatarCid || undefined
-                  : peerAvatarCid || undefined
+                  ? myAvatarUrl || undefined
+                  : peerAvatarUrl || undefined
               }
               message={config.message || '恭喜发财'}
               type={config.type || 'LUCKY'}

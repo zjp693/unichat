@@ -2,16 +2,16 @@
 
 import React, { RefObject } from 'react';
 import Image from 'next/image';
+import { useDispatch, useSelector } from 'react-redux';
 import { cn } from '@/lib/utils';
 import { SendRedPacketModal } from './red-packet/SendRedPacketModal';
 import { RedPacketConfig } from './red-packet/types';
+import { setIsActionsOpen } from '@/lib/chatSlice';
+import type { RootState } from '@/lib/store';
 
 interface ChatActionsPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
   onSendRedPacket: (config: RedPacketConfig) => void;
   chatType: 'private' | 'group';
-  panelHeight: number;
   contentRef?: RefObject<HTMLDivElement | null>;
 }
 
@@ -50,13 +50,18 @@ const ActionButton: React.FC<ActionButtonProps> = ({
  * 包含相册、拍照、语音通话、AI、红包、转账等功能入口
  */
 export const ChatActionsPanel: React.FC<ChatActionsPanelProps> = ({
-  isOpen,
-  onClose,
   onSendRedPacket,
   chatType,
-  panelHeight,
   contentRef
 }) => {
+  const dispatch = useDispatch();
+  const { isActionsOpen, panelHeight } = useSelector(
+    (state: RootState) => state.chat
+  );
+
+  const handleClose = () => {
+    dispatch(setIsActionsOpen(false));
+  };
   // 功能按钮配置列表
   const actionButtons = [
     { id: 'album', icon: '/chats/Album.png', label: 'Album' },
@@ -79,7 +84,7 @@ export const ChatActionsPanel: React.FC<ChatActionsPanelProps> = ({
     <div
       className={cn('bg-gray-100 overflow-hidden')}
       style={{
-        height: isOpen ? `${panelHeight}px` : '0px',
+        height: isActionsOpen ? `${panelHeight}px` : '0px',
         transition: 'height 0.3s ease-in-out'
       }}
     >
@@ -97,7 +102,7 @@ export const ChatActionsPanel: React.FC<ChatActionsPanelProps> = ({
                 chatType={chatType}
                 trigger={
                   <div
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="flex flex-col items-center gap-1"
                   >
                     <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center relative">
@@ -124,7 +129,7 @@ export const ChatActionsPanel: React.FC<ChatActionsPanelProps> = ({
               key={button.id}
               icon={button.icon}
               label={button.label}
-              onClick={onClose}
+              onClick={handleClose}
             />
           );
         })}

@@ -361,13 +361,44 @@ export function useMessageLoader({
         const { from, to, timestamp, content: rawContent } = log.args;
         const content = rawContent as string;
 
-        if (from?.toLowerCase() === currentAddress?.toLowerCase()) {
+        // 过滤非当前会话的消息
+        const isFromMe = from?.toLowerCase() === currentAddress?.toLowerCase();
+        const isToMe = to?.toLowerCase() === currentAddress?.toLowerCase();
+        const isFromRecipient =
+          from?.toLowerCase() === recipientAddress?.toLowerCase();
+        const isToRecipient =
+          to?.toLowerCase() === recipientAddress?.toLowerCase();
+
+        const isRelated =
+          (isFromMe && isToRecipient) || (isFromRecipient && isToMe);
+
+        if (!isRelated) return;
+
+        console.log('📨 [消息监听] [私聊] 收到区块链消息事件:', {
+          from,
+          to,
+          contentLen: content.length
+        });
+
+        // 处理自己发送的消息确认
+        if (isFromMe) {
           setMessages((prev) =>
-            prev.map((msg) =>
-              msg.originalContent === content
-                ? { ...msg, status: undefined }
-                : msg
-            )
+            prev.map((msg) => {
+              // 比较加密后的内容 (msg.content) 而不是原始内容 (msg.originalContent)
+              // 同时确保只更新发送中的消息
+              if (msg.status === 'sending' && msg.content === content) {
+                console.log(
+                  '✅ [消息监听] [私聊] 确认消息已上链，移除转圈圈状态:',
+                  msg.id
+                );
+                return {
+                  ...msg,
+                  status: undefined, // 清除发送中状态
+                  id: `${timestamp?.toString()}-${from?.toLowerCase()}-${Date.now()}` // 更新为持久化 ID
+                };
+              }
+              return msg;
+            })
           );
           return;
         }
@@ -375,10 +406,7 @@ export function useMessageLoader({
         const newMessage: Message = {
           id: `${timestamp?.toString()}-${from?.toLowerCase()}-${Date.now()}`,
           content: content,
-          sender:
-            from?.toLowerCase() === currentAddress?.toLowerCase()
-              ? 'user'
-              : 'other',
+          sender: 'other',
           timestamp: new Date(Number(timestamp) * 1000),
           type: 'text',
           isEncrypted: true,
@@ -401,7 +429,7 @@ export function useMessageLoader({
       });
     },
     !!currentConvoId,
-    { convoId: currentConvoId }
+    undefined // 不再使用 convoId 过滤，因为合约事件可能不包含此索引
   );
 
   // 8️⃣ Listen for new messages (Group)
@@ -409,9 +437,33 @@ export function useMessageLoader({
     groupAddress || '',
     currentAddress,
     (newMessage) => {
+      console.log('📨 [消息监听] [群聊] 收到群消息:', newMessage.id);
       setMessages((prev) => {
+        // 1. 尝试找到对应的乐观更新消息 (发送中且内容相同)
+        const pendingIndex = prev.findIndex(
+          (msg) =>
+            msg.status === 'sending' &&
+            msg.sender === 'user' &&
+            // 对于群聊，content 就是原始内容，可以直接比较
+            msg.content === newMessage.content
+        );
+
+        if (pendingIndex !== -1) {
+          console.log(
+            '✅ [消息监听] [群聊] 确认消息已上链，移除转圈圈状态:',
+            prev[pendingIndex].id
+          );
+          // 找到乐观消息，用新消息替换它
+          const newPrev = [...prev];
+          newPrev[pendingIndex] = newMessage;
+          return newPrev;
+        }
+
+        // 2. 如果没找到，检查是否已存在 (避免重复)
         const exists = prev.some((msg) => msg.id === newMessage.id);
         if (exists) return prev;
+
+        // 3. 追加新消息
         return [...prev, newMessage];
       });
       setTimeout(() => scrollToBottom('smooth'), 100);

@@ -53,6 +53,27 @@ export function RedPacketDetailsModal({
 }: RedPacketDetailsModalProps) {
   const { toast } = useToast();
 
+  console.log('🧧 [RedPacketDetailsModal] Props:', {
+    senderAvatar,
+    claimedList
+  });
+
+  const getSafeAvatarUrl = (url?: string) => {
+    console.log('🧧 [RedPacketDetailsModal] getSafeAvatarUrl:', url);
+    if (!url) return null;
+    try {
+      // 检查是否是有效的 URL
+      new URL(url);
+      return url;
+    } catch {
+      // 允许相对路径
+      if (url.startsWith('/')) return url;
+      return null;
+    }
+  };
+
+  const safeSenderAvatar = getSafeAvatarUrl(senderAvatar);
+
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
@@ -96,13 +117,14 @@ export function RedPacketDetailsModal({
           {/* 头像和名字 */}
           <div className="flex items-center gap-2 mb-1">
             <div className="w-5 h-5 rounded-sm overflow-hidden bg-gray-200 shrink-0">
-              {senderAvatar ? (
+              {safeSenderAvatar ? (
                 <Image
-                  src={senderAvatar}
+                  src={safeSenderAvatar}
                   alt={senderName}
                   width={20}
                   height={20}
                   className="object-cover w-full h-full"
+                  unoptimized
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-500 text-[10px]">
@@ -142,68 +164,72 @@ export function RedPacketDetailsModal({
 
         {/* 列表区域 */}
         <div className="flex-1 overflow-y-auto">
-          {claimedList.map((item, index) => (
-            <div
-              key={index}
-              className="flex items-center px-4 py-3 border-b border-gray-200"
-            >
-              <div className="relative mr-3">
-                <div className="w-10 h-10 rounded-md overflow-hidden bg-gray-100">
-                  {item.avatar ? (
-                    <Image
-                      src={item.avatar}
-                      alt={item.name}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-300" />
+          {claimedList.map((item, index) => {
+            const safeItemAvatar = getSafeAvatarUrl(item.avatar);
+            return (
+              <div
+                key={index}
+                className="flex items-center px-4 py-3 border-b border-gray-200"
+              >
+                <div className="relative mr-3">
+                  <div className="w-10 h-10 rounded-md overflow-hidden bg-gray-100">
+                    {safeItemAvatar ? (
+                      <Image
+                        src={safeItemAvatar}
+                        alt={item.name}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-300" />
+                    )}
+                  </div>
+                  {item.isBest && (
+                    <div className="absolute -top-2 -right-2 w-4 h-4">
+                      <Image
+                        src="/chats/Crown.png"
+                        alt="Best Luck"
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
                   )}
                 </div>
-                {item.isBest && (
-                  <div className="absolute -top-2 -right-2 w-4 h-4">
-                    <Image
-                      src="/chats/Crown.png"
-                      alt="Best Luck"
-                      fill
-                      className="object-contain"
-                    />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[15px] font-medium text-gray-900">
+                      {item.name}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[15px] font-medium',
+                        item.isBest ? 'text-[#fa9d3b]' : 'text-gray-900'
+                      )}
+                    >
+                      {tokenSymbol} {item.amount}
+                    </span>
                   </div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[15px] font-medium text-gray-900">
-                    {item.name}
-                  </span>
-                  <span
-                    className={cn(
-                      'text-[15px] font-medium',
-                      item.isBest ? 'text-[#fa9d3b]' : 'text-gray-900'
-                    )}
-                  >
-                    {tokenSymbol} {item.amount}
-                  </span>
-                </div>
-                <div className="flex items-center">
-                  <span className="text-[11px] text-gray-400 break-all mr-1 font-fomo">
-                    {item.address}
-                  </span>
-                  <button
-                    onClick={() => handleCopy(item.address)}
-                    className="w-3 h-3 relative opacity-60 hover:opacity-100 transition-opacity shrink-0"
-                  >
-                    <Image
-                      src="/contacts/copy.svg"
-                      alt="Copy"
-                      fill
-                      className="object-contain"
-                    />
-                  </button>
+                  <div className="flex items-center">
+                    <span className="text-[11px] text-gray-400 break-all mr-1 font-mono">
+                      {item.address}
+                    </span>
+                    <button
+                      onClick={() => handleCopy(item.address)}
+                      className="w-3 h-3 relative opacity-60 hover:opacity-100 transition-opacity shrink-0"
+                    >
+                      <Image
+                        src="/contacts/copy.svg"
+                        alt="Copy"
+                        fill
+                        className="object-contain"
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {claimedList.length === 0 && (
             <div className="flex flex-col items-center justify-center py-10 text-gray-300 text-sm">
               暂无领取记录

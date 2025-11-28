@@ -40,6 +40,20 @@ export function OpenRedPacketModalNew({
     console.log('OpenRedPacketModalNew V3 loaded');
   }, []);
 
+  const getSafeAvatarUrl = (url?: string) => {
+    console.log('senderAvatar:', url);
+    if (!url) return null;
+    try {
+      new URL(url);
+      return url;
+    } catch {
+      if (url.startsWith('/')) return url;
+      return null;
+    }
+  };
+
+  const safeSenderAvatar = getSafeAvatarUrl(senderAvatar);
+
   const handleOpenClick = () => {
     setIsOpening(true);
     // Animation duration 0.5s
@@ -80,12 +94,13 @@ export function OpenRedPacketModalNew({
               <div className="flex flex-col items-center gap-3">
                 <div className="flex items-center gap-2 text-[#fcedae]">
                   <div className="w-6 h-6 rounded-sm overflow-hidden relative bg-black/20">
-                    {senderAvatar ? (
+                    {safeSenderAvatar ? (
                       <Image
-                        src={senderAvatar}
+                        src={safeSenderAvatar}
                         alt={senderName}
                         fill
                         className="object-cover"
+                        unoptimized
                       />
                     ) : (
                       <div className="w-full h-full bg-gray-300 flex items-center justify-center text-xs text-gray-500">
@@ -164,9 +179,7 @@ export function OpenRedPacketModalNew({
                   className="object-contain"
                 />
               </button>
-            ) : status ===
-              'empty' ? // Empty status doesn't show a button or "claimed" text here, it shows text in top section and link at bottom
-            null : (
+            ) : status === 'empty' ? null : ( // Empty status doesn't show a button or "claimed" text here, it shows text in top section and link at bottom
               <div className="text-[#fcedae] text-lg font-medium whitespace-nowrap bg-black/10 px-4 py-1 rounded-full">
                 {status === 'claimed' ? '已领取' : '已过期'}
               </div>

@@ -1,72 +1,66 @@
 import React from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { KeyGenerationModal } from '@/components/chat/KeyGenerationModal';
 import { DecryptionModal } from '@/components/chat/DecryptionModal';
 import { MessageSendModeModal } from '@/components/chat/MessageSendModeModal';
 import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel';
 import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel';
 import type { KeyPair } from '@/lib/encryption';
+import {
+  setShowGenerationModal,
+  setShowDecryptModal,
+  setShowSendModeModal,
+  setShowGroupInfoPanel,
+  setShowPrivateChatSettingsPanel
+} from '@/lib/chatSlice';
+import type { RootState } from '@/lib/store';
 
 interface ChatModalsProps {
   // Key Generation
-  showGenerationModal: boolean;
-  setShowGenerationModal: (show: boolean) => void;
   handleKeyGenerated: (key: KeyPair) => void;
 
   // Decryption
-  showDecryptModal: boolean;
-  setShowDecryptModal: (show: boolean) => void;
   handleKeySelect: (key: KeyPair) => void;
   handleBatchDecrypt: (key: KeyPair) => void;
 
   // Send Mode
-  showSendModeModal: boolean;
-  setShowSendModeModal: (show: boolean) => void;
-  setPendingGroupMessage: (msg: string) => void;
   handleSendModeSelect: (mode: 'plaintext' | 'encrypted') => void;
 
   // Group Info
-  showGroupInfoPanel: boolean;
-  setShowGroupInfoPanel: (show: boolean) => void;
   chatType: 'private' | 'group';
   conversationId: string;
   memberCount: number;
-
-  // Private Settings
-  showPrivateChatSettingsPanel: boolean;
-  setShowPrivateChatSettingsPanel: (show: boolean) => void;
 }
 
 export const ChatModals: React.FC<ChatModalsProps> = ({
-  showGenerationModal,
-  setShowGenerationModal,
   handleKeyGenerated,
-  showDecryptModal,
-  setShowDecryptModal,
   handleKeySelect,
   handleBatchDecrypt,
-  showSendModeModal,
-  setShowSendModeModal,
-  setPendingGroupMessage,
   handleSendModeSelect,
-  showGroupInfoPanel,
-  setShowGroupInfoPanel,
   chatType,
   conversationId,
-  memberCount,
-  showPrivateChatSettingsPanel,
-  setShowPrivateChatSettingsPanel
+  memberCount
 }) => {
+  const dispatch = useDispatch();
+  const {
+    showGenerationModal,
+    showDecryptModal,
+    showSendModeModal,
+    showGroupInfoPanel,
+    showPrivateChatSettingsPanel
+  } = useSelector((state: RootState) => state.chat);
+
   return (
     <>
       <KeyGenerationModal
         isOpen={showGenerationModal}
-        onClose={() => setShowGenerationModal(false)}
+        onClose={() => dispatch(setShowGenerationModal(false))}
         onKeyGenerated={handleKeyGenerated}
       />
 
       <DecryptionModal
         isOpen={showDecryptModal}
-        onClose={() => setShowDecryptModal(false)}
+        onClose={() => dispatch(setShowDecryptModal(false))}
         onKeySelect={handleKeySelect}
         onBatchDecrypt={handleBatchDecrypt}
       />
@@ -75,7 +69,7 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
       <MessageSendModeModal
         isOpen={showSendModeModal}
         onClose={() => {
-          setShowSendModeModal(false);
+          dispatch(setShowSendModeModal(false));
         }}
         onSelectMode={handleSendModeSelect}
       />
@@ -86,7 +80,7 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
           conversationId={conversationId}
           chatType={chatType}
           memberCount={memberCount}
-          onClose={() => setShowGroupInfoPanel(false)}
+          onClose={() => dispatch(setShowGroupInfoPanel(false))}
         />
       )}
 
@@ -94,7 +88,7 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
       {showPrivateChatSettingsPanel && chatType === 'private' && (
         <PrivateChatSettingsPanel
           isOpen={showPrivateChatSettingsPanel}
-          onClose={() => setShowPrivateChatSettingsPanel(false)}
+          onClose={() => dispatch(setShowPrivateChatSettingsPanel(false))}
           conversationId={conversationId}
         />
       )}

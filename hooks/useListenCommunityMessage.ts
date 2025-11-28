@@ -1,6 +1,6 @@
 import { useWatchContractEvent, usePublicClient } from 'wagmi';
 import communityABI from '@/contract/abi/community.json';
-import { Abi, Address } from 'viem';
+import { Abi, Address, getAddress } from 'viem';
 import type { Message } from '@/lib/chat/types';
 
 interface CommunityMessage {
@@ -44,24 +44,28 @@ export function useListenCommunityMessage(
   const publicClient = usePublicClient();
 
   useWatchContractEvent({
-    address: communityAddress as `0x${string}`,
+    address: communityAddress ? getAddress(communityAddress) : undefined,
     abi: communityABI.abi as Abi,
     eventName: 'CommunityMessageBroadcasted',
     enabled: enabled && !!communityAddress,
     onLogs: async (logs) => {
+      console.log('📨 [群聊监听] 收到事件日志:', logs.length);
       for (const log of logs) {
+        console.log('📨 [群聊监听] 处理日志:', log);
         const { sender, seq, ts } = (log as any).args;
         const messageId = `${ts?.toString()}-${sender}-${seq?.toString()}`;
 
         // Fetch content
         let content = '';
         if (publicClient && seq !== undefined) {
+          console.log('📨 [群聊监听] 正在获取消息内容, seq:', seq);
           content =
             (await fetchMessageContent(
               publicClient,
               communityAddress,
               Number(seq)
             )) || '';
+          console.log('📨 [群聊监听] 获取到内容:', content);
         }
 
         const isOwn = sender?.toLowerCase() === currentAddress?.toLowerCase();
