@@ -12,6 +12,7 @@ import {
 import storage from 'redux-persist/lib/storage';
 import keyManagementReducer from './keyManagementSlice';
 import searchHistoryReducer from './searchHistorySlice';
+import chatReducer from './chatSlice';
 
 const persistConfig = {
   key: 'unichat-root',
@@ -21,7 +22,8 @@ const persistConfig = {
 
 const rootReducer = combineReducers({
   keyManagement: keyManagementReducer,
-  searchHistory: searchHistoryReducer
+  searchHistory: searchHistoryReducer,
+  chat: chatReducer
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

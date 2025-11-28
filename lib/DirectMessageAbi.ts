@@ -3,7 +3,7 @@ import {
   useWriteContract,
   useWatchContractEvent
 } from 'wagmi';
-import { Address, Abi } from 'viem';
+import { Address, Abi, getAddress } from 'viem';
 import DirectMessageAbiJson from '../contract/abi/DirectMessageAbi.json';
 
 // JSON 文件结构: { "abi": [...] }
@@ -26,8 +26,9 @@ if (
   );
 }
 
-export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
-  contractAddressFromEnv as Address;
+export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address = contractAddressFromEnv
+  ? getAddress(contractAddressFromEnv)
+  : (contractAddressFromEnv as Address);
 
 // 1. 定义数据类型
 export type DMMessage = {
