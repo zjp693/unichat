@@ -148,13 +148,15 @@ export default function ChatPage() {
   const { handleSendRedPacket, handleOpenRedPacket, handleClaimRedPacket } =
     useRedPacketActions({
       recipientAddress,
+      groupAddress: groupAddress as Address,
       setMessages,
       setIsActionsOpen: (open) => dispatch(setIsActionsOpen(open)),
       setSelectedRedPacket,
       setDetailsRedPacket,
       selectedRedPacket,
       scrollToBottom,
-      currentAddress: currentAddress as Address
+      currentAddress: currentAddress as Address,
+      chatType
     });
 
   // 加密操作
@@ -337,7 +339,39 @@ export default function ChatPage() {
       <OpenRedPacketModalNew
         isOpen={!!selectedRedPacket}
         onClose={() => setSelectedRedPacket(null)}
-        onOpen={() => handleClaimRedPacket()}
+        onOpen={async () => {
+          if (!selectedRedPacket) return;
+          let packetId: string | undefined;
+
+          try {
+            // 尝试解析 JSON (群红包 / Optimistic UI)
+            const json = JSON.parse(selectedRedPacket.content);
+            if (json.packetId) {
+              packetId = json.packetId;
+            }
+          } catch (e) {
+            // 不是 JSON，尝试解析 RP 格式 (私聊红包)
+            if (selectedRedPacket.content.startsWith('RP|')) {
+              const parts = selectedRedPacket.content.split('|');
+              if (parts.length >= 3) {
+                packetId = parts[2];
+              }
+            }
+          }
+
+          if (packetId) {
+            await handleClaimRedPacket(packetId);
+          } else {
+            console.error('无法解析红包 ID', selectedRedPacket);
+          }
+        }}
+        onDetails={() => {
+          const packet = selectedRedPacket;
+          setSelectedRedPacket(null);
+          if (packet) {
+            setDetailsRedPacket(packet);
+          }
+        }}
         senderName={
           selectedRedPacket?.sender === 'user'
             ? '我'
@@ -356,6 +390,13 @@ export default function ChatPage() {
             ? 'claimed'
             : 'active'
         }
+        packetId={(() => {
+          try {
+            return JSON.parse(selectedRedPacket?.content || '{}').packetId;
+          } catch {
+            return undefined;
+          }
+        })()}
         message={(() => {
           try {
             return (
@@ -399,6 +440,7 @@ export default function ChatPage() {
                   ? myAvatarUrl || undefined
                   : peerAvatarUrl || undefined
               }
+              packetId={config.packetId}
               message={config.message || '恭喜发财'}
               type={config.type || 'LUCKY'}
               myAmount={myClaim ? myClaim.amount : undefined}

@@ -12,15 +12,23 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { RedPacketConfig } from './types';
 
+import { useReadContract, useAccount } from 'wagmi';
+import {
+  RedPacketAbi,
+  RED_PACKET_CONTRACT_ADDRESS,
+  PacketStatus
+} from '@/lib/RedPacketAbi';
+
 interface OpenRedPacketModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onOpen: () => void;
+  onOpen: (startAnimation: () => void) => Promise<void>;
   onDetails?: () => void;
   senderName: string;
   senderAvatar?: string;
   message: string;
-  status: 'active' | 'claimed' | 'expired' | 'empty';
+  packetId?: string; // 新增 packetId
+  status?: 'active' | 'claimed' | 'expired' | 'empty'; // status 变为可选，内部计算优先
 }
 
 export function OpenRedPacketModalNew({
@@ -31,17 +39,69 @@ export function OpenRedPacketModalNew({
   senderName,
   senderAvatar,
   message,
-  status
+  packetId,
+  status: initialStatus = 'active'
 }: OpenRedPacketModalProps) {
   const [isOpening, setIsOpening] = React.useState(false);
+  const { address } = useAccount();
+
+  // 获取红包信息
+  const { data: packet } = useReadContract({
+    address: RED_PACKET_CONTRACT_ADDRESS,
+    abi: RedPacketAbi,
+    functionName: 'getPacket',
+    args: packetId ? [BigInt(packetId)] : undefined,
+    query: {
+      enabled: !!packetId && isOpen
+    }
+  });
+
+  // 检查是否已领取
+  const { data: hasClaimed } = useReadContract({
+    address: RED_PACKET_CONTRACT_ADDRESS,
+    abi: RedPacketAbi,
+    functionName: 'hasClaimed',
+    args: packetId && address ? [BigInt(packetId), address] : undefined,
+    query: {
+      enabled: !!packetId && !!address && isOpen
+    }
+  });
+
+  // 计算实时状态
+  const currentStatus = React.useMemo(() => {
+    if (!packet) return initialStatus;
+
+    // 1. 检查是否已领取
+    if (hasClaimed) return 'claimed';
+
+    const packetData = packet as any;
+
+    // 2. 检查是否过期
+    const expiryTime =
+      Number(packetData.creationTime) + Number(packetData.expiryDuration);
+    if (Date.now() / 1000 > expiryTime) return 'expired';
+
+    // 3. 检查是否领完 (对于群红包/拼手气红包)
+    // 注意：这里简化处理，如果是私聊红包，remainingCount 逻辑可能不同
+    // 但通常 remainingCount == 0 就是领完了
+    if (Number(packetData.remainingCount) === 0) return 'empty';
+
+    return 'active';
+  }, [packet, hasClaimed, initialStatus]);
 
   // Debug log to confirm new version is loaded
   React.useEffect(() => {
-    console.log('OpenRedPacketModalNew V3 loaded');
-  }, []);
+    console.log('OpenRedPacketModalNew V4 loaded', { packetId, currentStatus });
+  }, [packetId, currentStatus]);
+
+  // 自动跳转：如果已领取，直接进入详情页
+  React.useEffect(() => {
+    if (isOpen && currentStatus === 'claimed' && onDetails) {
+      onDetails();
+    }
+  }, [isOpen, currentStatus, onDetails]);
 
   const getSafeAvatarUrl = (url?: string) => {
-    console.log('senderAvatar:', url);
     if (!url) return null;
     try {
       new URL(url);
@@ -54,13 +114,18 @@ export function OpenRedPacketModalNew({
 
   const safeSenderAvatar = getSafeAvatarUrl(senderAvatar);
 
-  const handleOpenClick = () => {
-    setIsOpening(true);
-    // Animation duration 0.5s
-    setTimeout(() => {
-      onOpen();
+  // 处理“开”按钮点击
+  // 1. 调用 onOpen (即 handleClaimRedPacket)，传入回调函数
+  // 2. 当支付成功时，回调函数被执行，设置 isOpening 为 true，开始旋转动画
+  // 3. 等待交易完成，由父组件关闭模态框
+  const handleOpenClick = async () => {
+    if (isOpening) return;
+    try {
+      await onOpen(() => setIsOpening(true));
+    } catch (e) {
+      console.error(e);
       setIsOpening(false);
-    }, 500);
+    }
   };
 
   return (
@@ -114,7 +179,7 @@ export function OpenRedPacketModalNew({
                 </div>
 
                 {/* Message or Empty Status Text */}
-                {status === 'empty' ? (
+                {currentStatus === 'empty' ? (
                   <div className="text-[#fcedae] text-[24px] font-medium tracking-wide px-4 text-center mt-2">
                     手慢了，红包派完了
                   </div>
@@ -144,7 +209,7 @@ export function OpenRedPacketModalNew({
           </div>
 
           {/* Check Luck Link (Only for empty status) - Positioned in main container */}
-          {status === 'empty' && (
+          {currentStatus === 'empty' && (
             <div className="absolute bottom-[16%] w-full flex justify-center z-30">
               <button
                 onClick={onDetails}
@@ -162,7 +227,7 @@ export function OpenRedPacketModalNew({
               isOpening && 'opacity-0 scale-0'
             )}
           >
-            {status === 'active' ? (
+            {currentStatus === 'active' ? (
               <button
                 onClick={handleOpenClick}
                 disabled={isOpening}
@@ -179,9 +244,9 @@ export function OpenRedPacketModalNew({
                   className="object-contain"
                 />
               </button>
-            ) : status === 'empty' ? null : ( // Empty status doesn't show a button or "claimed" text here, it shows text in top section and link at bottom
+            ) : currentStatus === 'empty' ? null : ( // Empty status doesn't show a button or "claimed" text here, it shows text in top section and link at bottom
               <div className="text-[#fcedae] text-lg font-medium whitespace-nowrap bg-black/10 px-4 py-1 rounded-full">
-                {status === 'claimed' ? '已领取' : '已过期'}
+                {currentStatus === 'claimed' ? '已领取' : '已过期'}
               </div>
             )}
           </div>

@@ -15,7 +15,11 @@ export function useSendCommunityMessage(communityAddress: string) {
       hash
     });
 
-  const sendMessage = async (content: string, kind: 0 | 1 = 0) => {
+  const sendMessage = async (
+    content: string,
+    kind: 0 | 1 = 0,
+    cid: string = ''
+  ) => {
     if (!content.trim()) {
       throw new Error('消息内容不能为空');
     }
@@ -24,19 +28,21 @@ export function useSendCommunityMessage(communityAddress: string) {
       communityAddress,
       content,
       kind: kind === 0 ? '明文' : '密文',
+      cid,
       length: content.length
     });
 
-    await writeContractAsync({
+    const hash = await writeContractAsync({
       address: communityAddress as `0x${string}`,
       abi: communityABI.abi as Abi,
       functionName: 'sendCommunityMessage',
       args: [
         kind, // kind: 0 = 明文, 1 = 密文
         content, // 消息内容
-        '' // cid: 空字符串
+        cid // cid
       ]
     });
+    return hash;
   };
 
   return {

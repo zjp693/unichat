@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useReadContract, usePublicClient } from 'wagmi';
+import { useReadContract } from 'wagmi';
 import communityABI from '@/contract/abi/community.json';
 import { Abi, Address } from 'viem';
 import type { Message } from '@/lib/chat/types';
+import { decodeGroupRedPacketCid } from '@/lib/redpacket/encoding';
 
 interface CommunityMessage {
   sender: Address;
@@ -75,12 +76,29 @@ export function useCommunityMessages(
         const isOwn =
           msg.sender.toLowerCase() === currentUserAddress?.toLowerCase();
 
+        // 解析红包
+        const packetId = decodeGroupRedPacketCid(msg.cid);
+        let content = msg.content;
+        let type = 'text';
+
+        if (packetId) {
+          type = 'red-packet';
+          content = JSON.stringify({
+            packetId: packetId.toString(),
+            message: msg.content,
+            type: 'NORMAL', // 默认，详情页会更新
+            status: 'active',
+            amount: '0', // 列表页不显示具体金额
+            count: 1
+          });
+        }
+
         return {
           id: `${msg.ts.toString()}-${msg.sender}-${start + index}`,
           sender: isOwn ? 'user' : 'other',
           timestamp: new Date(Number(msg.ts) * 1000),
-          type: 'text' as const,
-          content: msg.content,
+          type: type as any,
+          content: content,
           recipient: communityAddress as Address,
           isEncrypted: false,
           originalContent: msg.content,

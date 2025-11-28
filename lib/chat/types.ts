@@ -24,7 +24,7 @@ export type MessageSender = 'user' | 'other' | 'system';
 /**
  * 消息状态
  */
-export type MessageStatus = 'sending' | 'failed';
+export type MessageStatus = 'sending' | 'failed' | 'sent';
 
 /**
  * 消息对象的数据结构

@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronLeft, ChevronDown, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Loader2 } from 'lucide-react';
+import { useReadContract } from 'wagmi';
 import {
   Dialog,
   DialogContent,
@@ -14,11 +15,12 @@ import { Input } from '@/components/ui/input';
 import { ActionSheet } from '@/components/ui/action-sheet';
 import { cn } from '@/lib/utils';
 import { RedPacketType, RedPacketConfig } from './types';
+import { useGetAllRecommendedTokenInfos } from '@/lib/RedPacketAbi';
 import Image from 'next/image';
 
 interface SendRedPacketModalProps {
   trigger?: React.ReactNode;
-  onSend?: (config: RedPacketConfig) => void;
+  onSend?: (config: RedPacketConfig) => Promise<void>;
   chatType: 'private' | 'group';
 }
 
@@ -29,6 +31,36 @@ export function SendRedPacketModal({
 }: SendRedPacketModalProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isTypeSwitcherOpen, setIsTypeSwitcherOpen] = React.useState(false);
+  const [isTokenSelectorOpen, setIsTokenSelectorOpen] = React.useState(false);
+
+  // 从合约获取推荐代币列表
+  const { data: recommendedTokensData, isLoading: isLoadingTokens } =
+    useGetAllRecommendedTokenInfos();
+
+  // 解析推荐代币列表
+  const recommendedTokens = React.useMemo(() => {
+    if (!recommendedTokensData) return [];
+    const [addresses, infos] = recommendedTokensData as [string[], any[]];
+
+    return addresses
+      .map((addr, index) => ({
+        address: addr.toLowerCase(),
+        info: infos[index]
+      }))
+      .filter((token) => token.info.isRecommended);
+  }, [recommendedTokensData]);
+
+  // 选中的代币地址（默认第一个）
+  const [selectedTokenAddress, setSelectedTokenAddress] =
+    React.useState<string>('');
+
+  // 当推荐代币加载完成后，设置默认值
+  React.useEffect(() => {
+    if (recommendedTokens.length > 0 && !selectedTokenAddress) {
+      setSelectedTokenAddress(recommendedTokens[0].address);
+    }
+  }, [recommendedTokens, selectedTokenAddress]);
+
   // Default to NORMAL for private chats, LUCKY for group chats
   const [packetType, setPacketType] = React.useState<RedPacketType>(
     chatType === 'private' ? 'NORMAL' : 'LUCKY'
@@ -39,13 +71,29 @@ export function SendRedPacketModal({
   );
   const [amount, setAmount] = React.useState<string>('');
   const [message, setMessage] = React.useState<string>('');
-  const [tokenSymbol, setTokenSymbol] = React.useState<string>('USDT');
 
   // Ref to track if user is using IME (e.g. Pinyin)
   const isComposing = React.useRef(false);
 
-  // Mock data for group member count
-  const groupMemberCount = 5;
+  // 获取当前选中代币的symbol
+  const { data: tokenSymbolData } = useReadContract({
+    address: selectedTokenAddress as `0x${string}`,
+    abi: [
+      {
+        inputs: [],
+        name: 'symbol',
+        outputs: [{ type: 'string' }],
+        stateMutability: 'view',
+        type: 'function'
+      }
+    ] as const,
+    functionName: 'symbol',
+    query: {
+      enabled: !!selectedTokenAddress && selectedTokenAddress.startsWith('0x')
+    }
+  });
+
+  const tokenSymbol = (tokenSymbolData as string) || 'Token';
 
   // Reset state when modal opens or chatType changes
   React.useEffect(() => {
@@ -62,23 +110,38 @@ export function SendRedPacketModal({
     const numCount = parseInt(count) || 0;
 
     if (packetType === 'LUCKY') {
-      return numAmount.toFixed(6); // Match the screenshot's precision roughly
+      return numAmount.toFixed(6);
     } else {
       return (numAmount * numCount).toFixed(6);
     }
   }, [amount, count, packetType]);
 
-  const handleSend = () => {
+  const [isSending, setIsSending] = React.useState(false);
+
+  const handleSend = async () => {
     if (!amount || !count) return;
 
-    onSend?.({
-      type: packetType,
-      tokenSymbol,
-      amount,
-      count: parseInt(count),
-      message: message || '恭喜发财，大吉大利'
-    });
-    setIsOpen(false);
+    if (!selectedTokenAddress) {
+      alert('请选择代币');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      await onSend?.({
+        type: packetType,
+        tokenSymbol,
+        tokenAddress: selectedTokenAddress,
+        amount,
+        count: parseInt(count),
+        message: message || '恭喜发财，大吉大利'
+      });
+      setIsOpen(false);
+    } catch (error) {
+      console.error('发送红包失败:', error);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleTypeSelect = (type: RedPacketType) => {
@@ -88,14 +151,18 @@ export function SendRedPacketModal({
     setIsTypeSwitcherOpen(false);
   };
 
+  const handleTokenSelect = (tokenAddress: string) => {
+    setSelectedTokenAddress(tokenAddress);
+    setIsTokenSelectorOpen(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         {trigger || <Button variant="outline">发红包</Button>}
       </DialogTrigger>
-      {/* Full screen on mobile, centered card on desktop */}
+
       <DialogContent className="w-full h-full max-w-none sm:max-w-[400px] sm:h-[800px] p-0 gap-0 bg-[#f7f7f7] !border-0 shadow-none sm:shadow-lg sm:rounded-xl flex flex-col [&>button]:hidden">
-        {/* Hidden Title for Accessibility */}
         <DialogTitle className="sr-only">发红包</DialogTitle>
 
         {/* Top Navigation Bar */}
@@ -104,7 +171,7 @@ export function SendRedPacketModal({
             <ChevronLeft className="w-6 h-6 text-black" />
           </DialogClose>
           <span className="text-[17px] font-medium text-black">发红包</span>
-          <div className="w-8"></div> {/* Spacer for centering */}
+          <div className="w-8"></div>
         </div>
 
         {/* Scrollable Content Area */}
@@ -122,7 +189,6 @@ export function SendRedPacketModal({
             </div>
           )}
 
-          {/* Spacer for Private Chat to match layout if needed, or just less margin */}
           {chatType === 'private' && <div className="mt-4"></div>}
 
           {/* Form Group */}
@@ -135,94 +201,83 @@ export function SendRedPacketModal({
                     <Image
                       src="/chats/Red envelope.png"
                       alt="Red Packet"
-                      width={18}
-                      height={18}
-                      className="rounded-sm"
+                      width={20}
+                      height={20}
                     />
-                    <span className="text-[16px] text-black">红包个数</span>
+                    <span className="text-[16px] text-[#1a1a1a]">红包个数</span>
                   </div>
-                  <div className="flex items-center flex-1 justify-end gap-2">
+                  <div className="flex items-center gap-2 flex-1 justify-end">
                     <Input
-                      type="text"
-                      inputMode="numeric"
+                      type="number"
                       placeholder="填写个数"
-                      className="text-right border-none shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] placeholder:text-gray-300 w-full bg-transparent"
+                      className="text-right border-none shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300"
                       value={count}
-                      onCompositionStart={() => (isComposing.current = true)}
-                      onCompositionEnd={(e) => {
-                        isComposing.current = false;
-                        let value = e.currentTarget.value.replace(/[^\d]/g, '');
-                        if (value.length > 7) value = value.slice(0, 7);
-                        setCount(value);
-                      }}
                       onChange={(e) => {
-                        if (isComposing.current) {
-                          setCount(e.target.value);
-                          return;
-                        }
-                        const value = e.target.value.replace(/[^\d]/g, '');
-                        if (value.length > 7) return;
-                        setCount(value);
+                        const val = e.target.value.replace(/[^\d]/g, '');
+                        setCount(val);
                       }}
                     />
-                    <span className="text-[16px] text-black">个</span>
+                    <span className="text-[16px] text-[#1a1a1a]">个</span>
                   </div>
                 </div>
-                <div className="text-xs text-gray-400 pl-4 -mt-2">
-                  本群共{groupMemberCount}人
-                </div>
+                <div className="text-xs text-gray-400 pl-4">本群共 {5} 人</div>
               </>
             )}
 
-            {/* Row 2: Token Selection (New) */}
-            <div className="bg-white rounded-lg p-4 flex items-center justify-between h-[60px]">
-              <span className="text-[16px] text-black font-normal">
-                选择代币
-              </span>
-              <div className="flex items-center gap-1 cursor-pointer">
-                <span className="text-[16px] text-black">{tokenSymbol}</span>
+            {/* Row 2: Token Selector */}
+            <div
+              className="bg-white rounded-lg p-4 flex items-center justify-between h-[60px] cursor-pointer"
+              onClick={() => setIsTokenSelectorOpen(true)}
+            >
+              <div className="flex items-center gap-2">
+                <Image
+                  src="/chats/Coins.png"
+                  alt="Coins"
+                  width={20}
+                  height={20}
+                />
+                <span className="text-[16px] text-[#1a1a1a]">塞钱进红包</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[16px] text-[#1a1a1a]">
+                  {tokenSymbol}
+                </span>
                 <ChevronDown className="w-4 h-4 text-gray-400" />
               </div>
             </div>
 
             {/* Row 3: Amount */}
             <div className="bg-white rounded-lg p-4 flex items-center justify-between h-[60px]">
-              <div className="flex items-center gap-2 min-w-[100px]">
+              <div className="flex items-center gap-2 min-w-[60px]">
                 {packetType === 'LUCKY' && (
-                  <div className="w-[18px] h-[18px] bg-[#d4b078] rounded-[4px] flex items-center justify-center text-white text-[11px] font-medium">
+                  <div className="bg-[#d4b078] rounded text-[10px] text-white px-1 py-0.5 mr-1">
                     拼
                   </div>
                 )}
-                <span className="text-[16px] text-black">
-                  {chatType === 'private'
-                    ? '金额'
-                    : packetType === 'LUCKY'
-                      ? '总金额'
-                      : '单个金额'}
+                <span className="text-[16px] text-[#1a1a1a]">
+                  {packetType === 'LUCKY' ? '总金额' : '单个金额'}
                 </span>
               </div>
-              <div className="flex items-center justify-end gap-2">
-                <span className="text-[16px] text-black">{tokenSymbol}</span>
+              <div className="flex items-center gap-2 flex-1 justify-end">
                 <Input
                   type="text"
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="border-none shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] placeholder:text-gray-300 bg-transparent text-right min-w-[34px]"
-                  style={{
-                    width: `${Math.max((amount || '').length, 4) + 0.5}ch`
-                  }}
+                  className="text-right border-none shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300"
                   value={amount}
                   onCompositionStart={() => (isComposing.current = true)}
                   onCompositionEnd={(e) => {
                     isComposing.current = false;
-                    let value = e.currentTarget.value.replace(/[^\d.]/g, '');
+                    const target = e.target as HTMLInputElement;
+                    let value = target.value.replace(/[^\d.]/g, '');
                     const parts = value.split('.');
                     if (parts.length > 2) {
                       value = parts[0] + '.' + parts.slice(1).join('');
                     }
-                    if (value.split('.')[0].length > 7) {
+                    if (value.split('.')[0].length > 7) return;
+                    if (parts[1] && parts[1].length > 6) {
                       const p = value.split('.');
-                      p[0] = p[0].slice(0, 7);
+                      p[1] = p[1].slice(0, 6);
                       value = p.join('.');
                     }
                     setAmount(value);
@@ -267,35 +322,94 @@ export function SendRedPacketModal({
 
           {/* Submit Button */}
           <Button
-            className="w-fit self-center px-10 h-[48px] text-[16px] bg-[#fa5151] hover:bg-[#d64e3e] text-white rounded-lg font-medium shadow-sm"
+            className="w-fit self-center px-10 h-[48px] text-[16px] bg-[#fa5151] hover:bg-[#d64e3e] text-white rounded-lg font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleSend}
+            disabled={isSending}
           >
-            塞钱进红包
+            {isSending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                处理中...
+              </>
+            ) : (
+              '塞钱进红包'
+            )}
           </Button>
 
           {/* Footer Note */}
-          <div className="mt-auto pt-8 pb-8 text-center">
-            <p className="text-xs text-gray-400">
-              未领取的红包，将于5天后发起退款
-            </p>
+          <div className="mt-auto pt-8 text-center text-xs text-gray-400">
+            未领取的红包，将于 24 小时后发起退款
           </div>
         </div>
 
-        {/* Action Sheet */}
+        {/* Type Switcher Action Sheet */}
         <ActionSheet
           isOpen={isTypeSwitcherOpen}
           onClose={() => setIsTypeSwitcherOpen(false)}
-          actions={[
-            {
-              label: '拼手气红包',
-              onClick: () => handleTypeSelect('LUCKY')
-            },
-            {
-              label: '普通红包',
-              onClick: () => handleTypeSelect('NORMAL')
-            }
-          ]}
-        />
+          title="红包类型"
+        >
+          <div className="flex flex-col">
+            <button
+              className="flex items-center justify-between p-4 active:bg-gray-50"
+              onClick={() => handleTypeSelect('LUCKY')}
+            >
+              <span className="text-[16px] text-[#1a1a1a]">拼手气红包</span>
+              {packetType === 'LUCKY' && (
+                <div className="w-2 h-2 rounded-full bg-[#fa5151]" />
+              )}
+            </button>
+            <div className="h-[1px] bg-gray-100 mx-4" />
+            <button
+              className="flex items-center justify-between p-4 active:bg-gray-50"
+              onClick={() => handleTypeSelect('NORMAL')}
+            >
+              <span className="text-[16px] text-[#1a1a1a]">普通红包</span>
+              {packetType === 'NORMAL' && (
+                <div className="w-2 h-2 rounded-full bg-[#fa5151]" />
+              )}
+            </button>
+          </div>
+        </ActionSheet>
+
+        {/* Token Selector Action Sheet */}
+        <ActionSheet
+          isOpen={isTokenSelectorOpen}
+          onClose={() => setIsTokenSelectorOpen(false)}
+          title="选择代币"
+        >
+          <div className="flex flex-col max-h-[60vh] overflow-y-auto">
+            {recommendedTokens.map((token) => (
+              <React.Fragment key={token.address}>
+                <button
+                  className="flex items-center justify-between p-4 active:bg-gray-50"
+                  onClick={() => handleTokenSelect(token.address)}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* 这里可以加代币图标 */}
+                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                      {token.info.symbol?.[0]}
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className="text-[16px] text-[#1a1a1a] font-medium">
+                        {token.info.symbol}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {token.info.name}
+                      </span>
+                    </div>
+                  </div>
+                  {selectedTokenAddress === token.address && (
+                    <div className="w-2 h-2 rounded-full bg-[#fa5151]" />
+                  )}
+                </button>
+                <div className="h-[1px] bg-gray-100 mx-4" />
+              </React.Fragment>
+            ))}
+            {recommendedTokens.length === 0 && (
+              <div className="p-8 text-center text-gray-400">暂无推荐代币</div>
+            )}
+          </div>
+        </ActionSheet>
       </DialogContent>
     </Dialog>
   );

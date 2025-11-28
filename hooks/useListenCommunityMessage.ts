@@ -2,6 +2,7 @@ import { useWatchContractEvent, usePublicClient } from 'wagmi';
 import communityABI from '@/contract/abi/community.json';
 import { Abi, Address, getAddress } from 'viem';
 import type { Message } from '@/lib/chat/types';
+import { decodeGroupRedPacketCid } from '@/lib/redpacket/encoding';
 
 interface CommunityMessage {
   sender: Address;
@@ -11,11 +12,11 @@ interface CommunityMessage {
   cid: string;
 }
 
-async function fetchMessageContent(
+async function fetchMessage(
   publicClient: any,
   communityAddress: string,
   seq: number
-): Promise<string | null> {
+): Promise<CommunityMessage | null> {
   try {
     const result = await publicClient.readContract({
       address: communityAddress as `0x${string}`,
@@ -25,12 +26,11 @@ async function fetchMessageContent(
     });
 
     if (result && Array.isArray(result) && result.length > 0) {
-      const msg = result[0] as CommunityMessage;
-      return msg.content;
+      return result[0] as CommunityMessage;
     }
     return null;
   } catch (error) {
-    console.error('Failed to fetch message content:', error);
+    console.error('Failed to fetch message:', error);
     return null;
   }
 }
@@ -55,27 +55,49 @@ export function useListenCommunityMessage(
         const { sender, seq, ts } = (log as any).args;
         const messageId = `${ts?.toString()}-${sender}-${seq?.toString()}`;
 
-        // Fetch content
+        // Fetch full message details
         let content = '';
+        let cid = '';
+
         if (publicClient && seq !== undefined) {
-          console.log('📨 [群聊监听] 正在获取消息内容, seq:', seq);
-          content =
-            (await fetchMessageContent(
-              publicClient,
-              communityAddress,
-              Number(seq)
-            )) || '';
-          console.log('📨 [群聊监听] 获取到内容:', content);
+          console.log('📨 [群聊监听] 正在获取消息详情, seq:', seq);
+          const msg = await fetchMessage(
+            publicClient,
+            communityAddress,
+            Number(seq)
+          );
+          if (msg) {
+            content = msg.content;
+            cid = msg.cid;
+            console.log('📨 [群聊监听] 获取到详情:', { content, cid });
+          }
         }
 
         const isOwn = sender?.toLowerCase() === currentAddress?.toLowerCase();
+
+        // 解析红包
+        const packetId = decodeGroupRedPacketCid(cid);
+        let type = 'text';
+        let finalContent = content;
+
+        if (packetId) {
+          type = 'red-packet';
+          finalContent = JSON.stringify({
+            packetId: packetId.toString(),
+            message: content,
+            type: 'NORMAL',
+            status: 'active',
+            amount: '0',
+            count: 1
+          });
+        }
 
         const newMessage: Message = {
           id: messageId,
           sender: isOwn ? 'user' : 'other',
           timestamp: new Date(Number(ts) * 1000),
-          type: 'text',
-          content: content,
+          type: type as any,
+          content: finalContent,
           recipient: communityAddress as Address,
           isEncrypted: false,
           originalContent: content,

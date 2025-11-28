@@ -20,6 +20,7 @@ import dayjs from 'dayjs';
 import { MESSAGES_PER_LOAD } from '@/lib/chat/constants';
 import { computeConvoId } from '@/lib/utils';
 import { useAccount } from 'wagmi';
+import { decodeDmRedPacketContent } from '@/lib/redpacket/encoding';
 
 interface UseMessageLoaderProps {
   conversationId: string;
@@ -197,19 +198,33 @@ export function useMessageLoader({
       let newMessages: Message[] = [];
 
       if (chatType === 'private' && rawMessages && Array.isArray(rawMessages)) {
-        newMessages = rawMessages.map((msg: DMMessage, index: number) => ({
-          id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}-${fetchParams.start + index}`,
-          sender:
-            msg.sender.toLowerCase() === currentAddress?.toLowerCase()
-              ? 'user'
-              : 'other',
-          content: msg.content,
-          timestamp: new Date(Number(msg.timestamp) * 1000),
-          type: 'text' as const,
-          isEncrypted: true,
-          originalContent: msg.content,
-          recipient: msg.recipient
-        }));
+        newMessages = rawMessages.map((msg: DMMessage, index: number) => {
+          // 尝试解码红包消息
+          const redPacketData = decodeDmRedPacketContent(msg.content);
+
+          return {
+            id: `${msg.timestamp.toString()}-${msg.sender.toLowerCase()}-${fetchParams.start + index}`,
+            sender:
+              msg.sender.toLowerCase() === currentAddress?.toLowerCase()
+                ? 'user'
+                : 'other',
+            content: redPacketData
+              ? JSON.stringify({
+                  packetId: redPacketData.packetId.toString(),
+                  tokenAddress: redPacketData.token,
+                  message: redPacketData.memo,
+                  type: 'NORMAL', // 默认为普通红包，因为链上数据没存类型，或者需要从memo扩展
+                  amount: '0', // 列表页不显示金额，需点击查看
+                  count: 1
+                })
+              : msg.content,
+            timestamp: new Date(Number(msg.timestamp) * 1000),
+            type: redPacketData ? 'red-packet' : 'text',
+            isEncrypted: !redPacketData, // 红包消息不加密
+            originalContent: msg.content,
+            recipient: msg.recipient
+          };
+        });
       } else if (chatType === 'group') {
         if (invitedMembersMessage) {
           newMessages = [
@@ -294,8 +309,9 @@ export function useMessageLoader({
     isGroupLoading,
     isGroupCountLoading,
     scrollToBottom,
-    scrollAreaRef
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    scrollAreaRef,
+    fetchParams.start,
+    oldestLoadedIndex
   ]);
 
   // 4️⃣ Scroll Adjustment
@@ -403,13 +419,25 @@ export function useMessageLoader({
           return;
         }
 
+        // 尝试解码红包消息
+        const redPacketData = decodeDmRedPacketContent(content);
+
         const newMessage: Message = {
           id: `${timestamp?.toString()}-${from?.toLowerCase()}-${Date.now()}`,
-          content: content,
+          content: redPacketData
+            ? JSON.stringify({
+                packetId: redPacketData.packetId.toString(),
+                tokenAddress: redPacketData.token,
+                message: redPacketData.memo,
+                type: 'NORMAL',
+                amount: '0',
+                count: 1
+              })
+            : content,
           sender: 'other',
           timestamp: new Date(Number(timestamp) * 1000),
-          type: 'text',
-          isEncrypted: true,
+          type: redPacketData ? 'red-packet' : 'text',
+          isEncrypted: !redPacketData,
           originalContent: content,
           recipient: to as Address
         };

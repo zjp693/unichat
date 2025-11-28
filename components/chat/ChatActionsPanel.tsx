@@ -10,7 +10,7 @@ import { setIsActionsOpen } from '@/lib/chatSlice';
 import type { RootState } from '@/lib/store';
 
 interface ChatActionsPanelProps {
-  onSendRedPacket: (config: RedPacketConfig) => void;
+  onSendRedPacket: (config: RedPacketConfig) => Promise<void>;
   chatType: 'private' | 'group';
   contentRef?: RefObject<HTMLDivElement | null>;
 }
