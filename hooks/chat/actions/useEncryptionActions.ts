@@ -30,7 +30,11 @@ interface UseEncryptionActionsProps {
     privateKey: string
   ) => { success: boolean; decrypted?: string }[];
   encryptMessage: (content: string, publicKey: string) => string;
-  sendGroupMessage: (content: string, kind?: 0 | 1) => Promise<void>;
+  sendGroupMessage: (
+    content: string,
+    kind?: 0 | 1,
+    cid?: string
+  ) => Promise<`0x${string}`>;
   scrollToBottom: (behavior?: 'smooth' | 'auto') => void;
   inputRef: React.RefObject<ChatInputAreaRef | null>;
 }

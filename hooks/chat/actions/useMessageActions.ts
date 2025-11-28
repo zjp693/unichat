@@ -17,7 +17,11 @@ interface UseMessageActionsProps {
   keys: KeyPair[];
   publicClient: any;
   writeContract: any;
-  sendGroupMessage: (content: string, kind?: 0 | 1) => Promise<void>;
+  sendGroupMessage: (
+    content: string,
+    kind?: 0 | 1,
+    cid?: string
+  ) => Promise<`0x${string}`>;
   encryptMessage: (content: string, publicKey: string) => string;
   setPendingGroupMessage?: (msg: string) => void;
   setShowSendModeModal?: (show: boolean) => void;
