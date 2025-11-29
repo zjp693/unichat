@@ -210,7 +210,7 @@ export function SendRedPacketModal({
                     <Input
                       type="number"
                       placeholder="填写个数"
-                      className="text-right border-none shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300"
+                      className="text-right !border-0 shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300 !bg-transparent"
                       value={count}
                       onChange={(e) => {
                         const val = e.target.value.replace(/[^\d]/g, '');
@@ -224,24 +224,16 @@ export function SendRedPacketModal({
               </>
             )}
 
-            {/* Row 2: Token Selector */}
+            {/* Row 2: Token Selection (New) */}
             <div
               className="bg-white rounded-lg p-4 flex items-center justify-between h-[60px] cursor-pointer"
               onClick={() => setIsTokenSelectorOpen(true)}
             >
-              <div className="flex items-center gap-2">
-                <Image
-                  src="/chats/Coins.png"
-                  alt="Coins"
-                  width={20}
-                  height={20}
-                />
-                <span className="text-[16px] text-[#1a1a1a]">塞钱进红包</span>
-              </div>
+              <span className="text-[16px] text-black font-normal">
+                选择代币
+              </span>
               <div className="flex items-center gap-1">
-                <span className="text-[16px] text-[#1a1a1a]">
-                  {tokenSymbol}
-                </span>
+                <span className="text-[16px] text-black">{tokenSymbol}</span>
                 <ChevronDown className="w-4 h-4 text-gray-400" />
               </div>
             </div>
@@ -255,7 +247,7 @@ export function SendRedPacketModal({
                   </div>
                 )}
                 <span className="text-[16px] text-[#1a1a1a]">
-                  {packetType === 'LUCKY' ? '总金额' : '单个金额'}
+                  {packetType === 'LUCKY' ? '总金额' : '单个红包'}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-1 justify-end">
@@ -263,7 +255,7 @@ export function SendRedPacketModal({
                   type="text"
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="text-right border-none shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300"
+                  className="text-right !border-0 shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300 !bg-transparent"
                   value={amount}
                   onCompositionStart={() => (isComposing.current = true)}
                   onCompositionEnd={(e) => {
@@ -303,7 +295,7 @@ export function SendRedPacketModal({
             <div className="bg-white rounded-lg p-4 h-[60px] flex items-center">
               <Input
                 placeholder="恭喜发财，大吉大利"
-                className="border-none shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300 bg-transparent"
+                className="!border-0 shadow-none focus-visible:ring-0 p-0 h-auto text-[16px] w-full placeholder:text-gray-300 !bg-transparent"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
               />
@@ -347,29 +339,17 @@ export function SendRedPacketModal({
           isOpen={isTypeSwitcherOpen}
           onClose={() => setIsTypeSwitcherOpen(false)}
           title="红包类型"
-        >
-          <div className="flex flex-col">
-            <button
-              className="flex items-center justify-between p-4 active:bg-gray-50"
-              onClick={() => handleTypeSelect('LUCKY')}
-            >
-              <span className="text-[16px] text-[#1a1a1a]">拼手气红包</span>
-              {packetType === 'LUCKY' && (
-                <div className="w-2 h-2 rounded-full bg-[#fa5151]" />
-              )}
-            </button>
-            <div className="h-[1px] bg-gray-100 mx-4" />
-            <button
-              className="flex items-center justify-between p-4 active:bg-gray-50"
-              onClick={() => handleTypeSelect('NORMAL')}
-            >
-              <span className="text-[16px] text-[#1a1a1a]">普通红包</span>
-              {packetType === 'NORMAL' && (
-                <div className="w-2 h-2 rounded-full bg-[#fa5151]" />
-              )}
-            </button>
-          </div>
-        </ActionSheet>
+          actions={[
+            {
+              label: '拼手气红包',
+              onClick: () => handleTypeSelect('LUCKY')
+            },
+            {
+              label: '普通红包',
+              onClick: () => handleTypeSelect('NORMAL')
+            }
+          ]}
+        />
 
         {/* Token Selector Action Sheet */}
         <ActionSheet
@@ -381,26 +361,12 @@ export function SendRedPacketModal({
             {recommendedTokens.map((token) => (
               <React.Fragment key={token.address}>
                 <button
-                  className="flex items-center justify-between p-4 active:bg-gray-50"
+                  className="flex items-center justify-center p-4 active:bg-gray-50 w-full"
                   onClick={() => handleTokenSelect(token.address)}
                 >
-                  <div className="flex items-center gap-3">
-                    {/* 这里可以加代币图标 */}
-                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-                      {token.info.symbol?.[0]}
-                    </div>
-                    <div className="flex flex-col items-start">
-                      <span className="text-[16px] text-[#1a1a1a] font-medium">
-                        {token.info.symbol}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {token.info.name}
-                      </span>
-                    </div>
-                  </div>
-                  {selectedTokenAddress === token.address && (
-                    <div className="w-2 h-2 rounded-full bg-[#fa5151]" />
-                  )}
+                  <span className="text-[16px] text-[#1a1a1a] font-medium">
+                    {token.address.slice(0, 6)}...{token.address.slice(-4)}
+                  </span>
                 </button>
                 <div className="h-[1px] bg-gray-100 mx-4" />
               </React.Fragment>

@@ -17,6 +17,7 @@ import { useChatRefs } from '@/hooks/chat/state/useChatRefs';
 import { useScrollManager } from '@/hooks/chat/ui/useScrollManager';
 import { useKeyboardManager } from '@/hooks/chat/ui/useKeyboardManager';
 import { useRedPacketActions } from '@/hooks/chat/actions/useRedPacketActions';
+import { useRedPacketEvents } from '@/hooks/chat/events/useRedPacketEvents';
 import { useEncryptionActions } from '@/hooks/chat/actions/useEncryptionActions';
 import { useMessageActions } from '@/hooks/chat/actions/useMessageActions';
 import { useMessageLoader } from '@/hooks/chat/data/useMessageLoader';
@@ -158,6 +159,16 @@ export default function ChatPage() {
       currentAddress: currentAddress as Address,
       chatType
     });
+
+  // 红包事件监听（用于显示其他人的领取提示）
+  useRedPacketEvents({
+    chatType,
+    groupAddress: groupAddress as Address,
+    recipientAddress,
+    currentAddress: currentAddress as Address,
+    setMessages,
+    messages
+  });
 
   // 加密操作
   const {
@@ -339,7 +350,7 @@ export default function ChatPage() {
       <OpenRedPacketModalNew
         isOpen={!!selectedRedPacket}
         onClose={() => setSelectedRedPacket(null)}
-        onOpen={async () => {
+        onOpen={async (startAnimation) => {
           if (!selectedRedPacket) return;
           let packetId: string | undefined;
 
@@ -360,7 +371,7 @@ export default function ChatPage() {
           }
 
           if (packetId) {
-            await handleClaimRedPacket(packetId);
+            await handleClaimRedPacket(packetId, startAnimation);
           } else {
             console.error('无法解析红包 ID', selectedRedPacket);
           }

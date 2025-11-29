@@ -14,6 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useReadContract, useAccount } from 'wagmi';
 import { RedPacketAbi, RED_PACKET_CONTRACT_ADDRESS } from '@/lib/RedPacketAbi';
 import { formatUnits, erc20Abi, getAddress } from 'viem';
+import { FormattedAmount } from './utils';
+import { ClaimerAvatar, ClaimerName } from './ClaimerInfo';
 
 interface Claimer {
   name: string;
@@ -124,24 +126,40 @@ export function RedPacketDetailsModal({
 
     if (!records || !Array.isArray(records)) return [];
 
-    // 找出最佳手气
+    // 判断红包是否已全部领取完毕
+    const isFullyClaimed = packetData
+      ? Number(packetData.claimedShares) === Number(packetData.totalShares)
+      : false;
+
+    // 找出最佳手气（只有拼手气红包且已全部领取才计算）
     let maxAmount = BigInt(0);
-    if (packetData?.isRandom) {
-      records.forEach((r: any) => {
-        if (r.amount > maxAmount) maxAmount = r.amount;
+    let firstMaxIndex = -1; // 记录第一个最大金额的索引
+
+    if (packetData?.isRandom && isFullyClaimed) {
+      records.forEach((r: any, index: number) => {
+        if (r.amount > maxAmount) {
+          maxAmount = r.amount;
+          firstMaxIndex = index; // 更新第一个最大金额的索引
+        }
       });
     }
 
-    return records.map((r: any) => ({
-      name:
-        r.claimer === currentAddress
-          ? '我'
-          : `${r.claimer.slice(0, 6)}...${r.claimer.slice(-4)}`,
-      address: r.claimer,
-      amount: formatUnits(r.amount, tokenDecimals),
-      isBest: packetData?.isRandom && r.amount === maxAmount && r.amount > 0,
-      avatar: undefined // 暂时无法获取头像
-    }));
+    return records.map((r: any, index: number) => {
+      const isCurrentUser =
+        r.claimer.toLowerCase() === currentAddress?.toLowerCase();
+
+      return {
+        address: r.claimer,
+        amount: formatUnits(r.amount, tokenDecimals),
+        // 只有拼手气红包 + 已全部领取 + 是第一个最大金额 才显示皇冠
+        isBest:
+          packetData?.isRandom &&
+          isFullyClaimed &&
+          index === firstMaxIndex &&
+          r.amount > 0,
+        isCurrentUser
+      };
+    });
   }, [recordsData, tokenDecimals, currentAddress, packetData]);
 
   // 计算我的领取金额
@@ -249,23 +267,41 @@ export function RedPacketDetailsModal({
 
           <div className="text-gray-400 text-[12px] mb-6">{message}</div>
 
-          {/* 只有已领取才显示金额 */}
           {!!myRecord && (
             <div className="flex flex-col items-center text-[#CDAC72]">
-              <div className="text-[48px] font-bold leading-none flex items-baseline gap-1">
-                {displayAmount}
-              </div>
-              <div className="text-[32px] font-medium mt-2 opacity-90">
-                {displaySymbol}
-              </div>
+              <FormattedAmount
+                amount={displayAmount}
+                symbol={displaySymbol}
+                integerClassName="text-[48px] font-bold leading-none"
+                decimalClassName="text-[32px] font-bold leading-none"
+                symbolClassName="text-[32px] font-medium mt-2 opacity-90"
+              />
             </div>
           )}
         </div>
 
         {/* 汇总栏 */}
         <div className="bg-[#f7f7f7] px-4 py-2 text-[13px] text-gray-500 shrink-0 border-b border-gray-200">
-          已领取{claimedCount}/{totalCount}个红包，共{claimedAmountStr}/
-          {totalAmountStr} {displaySymbol}
+          {packetData?.packetType === 0 ? (
+            // 私聊红包：显示简单的状态
+            claimedCount > 0 ? (
+              <>
+                1个红包共{claimedAmountStr}
+                {displaySymbol}
+              </>
+            ) : (
+              <>
+                红包金额{totalAmountStr}
+                {displaySymbol}，等待对方领取
+              </>
+            )
+          ) : (
+            // 群红包：显示进度
+            <>
+              已领取{claimedCount}/{totalCount}个红包，共{claimedAmountStr}/
+              {totalAmountStr} {displaySymbol}
+            </>
+          )}
         </div>
 
         {/* 列表区域 */}
@@ -276,11 +312,11 @@ export function RedPacketDetailsModal({
               className="flex items-center px-4 py-3 border-b border-gray-200"
             >
               <div className="relative mr-3">
-                <div className="w-10 h-10 rounded-md overflow-hidden bg-gray-100">
-                  <div className="w-full h-full bg-gray-300 flex items-center justify-center text-gray-500 text-xs">
-                    {item.name[0]}
-                  </div>
-                </div>
+                <ClaimerAvatar
+                  address={item.address}
+                  isCurrentUser={item.isCurrentUser}
+                  className="w-10 h-10"
+                />
                 {item.isBest && (
                   <div className="absolute -top-2 -right-2 w-4 h-4">
                     <Image
@@ -295,16 +331,27 @@ export function RedPacketDetailsModal({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-0.5">
                   <span className="text-[15px] font-medium text-gray-900">
-                    {item.name}
+                    <ClaimerName
+                      address={item.address}
+                      isCurrentUser={item.isCurrentUser}
+                    />
                   </span>
-                  <span
-                    className={cn(
+                  <FormattedAmount
+                    amount={item.amount}
+                    symbol={displaySymbol}
+                    integerClassName={cn(
                       'text-[15px] font-medium',
                       item.isBest ? 'text-[#fa9d3b]' : 'text-gray-900'
                     )}
-                  >
-                    {item.amount} {displaySymbol}
-                  </span>
+                    decimalClassName={cn(
+                      'text-[15px] font-medium',
+                      item.isBest ? 'text-[#fa9d3b]' : 'text-gray-900'
+                    )}
+                    symbolClassName={cn(
+                      'text-[15px] font-medium',
+                      item.isBest ? 'text-[#fa9d3b]' : 'text-gray-900'
+                    )}
+                  />
                 </div>
                 <div className="flex items-center">
                   <span className="text-[11px] text-gray-400 break-all mr-1 font-mono">

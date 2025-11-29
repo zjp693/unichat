@@ -444,7 +444,7 @@ export function useRedPacketActions({
           address: RED_PACKET_CONTRACT_ADDRESS,
           abi: RedPacketAbi,
           functionName: 'createPersonalPacket',
-          args: [tokenAddress, recipientAddress, amount, expiryDuration]
+          args: [tokenAddress, amount, recipientAddress, expiryDuration]
         });
 
         console.log('⏳ 等待红包创建确认...', createTxHash);
@@ -483,10 +483,17 @@ export function useRedPacketActions({
           id: `temp-${Date.now()}`,
           sender: 'user',
           senderAddress: currentAddress,
-          content: content,
+          content: JSON.stringify({
+            packetId: packetId.toString(),
+            message: memo || '恭喜发财，大吉大利',
+            type: 'NORMAL',
+            status: 'active',
+            amount: totalAmount, // 直接使用用户输入的金额字符串
+            tokenAddress: tokenAddress
+          }),
           timestamp: new Date(),
           status: 'sending',
-          type: 'text',
+          type: 'red-packet',
           recipient: recipientAddress,
           isEncrypted: false,
           originalContent: null,
@@ -565,6 +572,28 @@ export function useRedPacketActions({
           args: [BigInt(packetId)]
         })) as any;
 
+        // 私聊红包权限检查：只有指定的接收者才能领取
+        if (packet.packetType === 0) {
+          const recipient = packet.personalRecipient?.toLowerCase();
+          const current = currentAddress?.toLowerCase();
+
+          if (recipient !== current) {
+            console.log('❌ 无权领取此红包:', {
+              recipient,
+              current,
+              isCreator: packet.creator?.toLowerCase() === current
+            });
+
+            // 如果是发送者点击，给出友好提示
+            if (packet.creator?.toLowerCase() === current) {
+              alert('这是你发送的红包，只有接收者可以领取哦~');
+            } else {
+              alert('这个红包不是发给你的');
+            }
+            throw new Error('无权领取此红包');
+          }
+        }
+
         let txHash;
         if (packet.packetType === 0) {
           txHash = await claimPersonalPacket({
@@ -587,8 +616,41 @@ export function useRedPacketActions({
           onTxSent?.();
 
           console.log('⏳ 等待领取确认...', txHash);
-          await publicClient?.waitForTransactionReceipt({ hash: txHash });
+          const receipt = await publicClient?.waitForTransactionReceipt({
+            hash: txHash
+          });
           console.log('✅ 领取成功');
+
+          // 解析领取事件，获取领取金额
+          let claimedAmount = '0';
+          try {
+            const eventName =
+              packet.packetType === 0
+                ? 'PersonalPacketClaimed'
+                : 'GroupPacketClaimed';
+            const claimEvent = receipt?.logs
+              .map((log) => {
+                try {
+                  return decodeEventLog({
+                    abi: RedPacketAbi,
+                    data: log.data,
+                    topics: log.topics
+                  });
+                } catch {
+                  return null;
+                }
+              })
+              .find((event) => event?.eventName === eventName);
+
+            if (claimEvent) {
+              claimedAmount = (claimEvent as any).args.amount.toString();
+            }
+          } catch (e) {
+            console.error('解析领取事件失败:', e);
+          }
+
+          // 注意：领取提示消息现在由事件监听统一处理（useRedPacketEvents）
+          // 这样可以确保所有用户都能看到提示，包括领取者自己
 
           // UI 状态流转
           // 1. 关闭开红包弹窗
@@ -600,9 +662,24 @@ export function useRedPacketActions({
             setDetailsRedPacket(selectedRedPacket);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
+        const errorMessage = error?.message || error?.toString() || '';
+        const errorLower = errorMessage.toLowerCase();
+
+        // 用户取消交易 - 静默处理，不打印 console.error
+        if (
+          errorLower.includes('user rejected') ||
+          errorLower.includes('user denied') ||
+          errorLower.includes('rejected by user') ||
+          errorLower.includes('user cancelled') ||
+          errorLower.includes('cancelled')
+        ) {
+          console.log('👤 用户在钱包中取消了交易');
+          throw error; // 抛出给上层处理，但不显示错误日志
+        }
+
+        // 其他错误 - 打印错误日志
         console.error('领取红包失败:', error);
-        // alert('领取失败，请重试');
         throw error;
       }
     },
@@ -644,12 +721,31 @@ export function useRedPacketActions({
       }
 
       if (!packetId || !currentAddress || !publicClient) {
-        // 无法查询或缺少必要信息，兜底打开“开红包”弹窗
+        // 无法查询或缺少必要信息，兜底打开"开红包"弹窗
         setSelectedRedPacket(message);
         return;
       }
 
       try {
+        // 先获取红包信息，判断是否是发送者
+        const packet = (await publicClient.readContract({
+          address: RED_PACKET_CONTRACT_ADDRESS,
+          abi: RedPacketAbi,
+          functionName: 'getPacket',
+          args: [BigInt(packetId)]
+        })) as any;
+
+        // 如果是私聊红包且当前用户是发送者，直接打开详情页
+        if (
+          packet.packetType === 0 &&
+          packet.creator?.toLowerCase() === currentAddress.toLowerCase()
+        ) {
+          console.log('👀 发送者查看自己发的私聊红包');
+          setDetailsRedPacket(message);
+          return;
+        }
+
+        // 检查是否已领取
         const claimed = (await publicClient.readContract({
           address: RED_PACKET_CONTRACT_ADDRESS,
           abi: RedPacketAbi,
@@ -664,7 +760,7 @@ export function useRedPacketActions({
         }
       } catch (e) {
         console.error('查询红包状态失败', e);
-        // 查询失败，兜底打开“开红包”弹窗
+        // 查询失败，兜底打开"开红包"弹窗
         setSelectedRedPacket(message);
       }
     },
