@@ -387,11 +387,50 @@ export function useRedPacketActions({
       }
 
       const { tokenAddress, amount: totalAmount, message: memo } = config;
-      const amount = parseUnits(totalAmount, 18);
       const expiryDuration = BigInt(24 * 60 * 60);
+
+      // 动态获取 Token 精度，默认为 18
+      let decimals = 18;
+      if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
+        try {
+          decimals = (await publicClient?.readContract({
+            address: tokenAddress as Address,
+            abi: erc20Abi,
+            functionName: 'decimals'
+          })) as number;
+        } catch (e) {
+          console.warn('获取 Token 精度失败，使用默认值 18', e);
+        }
+      }
+
+      const amount = parseUnits(totalAmount, decimals);
+
+      console.log('💰 [发送私聊红包] 参数准备:', {
+        totalAmount,
+        decimals,
+        calculatedAmountWei: amount.toString(),
+        tokenAddress
+      });
 
       try {
         console.log('🚀 开始发送私聊红包流程...');
+
+        // 检查余额
+        if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
+          const balance = (await publicClient?.readContract({
+            address: tokenAddress as Address,
+            abi: erc20Abi,
+            functionName: 'balanceOf',
+            args: [currentAddress]
+          })) as bigint;
+
+          console.log('💰 当前余额:', formatUnits(balance, decimals));
+
+          if (balance < amount) {
+            alert(`余额不足，当前余额: ${formatUnits(balance, decimals)}`);
+            return;
+          }
+        }
 
         if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
           console.log('1️⃣ 请求 Token 授权...');
@@ -436,6 +475,8 @@ export function useRedPacketActions({
               hash: approveTxHash
             });
             console.log('✅ 授权成功');
+          } else {
+            console.log('✅ 已有足够授权，跳过');
           }
         }
 
@@ -479,6 +520,20 @@ export function useRedPacketActions({
           memo || '恭喜发财，大吉大利'
         );
 
+        // 获取 Token Symbol
+        let tokenSymbol = 'ETH';
+        if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
+          try {
+            tokenSymbol = (await publicClient?.readContract({
+              address: tokenAddress as Address,
+              abi: erc20Abi,
+              functionName: 'symbol'
+            })) as string;
+          } catch (e) {
+            console.warn('获取 Token Symbol 失败，使用默认值', e);
+          }
+        }
+
         const optimisticMessage: Message = {
           id: `temp-${Date.now()}`,
           sender: 'user',
@@ -489,7 +544,9 @@ export function useRedPacketActions({
             type: 'NORMAL',
             status: 'active',
             amount: totalAmount, // 直接使用用户输入的金额字符串
-            tokenAddress: tokenAddress
+            tokenAddress: tokenAddress,
+            tokenSymbol: tokenSymbol,
+            decimals: decimals
           }),
           timestamp: new Date(),
           status: 'sending',
