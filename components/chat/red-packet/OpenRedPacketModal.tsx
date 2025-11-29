@@ -43,6 +43,7 @@ export function OpenRedPacketModalNew({
   status: initialStatus = 'active'
 }: OpenRedPacketModalProps) {
   const [isOpening, setIsOpening] = React.useState(false);
+  const [isProcessing, setIsProcessing] = React.useState(false); // 防止重复点击
   const { address } = useAccount();
 
   // 获取红包信息
@@ -114,17 +115,58 @@ export function OpenRedPacketModalNew({
 
   const safeSenderAvatar = getSafeAvatarUrl(senderAvatar);
 
-  // 处理“开”按钮点击
-  // 1. 调用 onOpen (即 handleClaimRedPacket)，传入回调函数
-  // 2. 当支付成功时，回调函数被执行，设置 isOpening 为 true，开始旋转动画
-  // 3. 等待交易完成，由父组件关闭模态框
+  // 处理"开"按钮点击
+  // 流程：点击按钮 → 弹出钱包支付 → 用户确认 → 交易发送成功 → 播放动画
+  // isProcessing: 立即锁定，防止重复点击
+  // isOpening: 只在交易发送成功后设置，控制动画
   const handleOpenClick = async () => {
-    if (isOpening) return;
+    if (isProcessing || isOpening) return;
+
+    // 如果是 empty 状态，不调用领取接口，直接查看详情
+    if (currentStatus === 'empty') {
+      onDetails?.();
+      return;
+    }
+
+    // 如果已领取，也不调用接口，直接查看详情
+    if (currentStatus === 'claimed') {
+      onDetails?.();
+      return;
+    }
+
+    // 只有 active 状态才调用领取接口
+    if (currentStatus !== 'active') {
+      return;
+    }
+
+    setIsProcessing(true); // 立即锁定，防止重复点击
+
     try {
+      // onOpen 会调用 handleClaimRedPacket
+      // 当交易发送成功后，会调用这个回调函数触发动画
       await onOpen(() => setIsOpening(true));
-    } catch (e) {
-      console.error(e);
-      setIsOpening(false);
+      // 成功后会自动跳转详情，不需要手动恢复状态
+    } catch (error: any) {
+      const errorMessage = error?.message || error?.toString() || '';
+      const errorLower = errorMessage.toLowerCase();
+
+      // 用户取消交易 - 静默恢复，不显示错误提示
+      if (
+        errorLower.includes('user rejected') ||
+        errorLower.includes('user denied') ||
+        errorLower.includes('rejected by user') ||
+        errorLower.includes('user cancelled') ||
+        errorLower.includes('cancelled')
+      ) {
+        console.log('👤 用户取消了交易');
+        setIsProcessing(false);
+        return;
+      }
+
+      // 其他错误 - 显示提示并恢复UI，允许重试
+      console.error('领取红包失败:', error);
+      alert('领取失败，请重试');
+      setIsProcessing(false);
     }
   };
 
@@ -141,7 +183,7 @@ export function OpenRedPacketModalNew({
           {/* Top Section */}
           <div
             className={cn(
-              'absolute top-0 left-0 right-0 h-[70%] z-10 transition-transform duration-700 ease-in-out',
+              'absolute top-0 left-0 right-0 h-[70%] z-10 transition-transform duration-1000 ease-in-out',
               isOpening && '-translate-y-[140%]'
             )}
           >
@@ -195,7 +237,7 @@ export function OpenRedPacketModalNew({
           {/* Bottom Section */}
           <div
             className={cn(
-              'absolute bottom-[14%] left-0 right-0 h-[30%] z-[9] transition-transform duration-700 ease-in-out',
+              'absolute bottom-[14%] left-0 right-0 h-[30%] z-[9] transition-transform duration-1000 ease-in-out',
               isOpening && 'translate-y-[200%]'
             )}
           >
@@ -230,7 +272,7 @@ export function OpenRedPacketModalNew({
             {currentStatus === 'active' ? (
               <button
                 onClick={handleOpenClick}
-                disabled={isOpening}
+                disabled={isProcessing || isOpening}
                 className={cn(
                   'w-[25vw] h-[25vw] max-w-[100px] max-h-[100px] rounded-full flex items-center justify-center transition-transform active:scale-95',
                   isOpening && 'animate-rotate-y'

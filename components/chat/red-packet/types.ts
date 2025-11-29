@@ -7,4 +7,6 @@ export interface RedPacketConfig {
   amount: string;
   count: number;
   message: string;
+  packetId?: string; // 红包ID（用于查询已领取状态）
+  status?: 'active' | 'claimed' | 'expired'; // 红包状态
 }

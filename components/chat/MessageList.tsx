@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SenderName } from '@/components/chat/message/SenderName';
-import { RedPacketMessage } from '@/components/chat/red-packet/RedPacketMessage';
+import { RedPacketMessageWrapper } from '@/components/chat/red-packet/RedPacketMessageWrapper';
 import { RedPacketClaimMessage } from '@/components/chat/red-packet/RedPacketClaimMessage';
 import { GroupMessageAvatar } from '@/components/chat/GroupMessageAvatar';
 import { IPFSImg } from '@/components/ui/ipfs-img';
@@ -115,6 +115,8 @@ export const MessageList: React.FC<MessageListProps> = ({
             return (
               <RedPacketClaimMessage
                 key={message.id}
+                claimerAddress={claimData.claimerAddress}
+                ownerAddress={claimData.ownerAddress}
                 claimerName={claimData.claimerName}
                 ownerName={claimData.ownerName}
                 isCurrentUserClaimer={claimData.isCurrentUserClaimer}
@@ -251,9 +253,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                       try {
                         const config = JSON.parse(message.content);
                         return (
-                          <RedPacketMessage
+                          <RedPacketMessageWrapper
                             config={config}
-                            status={config.status || 'active'}
                             onClick={() => handleOpenRedPacket(message)}
                           />
                         );
