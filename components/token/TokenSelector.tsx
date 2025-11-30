@@ -7,6 +7,7 @@ import { TokenEmptyState } from './TokenEmptyState';
 import { AddTokenDialog } from './AddTokenDialog';
 import { ChevronLeft, LayoutGrid, Search } from 'lucide-react';
 import { useRecommendedTokens, useTokenFilter } from './hooks/useTokenData';
+import { useToast } from '@/hooks/use-toast';
 import type { TokenSelectorProps, Token } from './types';
 
 export function TokenSelector({
@@ -19,6 +20,7 @@ export function TokenSelector({
   const [isAddingToken, setIsAddingToken] = useState(false);
   // 只存储自定义代币的地址
   const [customAddresses, setCustomAddresses] = useState<string[]>([]);
+  const { toast } = useToast();
 
   // 🔍 监控自定义地址的变化
   useEffect(() => {
@@ -55,14 +57,18 @@ export function TokenSelector({
 
     if (exists) {
       console.log('⚠️ [TokenSelector] 代币已存在，跳过添加');
-    } else {
-      console.log('✅ [TokenSelector] 代币不存在，添加到列表');
-      setCustomAddresses((prev) => [newAddress, ...prev]);
+      toast({
+        title: '代币已存在',
+        description: `${token.symbol} 已经在列表中了`,
+        variant: 'destructive'
+      });
+      return; // 👈 直接返回，不执行后续操作
     }
 
-    // 这里的 token 是从 Dialog 传来的临时对象，没有余额信息
-    // 但因为我们更新了 customAddresses，useRecommendedTokens 会自动重新获取最新数据
-    // 为了即时反馈，我们可以先选中它（虽然余额可能暂时是0，直到下一次渲染）
+    console.log('✅ [TokenSelector] 代币不存在，添加到列表');
+    setCustomAddresses((prev) => [newAddress, ...prev]);
+
+    // 只在成功添加时才执行这些操作
     onSelectToken(token);
     onClose();
   };
