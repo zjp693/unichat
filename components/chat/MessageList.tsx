@@ -112,6 +112,18 @@ export const MessageList: React.FC<MessageListProps> = ({
         } else if (message.type === 'red-packet-claim') {
           try {
             const claimData = JSON.parse(message.content);
+
+            // 过滤逻辑：只显示别人领取了我的红包
+            // 1. 领取我的 (ownerAddress === currentAddress)
+            const isRelatedToMe =
+              currentAddress &&
+              claimData.ownerAddress?.toLowerCase() ===
+                currentAddress.toLowerCase();
+
+            if (!isRelatedToMe) {
+              return null;
+            }
+
             return (
               <RedPacketClaimMessage
                 key={message.id}

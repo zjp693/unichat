@@ -157,15 +157,7 @@ export function SendRedPacketModal({
             {chatType === 'group' && (
               <>
                 <div className="bg-white rounded-lg p-4 flex items-center justify-between h-[60px]">
-                  <div className="flex items-center gap-2 min-w-[100px]">
-                    <Image
-                      src="/chats/Red envelope.png"
-                      alt="Red Packet"
-                      width={20}
-                      height={20}
-                    />
-                    <span className="text-[16px] text-[#1a1a1a]">红包个数</span>
-                  </div>
+                  <span className="text-[16px] text-[#1a1a1a]">红包个数</span>
                   <div className="flex items-center gap-2 flex-1 justify-end">
                     <Input
                       type="number"
@@ -196,6 +188,10 @@ export function SendRedPacketModal({
                 <span className="text-[16px] text-black">{tokenSymbol}</span>
                 <ChevronDown className="w-4 h-4 text-gray-400" />
               </div>
+            </div>
+            <div className="text-xs text-gray-400 pl-4">
+              可用余额: {selectedToken?.symbol || 'UNICHAT'}{' '}
+              {selectedToken?.balance || '0'}
             </div>
 
             {/* Row 3: Amount */}

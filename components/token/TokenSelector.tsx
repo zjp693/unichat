@@ -25,6 +25,13 @@ export function TokenSelector({
     console.log('🔄 [TokenSelector] 当前自定义代币地址列表:', customAddresses);
   }, [customAddresses]);
 
+  // 当弹窗关闭时，重置搜索关键词
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchKeyword('');
+    }
+  }, [isOpen]);
+
   // 传入自定义地址，统一获取所有代币信息（包括余额）
   const { tokens: allTokens, isLoading } =
     useRecommendedTokens(customAddresses);
