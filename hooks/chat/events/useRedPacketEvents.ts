@@ -3,7 +3,7 @@ import { useWatchContractEvent, usePublicClient } from 'wagmi';
 import { RED_PACKET_CONTRACT_ADDRESS, RedPacketAbi } from '@/lib/RedPacketAbi';
 import type { Message } from '@/lib/chat/types';
 import type { Address } from 'viem';
-import { decodeEventLog } from 'viem';
+import { decodeEventLog, erc20Abi, formatUnits } from 'viem';
 
 // ============= 类型定义 =============
 
@@ -27,10 +27,14 @@ async function createClaimMessage(
   claimer: Address,
   isGroup: boolean,
   recipient: Address,
-  currentAddress?: Address
+  currentAddress?: Address,
+  amount?: bigint
 ): Promise<Message> {
-  // 查询红包信息，获取创建者地址
+  // 查询红包信息，获取创建者地址和代币信息
   let creatorAddress: Address | undefined;
+  let tokenSymbol = 'Token';
+  let decimals = 18;
+
   try {
     const packet = (await publicClient?.readContract({
       address: RED_PACKET_CONTRACT_ADDRESS,
@@ -40,17 +44,46 @@ async function createClaimMessage(
     })) as any;
 
     creatorAddress = packet?.creator;
+    const tokenAddress = packet?.token;
+
+    if (
+      tokenAddress &&
+      tokenAddress !== '0x0000000000000000000000000000000000000000'
+    ) {
+      try {
+        const [sym, dec] = await Promise.all([
+          publicClient.readContract({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: 'symbol'
+          }),
+          publicClient.readContract({
+            address: tokenAddress,
+            abi: erc20Abi,
+            functionName: 'decimals'
+          })
+        ]);
+        tokenSymbol = sym as string;
+        decimals = dec as number;
+      } catch (e) {
+        console.warn('获取代币信息失败:', e);
+      }
+    } else {
+      tokenSymbol = 'ETH';
+    }
   } catch (e) {
-    console.error('查询红包创建者失败:', e);
+    console.error('查询红包信息失败:', e);
   }
 
-  // 生成昵称（目前使用地址缩写，后续在组件中使用 usePeerAvatar 获取真实昵称）
+  // 生成昵称
   const claimerName = claimer
     ? `${claimer.slice(0, 6)}...${claimer.slice(-4)}`
     : '未知';
   const ownerName = creatorAddress
     ? `${creatorAddress.slice(0, 6)}...${creatorAddress.slice(-4)}`
     : '红包创建者';
+
+  const formattedAmount = amount ? formatUnits(amount, decimals) : undefined;
 
   return {
     id: `claim-event-${packetId.toString()}-${claimer}`,
@@ -61,6 +94,8 @@ async function createClaimMessage(
       ownerAddress: creatorAddress,
       claimerName,
       ownerName,
+      amount: formattedAmount,
+      tokenSymbol,
       isCurrentUserClaimer:
         claimer?.toLowerCase() === currentAddress?.toLowerCase()
     }),
@@ -133,7 +168,37 @@ async function isPersonalPacketRelevant(
   }
 }
 
-// ============= 事件处理器 =============
+/**
+ * 更新消息列表中的红包状态
+ */
+function updateRedPacketStatus(
+  messages: Message[],
+  packetId: string,
+  currentAddress: Address
+): Message[] {
+  return messages.map((msg) => {
+    if (msg.type !== 'red-packet') return msg;
+
+    try {
+      // 尝试解析 JSON
+      const content = JSON.parse(msg.content);
+      if (content.packetId === packetId) {
+        // 如果是当前用户发的红包，或者当前用户领取的红包，更新状态
+        // 这里简单点，只要 ID 匹配就更新为 claimed，因为这通常意味着当前上下文知道了这个领取事件
+        return {
+          ...msg,
+          content: JSON.stringify({
+            ...content,
+            status: 'claimed'
+          })
+        };
+      }
+    } catch (e) {
+      // 忽略解析错误
+    }
+    return msg;
+  });
+}
 
 /**
  * 处理群红包领取事件
@@ -146,9 +211,9 @@ async function handleGroupClaimEvent(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
 ): Promise<void> {
   try {
-    const { id, claimer } = log.args;
+    const { id, claimer, amount } = log.args;
 
-    console.log('🔥 群红包领取事件', { id: id.toString(), claimer });
+    console.log('🔥 群红包领取事件', { id: id.toString(), claimer, amount });
 
     // 检查红包是否属于当前群组
     const isRelevant = await isGroupPacketRelevant(
@@ -156,8 +221,6 @@ async function handleGroupClaimEvent(
       id,
       groupAddress
     );
-    console.log('群红包是否相关:', isRelevant);
-
     if (!isRelevant) return;
 
     // 创建领取消息
@@ -167,17 +230,24 @@ async function handleGroupClaimEvent(
       claimer,
       true,
       groupAddress,
-      currentAddress
+      currentAddress,
+      amount
     );
 
-    console.log('✅ 创建群红包领取消息:', claimMessage);
-
-    // 添加到消息列表（去重）
+    // 更新消息列表：添加提示消息 + 更新红包状态
     setMessages((prev) => {
-      if (prev.some((m) => m.id === claimMessage.id)) {
-        return prev;
+      // 1. 更新红包状态
+      const updatedMessages = updateRedPacketStatus(
+        prev,
+        id.toString(),
+        currentAddress
+      );
+
+      // 2. 添加提示消息（去重）
+      if (updatedMessages.some((m) => m.id === claimMessage.id)) {
+        return updatedMessages;
       }
-      return [...prev, claimMessage];
+      return [...updatedMessages, claimMessage];
     });
   } catch (e) {
     console.error('处理群红包领取事件失败:', e);
@@ -195,7 +265,7 @@ async function handlePersonalClaimEvent(
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
 ): Promise<void> {
   try {
-    const { id, claimer } = log.args;
+    const { id, claimer, amount } = log.args;
 
     // 检查红包是否属于当前对话
     const isRelevant = await isPersonalPacketRelevant(
@@ -213,15 +283,24 @@ async function handlePersonalClaimEvent(
       claimer,
       false,
       recipientAddress,
-      currentAddress
+      currentAddress,
+      amount
     );
 
-    // 添加到消息列表（去重）
+    // 更新消息列表：添加提示消息 + 更新红包状态
     setMessages((prev) => {
-      if (prev.some((m) => m.id === claimMessage.id)) {
-        return prev;
+      // 1. 更新红包状态
+      const updatedMessages = updateRedPacketStatus(
+        prev,
+        id.toString(),
+        currentAddress
+      );
+
+      // 2. 添加提示消息（去重）
+      if (updatedMessages.some((m) => m.id === claimMessage.id)) {
+        return updatedMessages;
       }
-      return [...prev, claimMessage];
+      return [...updatedMessages, claimMessage];
     });
   } catch (e) {
     console.error('处理私聊红包领取事件失败:', e);
@@ -254,7 +333,7 @@ async function processHistoricalEvents(
 
         // 处理群红包领取事件
         if (isGroupClaim && chatType === 'group' && groupAddress) {
-          const { id, claimer } = decoded.args as any;
+          const { id, claimer, amount } = decoded.args as any;
           const isRelevant = await isGroupPacketRelevant(
             publicClient,
             id,
@@ -268,7 +347,8 @@ async function processHistoricalEvents(
               claimer,
               true,
               groupAddress,
-              currentAddress
+              currentAddress,
+              amount
             );
           }
         }
@@ -278,7 +358,7 @@ async function processHistoricalEvents(
           chatType === 'private' &&
           recipientAddress
         ) {
-          const { id, claimer } = decoded.args as any;
+          const { id, claimer, amount } = decoded.args as any;
           const isRelevant = await isPersonalPacketRelevant(
             publicClient,
             id,
@@ -293,7 +373,8 @@ async function processHistoricalEvents(
               claimer,
               false,
               recipientAddress,
-              currentAddress
+              currentAddress,
+              amount
             );
           }
         }
@@ -305,16 +386,39 @@ async function processHistoricalEvents(
   );
 
   // 过滤掉 null 值并添加到消息列表（去重）
-  claimMessages.filter(Boolean).forEach((claimMessage) => {
-    if (claimMessage) {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === claimMessage.id)) {
-          return prev;
+  const validMessages = claimMessages.filter(
+    (msg): msg is Message => msg !== null
+  );
+
+  if (validMessages.length > 0) {
+    setMessages((prev) => {
+      let updatedMessages = [...prev];
+
+      // 1. 批量更新红包状态
+      validMessages.forEach((msg) => {
+        try {
+          // 从消息ID中提取 packetId: claim-event-{packetId}-{claimer}
+          const packetId = msg.id.split('-')[2];
+          updatedMessages = updateRedPacketStatus(
+            updatedMessages,
+            packetId,
+            currentAddress
+          );
+        } catch (e) {
+          console.warn('解析消息ID失败:', msg.id);
         }
-        return [...prev, claimMessage];
       });
-    }
-  });
+
+      // 2. 添加提示消息（去重）
+      validMessages.forEach((msg) => {
+        if (!updatedMessages.some((m) => m.id === msg.id)) {
+          updatedMessages.push(msg);
+        }
+      });
+
+      return updatedMessages;
+    });
+  }
 }
 
 // ============= 主 Hook =============

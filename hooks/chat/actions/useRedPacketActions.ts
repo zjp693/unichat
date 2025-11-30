@@ -37,6 +37,11 @@ import {
   decodeDmRedPacketContent,
   encodeGroupRedPacketCid
 } from '@/lib/redpacket/encoding';
+import {
+  getTokenDecimals,
+  checkTokenBalance,
+  approveTokenIfNeeded
+} from '@/lib/redpacket/tokenUtils';
 
 interface UseRedPacketActionsProps {
   recipientAddress?: Address;
@@ -104,19 +109,11 @@ export function useRedPacketActions({
 
       // --- 1. 准备参数 & 计算金额 ---
 
-      // 动态获取 Token 精度，默认为 18
-      let decimals = 18;
-      if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-        try {
-          decimals = (await publicClient?.readContract({
-            address: tokenAddress as Address,
-            abi: erc20Abi,
-            functionName: 'decimals'
-          })) as number;
-        } catch (e) {
-          console.warn('获取 Token 精度失败，使用默认值 18', e);
-        }
-      }
+      // 动态获取 Token 精度
+      const decimals = await getTokenDecimals(
+        tokenAddress as Address,
+        publicClient
+      );
 
       let amount: bigint;
       let shareAmounts: bigint[] = [];
@@ -178,69 +175,24 @@ export function useRedPacketActions({
         console.log('🚀 开始发送群红包流程...');
 
         // 检查余额
-        if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-          const balance = (await publicClient?.readContract({
-            address: tokenAddress as Address,
-            abi: erc20Abi,
-            functionName: 'balanceOf',
-            args: [currentAddress]
-          })) as bigint;
+        const hasBalance = await checkTokenBalance(
+          tokenAddress as Address,
+          currentAddress,
+          amount,
+          decimals,
+          publicClient
+        );
+        if (!hasBalance) return;
 
-          console.log('💰 当前余额:', formatUnits(balance, decimals));
-
-          if (balance < amount) {
-            alert(`余额不足，当前余额: ${formatUnits(balance, decimals)}`);
-            return;
-          }
-        }
-
-        if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-          console.log('1️⃣ 请求 Token 授权...');
-          const allowance = await publicClient?.readContract({
-            address: tokenAddress as Address,
-            abi: [
-              {
-                inputs: [
-                  { name: 'owner', type: 'address' },
-                  { name: 'spender', type: 'address' }
-                ],
-                name: 'allowance',
-                outputs: [{ name: '', type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function'
-              }
-            ],
-            functionName: 'allowance',
-            args: [currentAddress, RED_PACKET_CONTRACT_ADDRESS]
-          });
-
-          if ((allowance as bigint) < amount) {
-            const approveTxHash = await approve({
-              address: tokenAddress as Address,
-              abi: [
-                {
-                  inputs: [
-                    { name: 'spender', type: 'address' },
-                    { name: 'amount', type: 'uint256' }
-                  ],
-                  name: 'approve',
-                  outputs: [{ name: '', type: 'bool' }],
-                  stateMutability: 'nonpayable',
-                  type: 'function'
-                }
-              ],
-              functionName: 'approve',
-              args: [RED_PACKET_CONTRACT_ADDRESS, amount]
-            });
-            console.log('⏳ 等待授权确认...', approveTxHash);
-            await publicClient?.waitForTransactionReceipt({
-              hash: approveTxHash
-            });
-            console.log('✅ 授权成功');
-          } else {
-            console.log('✅ 已有足够授权，跳过');
-          }
-        }
+        // Token 授权
+        await approveTokenIfNeeded(
+          tokenAddress as Address,
+          RED_PACKET_CONTRACT_ADDRESS,
+          amount,
+          currentAddress,
+          publicClient,
+          approve
+        );
 
         console.log('2️⃣ 创建群红包合约...');
         const args = [
@@ -389,19 +341,11 @@ export function useRedPacketActions({
       const { tokenAddress, amount: totalAmount, message: memo } = config;
       const expiryDuration = BigInt(24 * 60 * 60);
 
-      // 动态获取 Token 精度，默认为 18
-      let decimals = 18;
-      if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-        try {
-          decimals = (await publicClient?.readContract({
-            address: tokenAddress as Address,
-            abi: erc20Abi,
-            functionName: 'decimals'
-          })) as number;
-        } catch (e) {
-          console.warn('获取 Token 精度失败，使用默认值 18', e);
-        }
-      }
+      // 动态获取 Token 精度
+      const decimals = await getTokenDecimals(
+        tokenAddress as Address,
+        publicClient
+      );
 
       const amount = parseUnits(totalAmount, decimals);
 
@@ -416,69 +360,24 @@ export function useRedPacketActions({
         console.log('🚀 开始发送私聊红包流程...');
 
         // 检查余额
-        if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-          const balance = (await publicClient?.readContract({
-            address: tokenAddress as Address,
-            abi: erc20Abi,
-            functionName: 'balanceOf',
-            args: [currentAddress]
-          })) as bigint;
+        const hasBalance = await checkTokenBalance(
+          tokenAddress as Address,
+          currentAddress,
+          amount,
+          decimals,
+          publicClient
+        );
+        if (!hasBalance) return;
 
-          console.log('💰 当前余额:', formatUnits(balance, decimals));
-
-          if (balance < amount) {
-            alert(`余额不足，当前余额: ${formatUnits(balance, decimals)}`);
-            return;
-          }
-        }
-
-        if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-          console.log('1️⃣ 请求 Token 授权...');
-          const allowance = await publicClient?.readContract({
-            address: tokenAddress as Address,
-            abi: [
-              {
-                inputs: [
-                  { name: 'owner', type: 'address' },
-                  { name: 'spender', type: 'address' }
-                ],
-                name: 'allowance',
-                outputs: [{ name: '', type: 'uint256' }],
-                stateMutability: 'view',
-                type: 'function'
-              }
-            ],
-            functionName: 'allowance',
-            args: [currentAddress, RED_PACKET_CONTRACT_ADDRESS]
-          });
-
-          if ((allowance as bigint) < amount) {
-            const approveTxHash = await approve({
-              address: tokenAddress as Address,
-              abi: [
-                {
-                  inputs: [
-                    { name: 'spender', type: 'address' },
-                    { name: 'amount', type: 'uint256' }
-                  ],
-                  name: 'approve',
-                  outputs: [{ name: '', type: 'bool' }],
-                  stateMutability: 'nonpayable',
-                  type: 'function'
-                }
-              ],
-              functionName: 'approve',
-              args: [RED_PACKET_CONTRACT_ADDRESS, amount]
-            });
-            console.log('⏳ 等待授权确认...', approveTxHash);
-            await publicClient?.waitForTransactionReceipt({
-              hash: approveTxHash
-            });
-            console.log('✅ 授权成功');
-          } else {
-            console.log('✅ 已有足够授权，跳过');
-          }
-        }
+        // Token 授权
+        await approveTokenIfNeeded(
+          tokenAddress as Address,
+          RED_PACKET_CONTRACT_ADDRESS,
+          amount,
+          currentAddress,
+          publicClient,
+          approve
+        );
 
         console.log('2️⃣ 创建私聊红包合约...');
         const createTxHash = await createPersonalPacket({
@@ -520,20 +419,6 @@ export function useRedPacketActions({
           memo || '恭喜发财，大吉大利'
         );
 
-        // 获取 Token Symbol
-        let tokenSymbol = 'ETH';
-        if (tokenAddress !== '0x0000000000000000000000000000000000000000') {
-          try {
-            tokenSymbol = (await publicClient?.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'symbol'
-            })) as string;
-          } catch (e) {
-            console.warn('获取 Token Symbol 失败，使用默认值', e);
-          }
-        }
-
         const optimisticMessage: Message = {
           id: `temp-${Date.now()}`,
           sender: 'user',
@@ -544,9 +429,7 @@ export function useRedPacketActions({
             type: 'NORMAL',
             status: 'active',
             amount: totalAmount, // 直接使用用户输入的金额字符串
-            tokenAddress: tokenAddress,
-            tokenSymbol: tokenSymbol,
-            decimals: decimals
+            tokenAddress: tokenAddress
           }),
           timestamp: new Date(),
           status: 'sending',
@@ -714,10 +597,46 @@ export function useRedPacketActions({
           setSelectedRedPacket(null);
 
           // 2. 打开详情弹窗
-          // 使用当前的 selectedRedPacket
           if (selectedRedPacket) {
             setDetailsRedPacket(selectedRedPacket);
           }
+
+          // 3. 手动更新本地消息状态，确保 UI 立即响应 (无需等待事件监听)
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.type !== 'red-packet') return msg;
+
+              let isTarget = false;
+              try {
+                const content = JSON.parse(msg.content);
+                if (content.packetId === packetId) isTarget = true;
+              } catch {
+                // 兼容旧格式 RP|...
+                if (
+                  msg.content.startsWith('RP|') &&
+                  msg.content.includes(packetId)
+                ) {
+                  // 旧格式很难直接更新状态，暂时忽略
+                }
+              }
+
+              if (isTarget) {
+                try {
+                  const content = JSON.parse(msg.content);
+                  return {
+                    ...msg,
+                    content: JSON.stringify({
+                      ...content,
+                      status: 'claimed'
+                    })
+                  };
+                } catch (e) {
+                  console.error('更新红包状态失败:', e);
+                }
+              }
+              return msg;
+            })
+          );
         }
       } catch (error: any) {
         const errorMessage = error?.message || error?.toString() || '';

@@ -31,8 +31,8 @@ export const networks: [Chain, ...Chain[]] = [
 
 // 🔧 配置多个RPC节点（已验证可用，中国大陆可访问）
 const arbitrumRpcUrls = [
-  'https://arb1.arbitrum.io/rpc', // Arbitrum官方RPC（已验证可用）
-  'https://arbitrum-one.publicnode.com' // PublicNode（已验证可用）
+  'https://arbitrum-one.publicnode.com', // PublicNode（已验证可用）
+  'https://arb1.arbitrum.io/rpc' // Arbitrum官方RPC（已验证可用）
 ];
 
 // 创建 Wagmi 适配器实例
