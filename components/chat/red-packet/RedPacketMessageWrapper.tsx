@@ -29,8 +29,9 @@ export function RedPacketMessageWrapper({
 
   // 确定红包状态
   const status = useMemo(() => {
-    // 优先使用 config 中的 status（如果已过期或已领完）
+    // 优先使用 config 中的 status（如果已过期或已领完或已领取）
     if (config.status === 'expired') return 'expired';
+    if (config.status === 'claimed') return 'claimed';
 
     // 如果当前用户已领取，显示为 claimed
     if (hasClaimed) return 'claimed';

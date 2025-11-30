@@ -274,7 +274,7 @@ export function OpenRedPacketModalNew({
                 onClick={handleOpenClick}
                 disabled={isProcessing || isOpening}
                 className={cn(
-                  'w-[25vw] h-[25vw] max-w-[100px] max-h-[100px] rounded-full flex items-center justify-center transition-transform active:scale-95',
+                  'w-[25vw] h-[25vw] max-w-[100px] max-h-[100px] rounded-full flex items-center justify-center transition-transform',
                   isOpening && 'animate-rotate-y'
                 )}
               >

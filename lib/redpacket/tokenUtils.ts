@@ -1,0 +1,122 @@
+import { Address } from 'viem';
+import { erc20Abi, formatUnits } from 'viem';
+
+/**
+ * 获取代币精度
+ * @param tokenAddress 代币合约地址，原生代币使用 0x0000000000000000000000000000000000000000
+ * @param publicClient Wagmi 的 publicClient
+ * @returns 代币精度（decimals）
+ */
+export async function getTokenDecimals(
+  tokenAddress: Address,
+  publicClient: any
+): Promise<number> {
+  // 原生代币 ETH
+  if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+    return 18;
+  }
+
+  try {
+    const decimals = (await publicClient.readContract({
+      address: tokenAddress,
+      abi: erc20Abi,
+      functionName: 'decimals'
+    })) as number;
+    return decimals;
+  } catch (e) {
+    console.warn('获取 Token 精度失败，使用默认值 18', e);
+    return 18;
+  }
+}
+
+/**
+ * 检查代币余额是否充足
+ * @param tokenAddress 代币合约地址
+ * @param userAddress 用户地址
+ * @param requiredAmount 需要的金额（wei）
+ * @param decimals 代币精度
+ * @param publicClient Wagmi 的 publicClient
+ * @returns 余额是否足够
+ */
+export async function checkTokenBalance(
+  tokenAddress: Address,
+  userAddress: Address,
+  requiredAmount: bigint,
+  decimals: number,
+  publicClient: any
+): Promise<boolean> {
+  // 原生代币 ETH 可以跳过（由钱包自动检查）
+  if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+    return true;
+  }
+
+  const balance = (await publicClient.readContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: [userAddress]
+  })) as bigint;
+
+  console.log('💰 当前余额:', formatUnits(balance, decimals));
+
+  if (balance < requiredAmount) {
+    alert(`余额不足，当前余额: ${formatUnits(balance, decimals)}`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * 检查并执行 ERC20 Token 授权
+ * @param tokenAddress 代币合约地址
+ * @param spenderAddress 被授权的合约地址（通常是红包合约）
+ * @param amount 需要授权的金额（wei）
+ * @param userAddress 用户地址
+ * @param publicClient Wagmi 的 publicClient
+ * @param approveFunc Wagmi 的 writeContractAsync 函数
+ * @returns 授权是否成功
+ */
+export async function approveTokenIfNeeded(
+  tokenAddress: Address,
+  spenderAddress: Address,
+  amount: bigint,
+  userAddress: Address,
+  publicClient: any,
+  approveFunc: any
+): Promise<boolean> {
+  // 原生代币 ETH 不需要授权
+  if (tokenAddress === '0x0000000000000000000000000000000000000000') {
+    return true;
+  }
+
+  console.log('1️⃣ 检查 Token 授权...');
+
+  // 检查当前授权额度
+  const allowance = (await publicClient.readContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: [userAddress, spenderAddress]
+  })) as bigint;
+
+  if (allowance >= amount) {
+    console.log('✅ 已有足够授权，跳过');
+    return true;
+  }
+
+  // 请求授权
+  console.log('⏳ 请求 Token 授权...');
+  const approveTxHash = await approveFunc({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'approve',
+    args: [spenderAddress, amount]
+  });
+
+  console.log('⏳ 等待授权确认...', approveTxHash);
+  await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
+  console.log('✅ 授权成功');
+
+  return true;
+}

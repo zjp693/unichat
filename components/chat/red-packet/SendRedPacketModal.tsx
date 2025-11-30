@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { ChevronLeft, ChevronDown, Loader2 } from 'lucide-react';
-import { useReadContract } from 'wagmi';
 import {
   Dialog,
   DialogContent,
@@ -15,8 +14,9 @@ import { Input } from '@/components/ui/input';
 import { ActionSheet } from '@/components/ui/action-sheet';
 import { cn } from '@/lib/utils';
 import { RedPacketType, RedPacketConfig } from './types';
-import { useGetAllRecommendedTokenInfos } from '@/lib/RedPacketAbi';
 import Image from 'next/image';
+import { TokenSelector } from '@/components/token';
+import type { Token } from '@/components/token/types';
 
 interface SendRedPacketModalProps {
   trigger?: React.ReactNode;
@@ -33,33 +33,10 @@ export function SendRedPacketModal({
   const [isTypeSwitcherOpen, setIsTypeSwitcherOpen] = React.useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = React.useState(false);
 
-  // 从合约获取推荐代币列表
-  const { data: recommendedTokensData, isLoading: isLoadingTokens } =
-    useGetAllRecommendedTokenInfos();
+  // 不再需要直接从合约获取，将使用 TokenSelector 内部的 useRecommendedTokens
 
-  // 解析推荐代币列表
-  const recommendedTokens = React.useMemo(() => {
-    if (!recommendedTokensData) return [];
-    const [addresses, infos] = recommendedTokensData as [string[], any[]];
-
-    return addresses
-      .map((addr, index) => ({
-        address: addr.toLowerCase(),
-        info: infos[index]
-      }))
-      .filter((token) => token.info.isRecommended);
-  }, [recommendedTokensData]);
-
-  // 选中的代币地址（默认第一个）
-  const [selectedTokenAddress, setSelectedTokenAddress] =
-    React.useState<string>('');
-
-  // 当推荐代币加载完成后，设置默认值
-  React.useEffect(() => {
-    if (recommendedTokens.length > 0 && !selectedTokenAddress) {
-      setSelectedTokenAddress(recommendedTokens[0].address);
-    }
-  }, [recommendedTokens, selectedTokenAddress]);
+  // 选中的代币
+  const [selectedToken, setSelectedToken] = React.useState<Token | null>(null);
 
   // Default to NORMAL for private chats, LUCKY for group chats
   const [packetType, setPacketType] = React.useState<RedPacketType>(
@@ -75,25 +52,8 @@ export function SendRedPacketModal({
   // Ref to track if user is using IME (e.g. Pinyin)
   const isComposing = React.useRef(false);
 
-  // 获取当前选中代币的symbol
-  const { data: tokenSymbolData } = useReadContract({
-    address: selectedTokenAddress as `0x${string}`,
-    abi: [
-      {
-        inputs: [],
-        name: 'symbol',
-        outputs: [{ type: 'string' }],
-        stateMutability: 'view',
-        type: 'function'
-      }
-    ] as const,
-    functionName: 'symbol',
-    query: {
-      enabled: !!selectedTokenAddress && selectedTokenAddress.startsWith('0x')
-    }
-  });
-
-  const tokenSymbol = (tokenSymbolData as string) || 'Token';
+  // 使用选中代币的信息
+  const tokenSymbol = selectedToken?.symbol || 'UNICHAT';
 
   // Reset state when modal opens or chatType changes
   React.useEffect(() => {
@@ -121,7 +81,7 @@ export function SendRedPacketModal({
   const handleSend = async () => {
     if (!amount || !count) return;
 
-    if (!selectedTokenAddress) {
+    if (!selectedToken) {
       alert('请选择代币');
       return;
     }
@@ -130,8 +90,8 @@ export function SendRedPacketModal({
       setIsSending(true);
       await onSend?.({
         type: packetType,
-        tokenSymbol,
-        tokenAddress: selectedTokenAddress,
+        tokenSymbol: selectedToken.symbol,
+        tokenAddress: selectedToken.address,
         amount,
         count: parseInt(count),
         message: message || '恭喜发财，大吉大利'
@@ -151,8 +111,8 @@ export function SendRedPacketModal({
     setIsTypeSwitcherOpen(false);
   };
 
-  const handleTokenSelect = (tokenAddress: string) => {
-    setSelectedTokenAddress(tokenAddress);
+  const handleTokenSelect = (token: Token) => {
+    setSelectedToken(token);
     setIsTokenSelectorOpen(false);
   };
 
@@ -197,15 +157,7 @@ export function SendRedPacketModal({
             {chatType === 'group' && (
               <>
                 <div className="bg-white rounded-lg p-4 flex items-center justify-between h-[60px]">
-                  <div className="flex items-center gap-2 min-w-[100px]">
-                    <Image
-                      src="/chats/Red envelope.png"
-                      alt="Red Packet"
-                      width={20}
-                      height={20}
-                    />
-                    <span className="text-[16px] text-[#1a1a1a]">红包个数</span>
-                  </div>
+                  <span className="text-[16px] text-[#1a1a1a]">红包个数</span>
                   <div className="flex items-center gap-2 flex-1 justify-end">
                     <Input
                       type="number"
@@ -236,6 +188,10 @@ export function SendRedPacketModal({
                 <span className="text-[16px] text-black">{tokenSymbol}</span>
                 <ChevronDown className="w-4 h-4 text-gray-400" />
               </div>
+            </div>
+            <div className="text-xs text-gray-400 pl-4">
+              可用余额: {selectedToken?.symbol || 'UNICHAT'}{' '}
+              {selectedToken?.balance || '0'}
             </div>
 
             {/* Row 3: Amount */}
@@ -351,31 +307,13 @@ export function SendRedPacketModal({
           ]}
         />
 
-        {/* Token Selector Action Sheet */}
-        <ActionSheet
+        {/* Token Selector */}
+        <TokenSelector
           isOpen={isTokenSelectorOpen}
           onClose={() => setIsTokenSelectorOpen(false)}
-          title="选择代币"
-        >
-          <div className="flex flex-col max-h-[60vh] overflow-y-auto">
-            {recommendedTokens.map((token) => (
-              <React.Fragment key={token.address}>
-                <button
-                  className="flex items-center justify-center p-4 active:bg-gray-50 w-full"
-                  onClick={() => handleTokenSelect(token.address)}
-                >
-                  <span className="text-[16px] text-[#1a1a1a] font-medium">
-                    {token.address.slice(0, 6)}...{token.address.slice(-4)}
-                  </span>
-                </button>
-                <div className="h-[1px] bg-gray-100 mx-4" />
-              </React.Fragment>
-            ))}
-            {recommendedTokens.length === 0 && (
-              <div className="p-8 text-center text-gray-400">暂无推荐代币</div>
-            )}
-          </div>
-        </ActionSheet>
+          selectedToken={selectedToken}
+          onSelectToken={handleTokenSelect}
+        />
       </DialogContent>
     </Dialog>
   );

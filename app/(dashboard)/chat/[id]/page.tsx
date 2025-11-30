@@ -397,7 +397,8 @@ export default function ChatPage() {
             : peerAvatarUrl || undefined
         }
         status={
-          selectedRedPacket?.content.includes('"claimed":true')
+          selectedRedPacket?.content.includes('"claimed":true') ||
+          selectedRedPacket?.content.includes('"status":"claimed"')
             ? 'claimed'
             : 'active'
         }
