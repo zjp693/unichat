@@ -25,6 +25,7 @@ interface UseMessageActionsProps {
   encryptMessage: (content: string, publicKey: string) => string;
   setPendingGroupMessage?: (msg: string) => void;
   setShowSendModeModal?: (show: boolean) => void;
+  setShowKeyModal?: (show: boolean) => void;
 }
 
 /**
@@ -44,7 +45,8 @@ export function useMessageActions({
   sendGroupMessage,
   encryptMessage,
   setPendingGroupMessage,
-  setShowSendModeModal
+  setShowSendModeModal,
+  setShowKeyModal
 }: UseMessageActionsProps) {
   // 发送新消息
   const handleSendMessage = useCallback(
@@ -130,6 +132,17 @@ export function useMessageActions({
 
       // 私聊逻辑
       try {
+        // 0. 检查是否有密钥
+        if (keys.length === 0) {
+          console.warn('⚠️ 未检测到密钥，请先生成密钥');
+          if (setShowKeyModal) {
+            setShowKeyModal(true);
+          } else {
+            alert('请先生成密钥对以发送加密消息');
+          }
+          return;
+        }
+
         if (!currentAddress || !recipientAddress) {
           throw new Error('地址无效');
         }
@@ -345,7 +358,8 @@ export function useMessageActions({
       encryptMessage,
       writeContract,
       setPendingGroupMessage,
-      setShowSendModeModal
+      setShowSendModeModal,
+      setShowKeyModal
     ]
   );
 
