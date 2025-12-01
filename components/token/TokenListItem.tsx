@@ -31,11 +31,8 @@ export function TokenListItem({
   const gradientClass = getColorFromAddress(token.address);
   const [imageError, setImageError] = useState(false);
 
-  // 检查 iconCid 是否是一个可用的图片 URL
-  const hasValidImage =
-    token.iconCid &&
-    (token.iconCid.startsWith('http://') ||
-      token.iconCid.startsWith('https://'));
+  // 使用 iconUrl 字段判断是否有有效图标（null 表示需要显示默认头像）
+  const hasValidImage = !!token.iconUrl && !imageError;
 
   return (
     <button
@@ -47,11 +44,11 @@ export function TokenListItem({
     >
       {/* 左侧：图标 */}
       <div className="relative">
-        {hasValidImage && !imageError ? (
+        {hasValidImage ? (
           <img
-            src={token.iconCid}
+            src={token.iconUrl!}
             onError={() => setImageError(true)}
-            className="w-10 h-10 rounded-full object-cover"
+            className="w-10 h-10 rounded-lg object-cover"
             alt={token.symbol}
           />
         ) : (

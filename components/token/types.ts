@@ -7,6 +7,7 @@ export interface Token {
   symbol: string;
   name: string;
   iconCid?: string; // IPFS CID（推荐代币有，自定义代币无）
+  iconUrl?: string | null; // 处理后的图标 URL（如果为 null 则显示默认头像）
   decimals: number;
   balance?: string; // 用户余额（格式化后）
 }

@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { RedPacketType, RedPacketConfig } from './types';
 import Image from 'next/image';
 import { TokenSelector } from '@/components/token';
+import { useRecommendedTokens } from '@/components/token/hooks/useTokenData';
 import type { Token } from '@/components/token/types';
 
 interface SendRedPacketModalProps {
@@ -33,10 +34,20 @@ export function SendRedPacketModal({
   const [isTypeSwitcherOpen, setIsTypeSwitcherOpen] = React.useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = React.useState(false);
 
-  // 不再需要直接从合约获取，将使用 TokenSelector 内部的 useRecommendedTokens
+  // 获取推荐代币列表
+  const { tokens: recommendedTokens, isLoading: isLoadingTokens } =
+    useRecommendedTokens([]);
 
   // 选中的代币
   const [selectedToken, setSelectedToken] = React.useState<Token | null>(null);
+
+  // 自动选中第一个代币
+  React.useEffect(() => {
+    if (!selectedToken && recommendedTokens.length > 0 && !isLoadingTokens) {
+      // console.log('🎯 自动选中第一个代币:', recommendedTokens[0]);
+      setSelectedToken(recommendedTokens[0]);
+    }
+  }, [selectedToken, recommendedTokens, isLoadingTokens]);
 
   // Default to NORMAL for private chats, LUCKY for group chats
   const [packetType, setPacketType] = React.useState<RedPacketType>(

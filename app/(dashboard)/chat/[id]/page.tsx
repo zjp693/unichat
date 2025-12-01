@@ -215,7 +215,8 @@ export default function ChatPage() {
     sendGroupMessage,
     encryptMessage,
     setPendingGroupMessage: (msg) => dispatch(setPendingGroupMessage(msg)),
-    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open))
+    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open)),
+    setShowKeyModal: (open) => dispatch(setShowKeyModal(open))
   });
 
   // --- Effects ---
