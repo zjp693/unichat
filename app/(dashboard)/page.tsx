@@ -2,18 +2,10 @@
 
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import {
-  Search,
-  CirclePlus,
-  Wallet,
-  Globe,
-  QrCode,
-  CreditCard,
-  Gift
-} from 'lucide-react';
+import { ChatNavbar } from '@/components/ui/chat-navbar';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { TopNavbar } from '@/components/ui/top-navbar';
 import Image from 'next/image';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -79,6 +71,7 @@ function convertCommunityToChat(community: CommunityWithStatus): ChatItem {
     proofData: community.proofData
   };
 }
+
 export default function ChatPage() {
   const router = useRouter();
   const { address: currentAddress, isConnected } = useAccount();
@@ -86,6 +79,7 @@ export default function ChatPage() {
 
   // 新用户检测
   const { isNewUser, isLoading: isCheckingProfile } = useProfileCheck();
+
   const [showSetupModal, setShowSetupModal] = useState(false);
 
   // 检测新用户并显示设置弹窗
@@ -165,24 +159,13 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
       <div className="flex-shrink-0">
-        <TopNavbar />
-      </div>
-
-      {/* 搜索栏和操作按钮 */}
-      <div className="pr-4 pb-3 bg-white border-b border-gray-200 text-right flex-shrink-0">
-        <button
-          className="p-2 rounded-full mr-2 hover:bg-gray-100 transition-colors"
-          onClick={() => router.push('/search')}
-        >
-          <Search size={18} />
-        </button>
-        <DropdownMenu />
+        <ChatNavbar />
       </div>
 
       {/* 聊天列表 */}
       <div
-        className="bg-gray-50 overflow-y-auto"
-        style={{ maxHeight: 'calc(100vh - 180px)' }}
+        className="bg-gray-50 overflow-y-auto flex-1"
+        style={{ maxHeight: 'calc(100vh - 134px)' }}
       >
         {!isConnected ? (
           <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -538,143 +521,6 @@ function ChatListItem({
           <div className="border-t w-[calc(100%-5rem)] border-border absolute bottom-0"></div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function DropdownMenu() {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const handleGroupChatClick = () => {
-    setIsOpen(false);
-    router.push('/chat/create-group');
-  };
-
-  const handleItemClick = () => {
-    setIsOpen(false);
-  };
-
-  return (
-    <div className="relative inline-block" ref={dropdownRef}>
-      <button className="p-2 rounded-full" onClick={() => setIsOpen(!isOpen)}>
-        <CirclePlus size={18} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-32 bg-[#424242] text-xs text-white shadow-lg rounded-md z-50">
-          {/* 添加向上箭头 */}
-          <div className="absolute -top-3 right-2 w-0 h-0 border-l-8 border-r-8 border-b-[16px] border-l-transparent border-r-transparent border-b-[#424242]"></div>
-          <div
-            className="pt-2 px-2 flex items-center"
-            onClick={handleGroupChatClick}
-          >
-            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
-              <Image
-                src="/chats/Group chat.png"
-                alt="Group chat"
-                width={16}
-                height={16}
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div className="w-full text-left">
-              <div className="w-full pb-2  border-b border-[#585858]">
-                Group chat
-              </div>
-            </div>
-          </div>
-          <div
-            className="py-2 px-2 flex items-center"
-            onClick={handleItemClick}
-          >
-            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
-              <Image
-                src="/chats/Global Contacts.png"
-                alt="Global Contacts"
-                width={16}
-                height={16}
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div className="w-full text-left">
-              <div className="w-full pb-2  border-b border-[#585858]">
-                Global Contacts
-              </div>
-            </div>
-          </div>
-          <div
-            className="py-2 px-2 flex items-center"
-            onClick={handleItemClick}
-          >
-            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
-              <Image
-                src="/chats/Scan.png"
-                alt="Scan"
-                width={16}
-                height={16}
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div className="w-full text-left">
-              <div className="w-full pb-2  border-b border-[#585858]">Scan</div>
-            </div>
-          </div>
-          <div
-            className="py-2 px-2 flex items-center"
-            onClick={handleItemClick}
-          >
-            <div className="w-4 h-4 mb-2 flex-shrink-0 mr-2 flex items-center justify-center">
-              <Image
-                src="/chats/payment.png"
-                alt="Payment"
-                width={16}
-                height={16}
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div className="w-full text-left">
-              <div className="w-full pb-2  border-b border-[#585858]">
-                Payment
-              </div>
-            </div>
-          </div>
-          <div
-            className="py-2 px-2 flex items-center"
-            onClick={handleItemClick}
-          >
-            <div className="w-4 h-4 flex-shrink-0 mr-2 flex items-center justify-center">
-              <Image
-                src="/chats/Airdrop.png"
-                alt="Airdrop"
-                width={16}
-                height={16}
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div className="w-full text-left">
-              <div className="w-full">Airdrop</div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

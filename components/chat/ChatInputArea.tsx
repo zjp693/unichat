@@ -44,8 +44,8 @@ export const ChatInputArea = forwardRef<ChatInputAreaRef, ChatInputAreaProps>(
           <Image
             src="/chats/voice.png"
             alt="Voice"
-            width={24}
-            height={24}
+            width={32}
+            height={32}
             className="text-gray-500"
           />
         </Button>
@@ -72,8 +72,8 @@ export const ChatInputArea = forwardRef<ChatInputAreaRef, ChatInputAreaProps>(
           <Image
             src="/chats/face.png"
             alt="Face"
-            width={24}
-            height={24}
+            width={32}
+            height={32}
             className="text-gray-500"
           />
         </Button>
@@ -96,13 +96,13 @@ export const ChatInputArea = forwardRef<ChatInputAreaRef, ChatInputAreaProps>(
           variant="ghost"
           onClick={handleOpenActions}
           className={`rounded-lg transition-all duration-300 ease-in-out
-          ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 w-8 pl-0 pr-2 py-0 pointer-events-auto'}`}
+          ${inputMessage.trim() !== '' ? 'opacity-0 w-0 p-0 m-0 overflow-hidden pointer-events-none' : 'opacity-100 pl-0 pr-2 py-0 pointer-events-auto'}`}
         >
           <Image
             src="/chats/plus.png"
             alt="Plus"
-            width={24}
-            height={24}
+            width={32}
+            height={32}
             className="text-gray-600"
           />
         </Button>
