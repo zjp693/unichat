@@ -432,7 +432,7 @@ function ChatListItem({
                 router.push(`/contacts/profile/${chat.id}?type=nonfriend`);
               }
             }}
-            className="h-12 w-12 rounded-sm overflow-hidden"
+            className="h-14 w-14 rounded-sm overflow-hidden"
           >
             {displayUnreadCount && (
               <Badge

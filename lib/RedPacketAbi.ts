@@ -102,6 +102,7 @@ export function useClaimGroupPacket() {
 
 /**
  * 钩子: 获取红包详情
+ * 缓存策略：1分钟内不重新请求，缓存保留10分钟
  */
 export function useGetPacket(packetId: bigint | undefined) {
   return useReadContract({
@@ -110,13 +111,16 @@ export function useGetPacket(packetId: bigint | undefined) {
     functionName: 'getPacket',
     args: packetId !== undefined ? [packetId] : undefined,
     query: {
-      enabled: packetId !== undefined
+      enabled: packetId !== undefined,
+      staleTime: 1 * 60 * 1000, // 1分钟内认为数据是新鲜的
+      gcTime: 10 * 60 * 1000 // 缓存保留10分钟
     }
   });
 }
 
 /**
  * 钩子: 检查用户是否已领取红包
+ * 缓存策略：1分钟内不重新请求，缓存保留10分钟
  */
 export function useHasClaimed(
   packetId: bigint | undefined,
@@ -128,7 +132,9 @@ export function useHasClaimed(
     functionName: 'hasClaimed',
     args: packetId !== undefined && user ? [packetId, user] : undefined,
     query: {
-      enabled: packetId !== undefined && !!user
+      enabled: packetId !== undefined && !!user,
+      staleTime: 1 * 60 * 1000, // 2分钟内认为数据是新鲜的
+      gcTime: 10 * 60 * 1000 // 缓存保留10分钟
     }
   });
 }
