@@ -6,7 +6,40 @@ import { useMemo } from 'react';
 import { useReadContract, useReadContracts, useAccount } from 'wagmi';
 import { erc20Abi, isAddress, formatUnits } from 'viem';
 import { useGetAllRecommendedTokenInfos } from '@/lib/RedPacketAbi';
+import { buildIPFSUrl } from '@/lib/ipfs-gateways';
 import type { Token, TokenInfo } from '../types';
+
+/**
+ * 判断字符串是否是有效的 IPFS CID
+ */
+function isIPFSCid(str: string): boolean {
+  if (!str) return false;
+
+  // 常见的 IPFS CID 前缀
+  const ipfsPrefixes = ['Qm', 'bafy', 'bafk', 'bafz', 'f01', 'z'];
+
+  return ipfsPrefixes.some((prefix) => str.startsWith(prefix));
+}
+
+/**
+ * 将 iconCid 转换为有效的图标 URL
+ * @param iconCid 原始图标数据（可能是 IPFS CID、HTTP URL 或空）
+ * @returns 有效的图标 URL 或 null（需要显示默认头像）
+ */
+function getValidIconUrl(iconCid: string): string | null {
+  // 1. 完整的 HTTP/HTTPS URL
+  if (iconCid.startsWith('http://') || iconCid.startsWith('https://')) {
+    return iconCid;
+  }
+
+  // 2. IPFS CID
+  if (isIPFSCid(iconCid)) {
+    return buildIPFSUrl(iconCid);
+  }
+
+  // 3. 其他情况，视为无效
+  return null;
+}
 
 /**
  * 获取推荐代币列表并补全 symbol, name 和 balance
@@ -131,18 +164,21 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
         symbol: (symbolData?.result as string) || 'UNKNOWN',
         name: (nameData?.result as string) || 'Unknown Token',
         iconCid: tokenAddr.iconCid,
+        iconUrl: getValidIconUrl(tokenAddr.iconCid), // 新增：智能处理图标URL
         decimals: decimals,
         balance: balance
       } as Token;
 
-      // 🔍 打印代币数据调试信息
-      console.log(`🪙 Token [${token.symbol}]:`, {
-        name: token.name,
-        address: token.address,
-        balance: token.balance,
-        decimals: token.decimals,
-        iconCid: token.iconCid // <--- 添加这一行
-      });
+      // // 🔍 打印代币数据调试信息 - 重点查看图标信息
+      // console.log(`🪙 Token [${token.symbol}]:`, {
+      //   name: token.name,
+      //   address: token.address,
+      //   balance: token.balance,
+      //   decimals: token.decimals,
+      //   iconCid: token.iconCid,
+      //   iconUrl: token.iconUrl,
+      //   hasIcon: !!token.iconUrl
+      // });
 
       return token;
     });

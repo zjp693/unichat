@@ -91,9 +91,9 @@ export function OpenRedPacketModalNew({
   }, [packet, hasClaimed, initialStatus]);
 
   // Debug log to confirm new version is loaded
-  React.useEffect(() => {
-    console.log('OpenRedPacketModalNew V4 loaded', { packetId, currentStatus });
-  }, [packetId, currentStatus]);
+  // React.useEffect(() => {
+  //   console.log('OpenRedPacketModalNew V4 loaded', { packetId, currentStatus });
+  // }, [packetId, currentStatus]);
 
   // 自动跳转：如果已领取，直接进入详情页
   React.useEffect(() => {
@@ -200,7 +200,7 @@ export function OpenRedPacketModalNew({
               {/* Sender Info */}
               <div className="flex flex-col items-center gap-3">
                 <div className="flex items-center gap-2 text-[#fcedae]">
-                  <div className="w-6 h-6 rounded-sm overflow-hidden relative bg-black/20">
+                  <div className="w-6 h-6 rounded-sm overflow-hidden relative">
                     {safeSenderAvatar ? (
                       <Image
                         src={safeSenderAvatar}
@@ -274,7 +274,7 @@ export function OpenRedPacketModalNew({
                 onClick={handleOpenClick}
                 disabled={isProcessing || isOpening}
                 className={cn(
-                  'w-[25vw] h-[25vw] max-w-[100px] max-h-[100px] rounded-full flex items-center justify-center transition-transform',
+                  'w-[25vw] h-[25vw] max-w-[100px] max-h-[100px] rounded-full flex items-center justify-center transition-transform bg-transparent border-none outline-none focus:outline-none',
                   isOpening && 'animate-rotate-y'
                 )}
               >

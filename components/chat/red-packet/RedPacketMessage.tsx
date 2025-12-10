@@ -6,7 +6,7 @@ import { RedPacketConfig } from './types';
 
 interface RedPacketMessageProps {
   config: RedPacketConfig;
-  status?: 'active' | 'claimed' | 'expired';
+  status?: 'active' | 'claimed' | 'expired' | 'empty';
   onClick?: () => void;
 }
 
@@ -15,13 +15,31 @@ export function RedPacketMessage({
   status = 'active',
   onClick
 }: RedPacketMessageProps) {
-  const isClaimed = status === 'claimed';
+  // 已领取、已领完、已过期都使用相同的"已打开"样式
+  const isOpened =
+    status === 'claimed' || status === 'empty' || status === 'expired';
+
+  // 根据状态显示不同的文案
+  const getStatusText = () => {
+    switch (status) {
+      case 'claimed':
+        return '已领取';
+      case 'empty':
+        return '已领完';
+      case 'expired':
+        return '已过期';
+      default:
+        return null;
+    }
+  };
+
+  const statusText = getStatusText();
 
   return (
     <div
       className={cn(
         'w-[240px] rounded-[8px] overflow-hidden cursor-pointer transition-all active:scale-95 select-none relative',
-        isClaimed ? 'bg-[#fdd7b1]' : 'bg-[#fa9c3b]'
+        isOpened ? 'bg-[#fdd7b1]' : 'bg-[#fa9c3b]'
       )}
       onClick={onClick}
     >
@@ -31,12 +49,12 @@ export function RedPacketMessage({
         <div
           className={cn(
             'w-[40px] h-[50px] flex items-center justify-center flex-shrink-0',
-            isClaimed ? 'opacity-100' : 'opacity-100'
+            isOpened ? 'opacity-100' : 'opacity-100'
           )}
         >
           <div className="relative w-[36px] h-[44px]">
             <Image
-              src={isClaimed ? '/chats/Claim.png' : '/chats/Notclaimed.png'}
+              src={isOpened ? '/chats/Claim.png' : '/chats/Notclaimed.png'}
               alt="Red Packet"
               fill
               className="object-contain"
@@ -49,8 +67,8 @@ export function RedPacketMessage({
           <span className="text-[15px] font-medium leading-tight truncate text-white">
             {config.message || '恭喜发财，大吉大利'}
           </span>
-          {isClaimed && (
-            <span className="text-[12px] text-white mt-1">已领取</span>
+          {statusText && (
+            <span className="text-[12px] text-white mt-1">{statusText}</span>
           )}
         </div>
       </div>

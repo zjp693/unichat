@@ -1,5 +1,6 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
 import { KeyGenerationModal } from '@/components/chat/KeyGenerationModal';
 import { DecryptionModal } from '@/components/chat/DecryptionModal';
 import { MessageSendModeModal } from '@/components/chat/MessageSendModeModal';
@@ -11,7 +12,8 @@ import {
   setShowDecryptModal,
   setShowSendModeModal,
   setShowGroupInfoPanel,
-  setShowPrivateChatSettingsPanel
+  setShowPrivateChatSettingsPanel,
+  setShowKeyModal
 } from '@/lib/chatSlice';
 import type { RootState } from '@/lib/store';
 
@@ -47,11 +49,19 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
     showDecryptModal,
     showSendModeModal,
     showGroupInfoPanel,
-    showPrivateChatSettingsPanel
+    showPrivateChatSettingsPanel,
+    showKeyModal
   } = useSelector((state: RootState) => state.chat);
 
   return (
     <>
+      <KeyManagementModal
+        isOpen={showKeyModal}
+        onClose={() => dispatch(setShowKeyModal(false))}
+        onKeySelect={handleKeySelect}
+        onBatchDecrypt={handleBatchDecrypt}
+      />
+
       <KeyGenerationModal
         isOpen={showGenerationModal}
         onClose={() => dispatch(setShowGenerationModal(false))}
