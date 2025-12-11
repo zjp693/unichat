@@ -18,10 +18,6 @@ import {
 import { Address, Abi } from 'viem';
 import communityABI from '@/contract/abi/community.json';
 import { useToast } from '@/hooks/use-toast';
-import {
-  usePeerLastMessage,
-  formatMessageTime
-} from '@/hooks/usePeerLastMessage';
 import { useChatListSync } from '@/hooks/useChatListSync';
 import { useCommunitiesWithStatus } from '@/hooks/useCommunities';
 import { useJoinCommunity } from '@/hooks/useJoinCommunity';
@@ -31,6 +27,9 @@ import { NewUserSetupModal } from '@/components/profile/NewUserSetupModal';
 import { usePeerProfile } from '@/hooks/usePeerProfile';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IPFSImg } from '@/components/ui/ipfs-img';
+// 新增：聊天时间戳和排序
+import { useChatTimestamp } from '@/hooks/useChatTimestamp';
+import { useSortedChats } from '@/hooks/useSortedChats';
 
 interface ChatItem {
   id: string;
@@ -150,10 +149,13 @@ export default function ChatPage() {
     return chainCommunities.map(convertCommunityToChat);
   }, [chainCommunities]);
 
-  // 合并群聊和私聊列表
-  const allChats = useMemo(() => {
+  // 合并群聊和私聊列表（未排序）
+  const allChatsRaw = useMemo(() => {
     return [...groupChats, ...privateChats];
   }, [groupChats, privateChats]);
+
+  // 使用 useSortedChats 按最后消息时间排序
+  const allChats = useSortedChats(allChatsRaw);
 
   return (
     <div className="flex flex-col h-screen">
@@ -257,11 +259,13 @@ function ChatListItem({
     ? Number(groupMessageCountData)
     : 0;
 
-  // 获取私聊的最后消息时间
-  const { timestamp } = usePeerLastMessage(
-    !chat.isGroup && currentAddress ? currentAddress : undefined,
-    !chat.isGroup ? (chat.id as Address) : (undefined as any)
-  );
+  // 使用统一的 useChatTimestamp 获取时间戳（自动上报到 Redux）
+  const { displayTime } = useChatTimestamp({
+    chatId: chat.id,
+    isGroup: !!chat.isGroup,
+    currentAddress,
+    isJoined: chat.isJoined
+  });
 
   // 获取私聊的今日消息总数
   // 根据网页测试结果，可能需要交换参数
@@ -291,10 +295,6 @@ function ChatListItem({
 
   // 将 bigint 转换为 number（今日消息数）
   const todayCount = todayMessageCount ? Number(todayMessageCount) : 0;
-
-  // 格式化时间
-  const displayTime =
-    !chat.isGroup && timestamp ? formatMessageTime(timestamp) : chat.time;
 
   // 决定显示的消息数：私聊显示今日消息数，群聊显示消息总数（只有已加入的才显示）
   const displayUnreadCount = chat.isGroup

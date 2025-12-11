@@ -16,6 +16,10 @@ interface ChatState {
   // --- 业务状态 ---
   selectedMessageId: string | null;
   pendingGroupMessage: string;
+
+  // --- 聊天列表时间戳 ---
+  // 存储每个聊天的最后消息时间戳 { [chatId]: timestamp }
+  timestampMap: Record<string, number>;
 }
 
 const initialState: ChatState = {
@@ -28,7 +32,8 @@ const initialState: ChatState = {
   showGenerationModal: false,
   showSendModeModal: false,
   selectedMessageId: null,
-  pendingGroupMessage: ''
+  pendingGroupMessage: '',
+  timestampMap: {}
 };
 
 const chatSlice = createSlice({
@@ -65,6 +70,17 @@ const chatSlice = createSlice({
     setPendingGroupMessage(state, action: PayloadAction<string>) {
       state.pendingGroupMessage = action.payload;
     },
+    // 更新某个聊天的最后消息时间戳
+    updateTimestamp(
+      state,
+      action: PayloadAction<{ chatId: string; timestamp: number }>
+    ) {
+      state.timestampMap[action.payload.chatId] = action.payload.timestamp;
+    },
+    // 清空所有时间戳（切换账户时使用）
+    clearTimestampMap(state) {
+      state.timestampMap = {};
+    },
     // 重置所有 UI 状态 (离开聊天页面时使用)
     resetChatState(state) {
       return initialState;
@@ -83,6 +99,8 @@ export const {
   setShowSendModeModal,
   setSelectedMessageId,
   setPendingGroupMessage,
+  updateTimestamp,
+  clearTimestampMap,
   resetChatState
 } = chatSlice.actions;
 
