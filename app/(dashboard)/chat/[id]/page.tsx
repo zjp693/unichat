@@ -21,6 +21,7 @@ import { useRedPacketEvents } from '@/hooks/chat/events/useRedPacketEvents';
 import { useEncryptionActions } from '@/hooks/chat/actions/useEncryptionActions';
 import { useMessageActions } from '@/hooks/chat/actions/useMessageActions';
 import { useMessageLoader } from '@/hooks/chat/data/useMessageLoader';
+import { useCommunityMembersCount } from '@/hooks/useCommunityMembers';
 import {
   ChatInputArea,
   ChatInputAreaRef
@@ -104,6 +105,18 @@ export default function ChatPage() {
     avatarUrl: myAvatarUrl,
     isLoading: isMyAvatarLoading
   } = usePeerAvatar(currentAddress as Address | undefined);
+
+  // --- 群成员数量（实时从链上获取）---
+  const { memberCount: realTimeMemberCount, isLoading: isMemberCountLoading } =
+    useCommunityMembersCount(chatType === 'group' ? groupAddress : undefined);
+
+  // 使用实时成员数，如果加载中则使用 URL 参数的回退值
+  const displayMemberCount =
+    chatType === 'group'
+      ? isMemberCountLoading
+        ? memberCount || 0
+        : realTimeMemberCount
+      : 0;
 
   // --- Refs 管理 ---
   const { inputRef, scrollAreaRef, actionsPanelContentRef } = useChatRefs();
@@ -250,7 +263,7 @@ export default function ChatPage() {
               undefined,
             level: groupLevel as any,
             address: chatType === 'private' ? recipientAddress : groupAddress,
-            memberCount: memberCount,
+            memberCount: displayMemberCount,
             groupCondition: groupCondition
           }}
           onMenuClick={() => {
@@ -333,6 +346,7 @@ export default function ChatPage() {
             onSendRedPacket={handleSendRedPacket}
             chatType={chatType}
             contentRef={actionsPanelContentRef}
+            memberCount={displayMemberCount}
           />
         </div>
       </div>
@@ -345,7 +359,7 @@ export default function ChatPage() {
         handleSendModeSelect={handleSendModeSelect}
         chatType={chatType}
         conversationId={conversationId as string}
-        memberCount={memberCount}
+        memberCount={displayMemberCount}
       />
 
       <OpenRedPacketModalNew

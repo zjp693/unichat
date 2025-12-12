@@ -159,13 +159,35 @@ export function useGetClaimRecordsPaged(
 }
 
 /**
- * 钩子: 获取所有推荐代币信息
+ * 钩子: 获取推荐代币地址列表（分页）
+ * @param offset 起始位置
+ * @param limit 获取数量
  */
-export function useGetAllRecommendedTokenInfos() {
+export function useGetRecommendedTokensPaged(
+  offset: bigint = BigInt(0),
+  limit: bigint = BigInt(20) // 默认获取 20 个，应该足够了
+) {
   return useReadContract({
     address: RED_PACKET_CONTRACT_ADDRESS,
     abi: RedPacketAbi,
-    functionName: 'getAllRecommendedTokenInfos'
+    functionName: 'getRecommendedTokensPaged',
+    args: [offset, limit]
+  });
+}
+
+/**
+ * 钩子: 获取单个代币的推荐信息
+ * @param tokenAddress 代币地址
+ */
+export function useGetRecommendedTokenInfo(tokenAddress: Address | undefined) {
+  return useReadContract({
+    address: RED_PACKET_CONTRACT_ADDRESS,
+    abi: RedPacketAbi,
+    functionName: 'recommendedTokens',
+    args: tokenAddress ? [tokenAddress] : undefined,
+    query: {
+      enabled: !!tokenAddress
+    }
   });
 }
 

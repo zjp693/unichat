@@ -70,6 +70,25 @@
         {
           "indexed": true,
           "internalType": "address",
+          "name": "chat",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "allowed",
+          "type": "bool"
+        }
+      ],
+      "name": "ChatContractUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
           "name": "token",
           "type": "address"
         },
@@ -531,6 +550,60 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "creator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalShares",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isRandom",
+          "type": "bool"
+        },
+        {
+          "internalType": "address",
+          "name": "groupContract",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "shareAmounts",
+          "type": "uint256[]"
+        },
+        {
+          "internalType": "uint256",
+          "name": "expiryDuration",
+          "type": "uint256"
+        }
+      ],
+      "name": "createGroupPacketFor",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "packetId",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
           "name": "token",
           "type": "address"
         },
@@ -551,6 +624,45 @@
         }
       ],
       "name": "createPersonalPacket",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "packetId",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "creator",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "recipient",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "expiryDuration",
+          "type": "uint256"
+        }
+      ],
+      "name": "createPersonalPacketFor",
       "outputs": [
         {
           "internalType": "uint256",
@@ -900,6 +1012,25 @@
           "type": "address"
         }
       ],
+      "name": "isChatContract",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
       "name": "isCoreToken",
       "outputs": [
         {
@@ -1047,6 +1178,24 @@
     {
       "inputs": [],
       "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "chat",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "allowed",
+          "type": "bool"
+        }
+      ],
+      "name": "setChatContract",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

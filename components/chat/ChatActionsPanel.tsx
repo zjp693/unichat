@@ -13,6 +13,7 @@ interface ChatActionsPanelProps {
   onSendRedPacket: (config: RedPacketConfig) => Promise<void>;
   chatType: 'private' | 'group';
   contentRef?: RefObject<HTMLDivElement | null>;
+  memberCount?: number;
 }
 
 interface ActionButtonProps {
@@ -52,7 +53,8 @@ const ActionButton: React.FC<ActionButtonProps> = ({
 export const ChatActionsPanel: React.FC<ChatActionsPanelProps> = ({
   onSendRedPacket,
   chatType,
-  contentRef
+  contentRef,
+  memberCount
 }) => {
   const dispatch = useDispatch();
   const { isActionsOpen, panelHeight } = useSelector(
@@ -100,6 +102,7 @@ export const ChatActionsPanel: React.FC<ChatActionsPanelProps> = ({
                 key={button.id}
                 onSend={onSendRedPacket}
                 chatType={chatType}
+                memberCount={memberCount}
                 trigger={
                   <div
                     onClick={handleClose}

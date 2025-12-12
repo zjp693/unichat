@@ -10,14 +10,8 @@ export const publicClient = createPublicClient({
 // 合约地址
 export const FACTORY_ADDRESS = process.env
   .NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
-export const UNICHAT_TOKEN_ADDRESS = process.env
-  .NEXT_PUBLIC_UNICHAT_TOKEN_ADDRESS as `0x${string}`;
 
 // 验证合约地址配置
 if (!FACTORY_ADDRESS) {
   console.error('⚠️ 警告: NEXT_PUBLIC_FACTORY_ADDRESS 环境变量未设置');
-}
-
-if (!UNICHAT_TOKEN_ADDRESS) {
-  console.error('⚠️ 警告: NEXT_PUBLIC_UNICHAT_TOKEN_ADDRESS 环境变量未设置');
 }
