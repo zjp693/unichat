@@ -4,39 +4,21 @@ import {
   usePublicClient,
   useWriteContract
 } from 'wagmi';
-import {
-  parseUnits,
-  formatUnits,
-  getAddress,
-  decodeEventLog,
-  erc20Abi
-} from 'viem';
+import { parseUnits, formatUnits, decodeEventLog, erc20Abi, Abi } from 'viem';
 import type { Message } from '@/lib/chat/types';
 import { RedPacketConfig } from '@/components/chat/red-packet/types';
 import { Address } from '@/lib/utils';
 import {
-  useCreatePersonalPacket,
-  useCreateGroupPacket,
   useClaimPersonalPacket,
   useClaimGroupPacket,
-  useGetPacket,
-  useHasClaimed,
   RED_PACKET_CONTRACT_ADDRESS,
-  RedPacketAbi,
-  PacketType,
-  PacketStatus
+  RedPacketAbi
 } from '@/lib/RedPacketAbi';
 import {
-  useSendMessage,
   DIRECT_MESSAGE_CONTRACT_ADDRESS,
   DirectMessageAbi
 } from '@/lib/DirectMessageAbi';
-import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage';
-import {
-  encodeDmRedPacketContent,
-  decodeDmRedPacketContent,
-  encodeGroupRedPacketCid
-} from '@/lib/redpacket/encoding';
+import communityABI from '@/contract/abi/community.json';
 import {
   getTokenDecimals,
   checkTokenBalance,
@@ -70,24 +52,17 @@ export function useRedPacketActions({
 }: UseRedPacketActionsProps) {
   const publicClient = usePublicClient();
   const { writeContractAsync: approve } = useWriteContract();
-  const { writeContractAsync: createPersonalPacket } =
-    useCreatePersonalPacket();
-  const { writeContractAsync: createGroupPacket } = useCreateGroupPacket();
+  const { writeContractAsync: writeContract } = useWriteContract();
   const { writeContractAsync: claimPersonalPacket } = useClaimPersonalPacket();
   const { writeContractAsync: claimGroupPacket } = useClaimGroupPacket();
-  const { writeContractAsync: sendMessage } = useSendMessage();
-  const { sendMessage: sendGroupMessage } = useSendCommunityMessage(
-    groupAddress || '0x0000000000000000000000000000000000000000'
-  );
 
-  const { data: waitForTransaction } = useWaitForTransactionReceipt(); /**
+  /**
    * 发送群聊红包
-   * 流程：
+   * 新流程（优化为 2 步交易）：
    * 1. 计算金额：根据红包类型（普通/拼手气）计算总金额和份额。
    * 2. 余额检查：确保用户 Token 余额充足。
-   * 3. 授权 (Approve)：检查并请求 ERC20 Token 授权。
-   * 4. 创建红包 (Create)：调用 RedPacket 合约创建红包。
-   * 5. 发送消息 (Send)：调用 Room 合约发送包含红包 ID 的群消息。
+   * 3. 授权 (Approve)：检查并请求 ERC20 Token 授权给 RedPacket 合约。
+   * 4. 一键发送：调用 Community 合约的 sendRedPacketMessage，内部自动创建红包并发送消息。
    */
   const handleSendGroupRedPacket = useCallback(
     async (config: RedPacketConfig) => {
@@ -194,53 +169,32 @@ export function useRedPacketActions({
           approve
         );
 
-        console.log('2️⃣ 创建群红包合约...');
-        const args = [
-          tokenAddress,
-          amount,
-          totalShares,
-          isRandom,
-          groupAddress,
-          shareAmounts,
-          expiryDuration
-        ];
+        console.log('2️⃣ 调用群合约发送红包...');
 
-        try {
-          await publicClient?.simulateContract({
-            address: RED_PACKET_CONTRACT_ADDRESS,
-            abi: RedPacketAbi,
-            functionName: 'createGroupPacket',
-            args: args,
-            account: currentAddress
-          });
-          console.log('✅ 模拟交易成功');
-        } catch (simError: any) {
-          console.error('❌ 模拟交易失败:', simError);
-          console.error('详细错误:', simError?.cause || simError?.message);
-          console.error('合约参数:', {
+        // 调用群聊合约的 sendRedPacketMessage
+        // 参数: token, totalAmount, totalShares, isRandom, shareAmounts, expiryDuration, msgKind, memo
+        const txHash = await writeContract({
+          address: groupAddress,
+          abi: communityABI.abi as Abi,
+          functionName: 'sendRedPacketMessage',
+          args: [
             tokenAddress,
-            amount: amount.toString(),
-            totalShares: totalShares.toString(),
+            amount,
+            totalShares,
             isRandom,
-            groupAddress,
-            shareAmounts: [],
-            expiryDuration: expiryDuration.toString()
-          });
-          throw simError;
-        }
-
-        const createTxHash = await createGroupPacket({
-          address: RED_PACKET_CONTRACT_ADDRESS,
-          abi: RedPacketAbi,
-          functionName: 'createGroupPacket',
-          args: args
+            shareAmounts,
+            expiryDuration,
+            0, // msgKind: 0 = 明文
+            memo || '恭喜发财，大吉大利'
+          ]
         });
 
-        console.log('⏳ 等待红包创建确认...', createTxHash);
+        console.log('⏳ 等待交易确认...', txHash);
         const receipt = await publicClient?.waitForTransactionReceipt({
-          hash: createTxHash
+          hash: txHash
         });
 
+        // 从日志中解析 PacketId (GroupPacketCreated)
         const packetCreatedEvent = receipt?.logs
           .map((log) => {
             try {
@@ -263,10 +217,8 @@ export function useRedPacketActions({
 
         console.log('✅ 红包创建成功, ID:', packetId.toString());
 
-        console.log('3️⃣ 发送群消息...');
-        const cid = encodeGroupRedPacketCid(packetId);
+        // 构建乐观 UI 消息
         const content = memo || '恭喜发财，大吉大利';
-
         const optimisticMessage: Message = {
           id: `temp-group-${Date.now()}`,
           sender: 'user',
@@ -280,7 +232,7 @@ export function useRedPacketActions({
             count: count
           }),
           timestamp: new Date(),
-          status: 'sending',
+          status: 'sent', // 交易已确认，直接设为 sent
           type: 'red-packet',
           recipient: groupAddress,
           isEncrypted: false,
@@ -289,23 +241,8 @@ export function useRedPacketActions({
         };
 
         setMessages((prev) => [...prev, optimisticMessage]);
-
-        const msgHash = await sendGroupMessage(content, 0, cid);
-
-        if (msgHash) {
-          console.log('⏳ 等待消息上链...', msgHash);
-          await publicClient?.waitForTransactionReceipt({ hash: msgHash });
-          console.log('✅ 消息已上链');
-        }
-
         setIsActionsOpen(false);
         scrollToBottom('smooth');
-
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === optimisticMessage.id ? { ...m, status: 'sent' } : m
-          )
-        );
       } catch (error) {
         console.error('❌ 发送群红包失败:', error);
         alert('发送失败，请查看控制台');
@@ -316,8 +253,7 @@ export function useRedPacketActions({
       currentAddress,
       publicClient,
       approve,
-      createGroupPacket,
-      sendGroupMessage,
+      writeContract,
       setMessages,
       setIsActionsOpen,
       scrollToBottom
@@ -326,10 +262,10 @@ export function useRedPacketActions({
 
   /**
    * 发送私聊红包
-   * 流程：
-   * 1. 余额检查与授权。
-   * 2. 创建红包：调用 createPersonalPacket。
-   * 3. 发送消息：调用 DirectMessage 合约发送 RP 格式的消息。
+   * 新流程（优化为 2 步交易）：
+   * 1. 余额检查：确保用户 Token 余额充足。
+   * 2. 授权 (Approve)：检查并请求 ERC20 Token 授权给 RedPacket 合约。
+   * 3. 一键发送：调用 DirectMessage 合约的 sendRedPacketMessage，内部自动创建红包并发送消息。
    */
   const handleSendPersonalRedPacket = useCallback(
     async (config: RedPacketConfig) => {
@@ -379,19 +315,29 @@ export function useRedPacketActions({
           approve
         );
 
-        console.log('2️⃣ 创建私聊红包合约...');
-        const createTxHash = await createPersonalPacket({
-          address: RED_PACKET_CONTRACT_ADDRESS,
-          abi: RedPacketAbi,
-          functionName: 'createPersonalPacket',
-          args: [tokenAddress, amount, recipientAddress, expiryDuration]
+        console.log('2️⃣ 调用 DirectMessage 发送私聊红包...');
+
+        // 调用 DirectMessage 合约的 sendRedPacketMessage
+        // 参数: token, totalAmount, recipient, expiryDuration, memo
+        const txHash = await writeContract({
+          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+          abi: DirectMessageAbi,
+          functionName: 'sendRedPacketMessage',
+          args: [
+            tokenAddress,
+            amount,
+            recipientAddress,
+            expiryDuration,
+            memo || '恭喜发财，大吉大利'
+          ]
         });
 
-        console.log('⏳ 等待红包创建确认...', createTxHash);
+        console.log('⏳ 等待交易确认...', txHash);
         const receipt = await publicClient?.waitForTransactionReceipt({
-          hash: createTxHash
+          hash: txHash
         });
 
+        // 从日志中解析 PacketId (PersonalPacketCreated)
         const packetCreatedEvent = receipt?.logs
           .map((log) => {
             try {
@@ -412,13 +358,9 @@ export function useRedPacketActions({
           throw new Error('无法获取红包 ID');
         }
 
-        console.log('3️⃣ 发送聊天消息...');
-        const content = encodeDmRedPacketContent(
-          packetId,
-          tokenAddress as Address,
-          memo || '恭喜发财，大吉大利'
-        );
+        console.log('✅ 红包发送成功, ID:', packetId.toString());
 
+        // 构建乐观 UI 消息
         const optimisticMessage: Message = {
           id: `temp-${Date.now()}`,
           sender: 'user',
@@ -428,11 +370,11 @@ export function useRedPacketActions({
             message: memo || '恭喜发财，大吉大利',
             type: 'NORMAL',
             status: 'active',
-            amount: totalAmount, // 直接使用用户输入的金额字符串
+            amount: totalAmount,
             tokenAddress: tokenAddress
           }),
           timestamp: new Date(),
-          status: 'sending',
+          status: 'sent', // 交易已确认
           type: 'red-packet',
           recipient: recipientAddress,
           isEncrypted: false,
@@ -441,28 +383,8 @@ export function useRedPacketActions({
         };
 
         setMessages((prev) => [...prev, optimisticMessage]);
-
-        const sendTxHash = await sendMessage({
-          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
-          abi: DirectMessageAbi,
-          functionName: 'sendMessage',
-          args: [recipientAddress, content]
-        });
-
         setIsActionsOpen(false);
         scrollToBottom('smooth');
-
-        publicClient
-          ?.waitForTransactionReceipt({ hash: sendTxHash })
-          .then(() => {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === optimisticMessage.id
-                  ? { ...msg, status: 'sent' }
-                  : msg
-              )
-            );
-          });
       } catch (error) {
         console.error('❌ 发送私聊红包失败:', error);
         alert('发送失败，请查看控制台');
@@ -473,8 +395,7 @@ export function useRedPacketActions({
       currentAddress,
       publicClient,
       approve,
-      createPersonalPacket,
-      sendMessage,
+      writeContract,
       setMessages,
       setIsActionsOpen,
       scrollToBottom
@@ -734,10 +655,21 @@ export function useRedPacketActions({
         } else {
           setSelectedRedPacket(message);
         }
-      } catch (e) {
-        console.error('查询红包状态失败', e);
-        // 查询失败，兜底打开"开红包"弹窗
-        setSelectedRedPacket(message);
+      } catch (e: any) {
+        const errorMessage = e?.message || String(e);
+
+        if (errorMessage.includes('Packet not found')) {
+          console.warn(
+            '⚠️ 红包不存在，可能是历史测试数据，packetId:',
+            packetId
+          );
+          // 红包不存在，可能是旧数据，仍然尝试打开详情页（会显示"红包不存在"）
+          setDetailsRedPacket(message);
+        } else {
+          console.error('❌ 查询红包状态失败:', errorMessage);
+          // 其他错误，兜底打开"开红包"弹窗
+          setSelectedRedPacket(message);
+        }
       }
     },
     [publicClient, currentAddress, setSelectedRedPacket, setDetailsRedPacket]

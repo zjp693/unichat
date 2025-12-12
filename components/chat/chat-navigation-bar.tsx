@@ -271,7 +271,7 @@ const BottomSection: React.FC<BottomSectionProps> = ({
                 </span>
                 {mode === 'group' && chatInfo.level && (
                   <div className="flex text-sm px-2 py-0.5">
-                    LV{chatInfo.level}(11)
+                    LV{chatInfo.level}({chatInfo.memberCount || 0})
                     <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] ml-1 px-1">
                       认证
                     </div>

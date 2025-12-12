@@ -5,7 +5,11 @@
 import { useMemo } from 'react';
 import { useReadContract, useReadContracts, useAccount } from 'wagmi';
 import { erc20Abi, isAddress, formatUnits } from 'viem';
-import { useGetAllRecommendedTokenInfos } from '@/lib/RedPacketAbi';
+import {
+  useGetRecommendedTokensPaged,
+  RED_PACKET_CONTRACT_ADDRESS,
+  RedPacketAbi
+} from '@/lib/RedPacketAbi';
 import { buildIPFSUrl } from '@/lib/ipfs-gateways';
 import type { Token, TokenInfo } from '../types';
 
@@ -47,41 +51,79 @@ function getValidIconUrl(iconCid: string): string | null {
  */
 export function useRecommendedTokens(customAddresses: string[] = []) {
   const { address: userAddress } = useAccount();
-  const { data: recommendedTokensData, isLoading: isLoadingRecommended } =
-    useGetAllRecommendedTokenInfos();
 
-  // 解析推荐代币的地址和 iconCid
-  const tokenAddresses = useMemo(() => {
-    const recommended: {
-      address: string;
-      iconCid: string;
-      isRecommended: boolean;
-    }[] = [];
+  // 使用新的分页 API 获取推荐代币地址列表
+  const { data: recommendedAddresses, isLoading: isLoadingAddresses } =
+    useGetRecommendedTokensPaged(BigInt(0), BigInt(100));
 
-    if (recommendedTokensData) {
-      const [addresses, infos] = recommendedTokensData as [string[], any[]];
-      addresses.forEach((addr, index) => {
-        if (infos[index]?.isRecommended) {
-          recommended.push({
-            address: addr.toLowerCase(),
-            iconCid: infos[index]?.iconCid || '',
-            isRecommended: true
-          });
+  // 合并推荐代币和自定义代币地址
+  const allTokenAddresses = useMemo(() => {
+    const addresses: string[] = [];
+
+    // 添加推荐代币地址
+    if (recommendedAddresses && Array.isArray(recommendedAddresses)) {
+      recommendedAddresses.forEach((addr: string) => {
+        if (addr && addr !== '0x0000000000000000000000000000000000000000') {
+          addresses.push(addr.toLowerCase());
         }
       });
     }
 
     // 合并自定义代币（去重）
-    const custom = customAddresses
-      .map((addr) => ({
-        address: addr.toLowerCase(),
-        iconCid: '', // 自定义代币暂时没有图标
-        isRecommended: false
-      }))
-      .filter((c) => !recommended.some((r) => r.address === c.address)); // 避免重复
+    customAddresses.forEach((addr) => {
+      const lowerAddr = addr.toLowerCase();
+      if (!addresses.includes(lowerAddr)) {
+        addresses.push(lowerAddr);
+      }
+    });
 
-    return [...custom, ...recommended];
-  }, [recommendedTokensData, customAddresses]);
+    return addresses;
+  }, [recommendedAddresses, customAddresses]);
+
+  // 批量查询每个代币的 recommendedTokens 信息以获取 iconCid
+  const tokenInfoContracts = useMemo(() => {
+    return allTokenAddresses.map((addr) => ({
+      address: RED_PACKET_CONTRACT_ADDRESS,
+      abi: RedPacketAbi,
+      functionName: 'recommendedTokens',
+      args: [addr as `0x${string}`]
+    }));
+  }, [allTokenAddresses]);
+
+  const { data: tokenInfosData, isLoading: isLoadingTokenInfos } =
+    useReadContracts({
+      contracts: tokenInfoContracts as any,
+      query: {
+        enabled: tokenInfoContracts.length > 0
+      }
+    });
+
+  // 解析代币信息并构建 tokenAddresses 数组（包含 iconCid）
+  const tokenAddresses = useMemo(() => {
+    return allTokenAddresses.map((addr, index) => {
+      let iconCid = '';
+
+      if (tokenInfosData && tokenInfosData[index]) {
+        const info = tokenInfosData[index];
+        if (info.status === 'success' && info.result) {
+          // recommendedTokens 返回 (bool isRecommended, string iconCid, address submitter, uint256 stakedUnichat, bool isCore)
+          const result = info.result as any;
+          if (result && result.length > 1) {
+            iconCid = result[1] || ''; // iconCid is the second element
+          }
+        }
+      }
+
+      return {
+        address: addr,
+        iconCid,
+        isRecommended:
+          (Array.isArray(recommendedAddresses) &&
+            recommendedAddresses.includes(addr as `0x${string}`)) ||
+          false
+      };
+    });
+  }, [allTokenAddresses, tokenInfosData, recommendedAddresses]);
 
   // 批量查询 symbol, name, decimals 和 balance
   const contracts = useMemo(
@@ -164,21 +206,10 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
         symbol: (symbolData?.result as string) || 'UNKNOWN',
         name: (nameData?.result as string) || 'Unknown Token',
         iconCid: tokenAddr.iconCid,
-        iconUrl: getValidIconUrl(tokenAddr.iconCid), // 新增：智能处理图标URL
+        iconUrl: getValidIconUrl(tokenAddr.iconCid),
         decimals: decimals,
         balance: balance
       } as Token;
-
-      // // 🔍 打印代币数据调试信息 - 重点查看图标信息
-      // console.log(`🪙 Token [${token.symbol}]:`, {
-      //   name: token.name,
-      //   address: token.address,
-      //   balance: token.balance,
-      //   decimals: token.decimals,
-      //   iconCid: token.iconCid,
-      //   iconUrl: token.iconUrl,
-      //   hasIcon: !!token.iconUrl
-      // });
 
       return token;
     });
@@ -186,7 +217,7 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
 
   return {
     tokens,
-    isLoading: isLoadingRecommended || isLoadingContracts,
+    isLoading: isLoadingAddresses || isLoadingTokenInfos || isLoadingContracts,
     error: null
   };
 }

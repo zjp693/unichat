@@ -23,12 +23,14 @@ interface SendRedPacketModalProps {
   trigger?: React.ReactNode;
   onSend?: (config: RedPacketConfig) => Promise<void>;
   chatType: 'private' | 'group';
+  memberCount?: number;
 }
 
 export function SendRedPacketModal({
   trigger,
   onSend,
-  chatType
+  chatType,
+  memberCount
 }: SendRedPacketModalProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isTypeSwitcherOpen, setIsTypeSwitcherOpen] = React.useState(false);
@@ -183,7 +185,9 @@ export function SendRedPacketModal({
                     <span className="text-[16px] text-[#1a1a1a]">个</span>
                   </div>
                 </div>
-                <div className="text-xs text-gray-400 pl-4">本群共 {5} 人</div>
+                <div className="text-xs text-gray-400 pl-4">
+                  本群共 {memberCount || 0} 人
+                </div>
               </>
             )}
 
