@@ -1,15 +1,52 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { useCommunityMembers } from '@/hooks/useCommunityMembers';
+import { usePeerAvatar } from '@/hooks/usePeerProfile';
+import { IPFSImg } from '@/components/ui/ipfs-img';
+import type { Address } from 'viem';
 
 // 定义布局常量，可以从公共文件导入或在此定义
 const TOP_BAR_HEIGHT = 56;
 const NAV_BAR_HEIGHT = 56;
 const TOTAL_HEADER_HEIGHT = TOP_BAR_HEIGHT + NAV_BAR_HEIGHT;
+
+// 单个成员项组件 - 显示头像和昵称
+function MemberItem({ address }: { address: Address }) {
+  const { avatarCid, name, isLoading } = usePeerAvatar(address);
+
+  // 显示名称：优先使用昵称，否则显示地址缩写
+  const displayName = name || `${address.slice(0, 4)}...${address.slice(-3)}`;
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="w-12 h-12 rounded-md overflow-hidden bg-gray-200">
+        {isLoading ? (
+          <div className="w-full h-full animate-pulse bg-gray-300" />
+        ) : avatarCid ? (
+          <IPFSImg
+            src={avatarCid}
+            alt={displayName}
+            fallbackSrc="/me/me2.png"
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-400 to-purple-500 text-white text-sm font-medium">
+            {displayName[0]?.toUpperCase()}
+          </div>
+        )}
+      </div>
+      <span className="text-xs mt-1 truncate w-12 text-center text-gray-700">
+        {displayName}
+      </span>
+    </div>
+  );
+}
 
 interface GroupChatInfoPanelProps {
   conversationId: string;
@@ -24,16 +61,25 @@ export default function GroupChatInfoPanel({
   memberCount,
   onClose
 }: GroupChatInfoPanelProps) {
-  // 模拟数据
+  // 获取群成员地址列表（最多获取100个）
+  const { members: memberAddresses, isLoading: isMembersLoading } =
+    useCommunityMembers(conversationId, 0, 100);
+
+  // 控制成员列表展开/收起状态
+  const [showAllMembers, setShowAllMembers] = useState(false);
+
+  // 置顶公告聊天开关状态
+  const [isPinAnnouncementEnabled, setIsPinAnnouncementEnabled] =
+    useState(false);
+
+  // 默认显示14个成员（加邀请按钮共15格，即5列x3行），展开后显示全部
+  const displayedMembers = showAllMembers
+    ? memberAddresses
+    : memberAddresses.slice(0, 14);
+
+  // 群名称（可以后续从合约获取）
   const groupName =
     conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊';
-  const members = [
-    { id: 'u1', name: 'keyle', avatar: '/placeholder-user.jpg' },
-    { id: 'u2', name: 'ktrt', avatar: '/placeholder-user.jpg' },
-    { id: 'u3', name: 'kelno', avatar: '/placeholder-user.jpg' },
-    { id: 'u4', name: 'ktty', avatar: '/placeholder-user.jpg' },
-    { id: 'u5', name: '你', avatar: '/placeholder-user.jpg' }
-  ];
 
   // 新增：模拟 "我的群聊" 数据
   const myGroupsData = [
@@ -70,7 +116,7 @@ export default function GroupChatInfoPanel({
     }
   ];
 
-  const [showAllMyGroups, setShowAllMyGroups] = React.useState(false); // 控制 "我的群聊" 列表展开/收起状态
+  const [showAllMyGroups, setShowAllMyGroups] = useState(false); // 控制 "我的群聊" 列表展开/收起状态
   const displayedMyGroups = showAllMyGroups ? myGroupsData : []; // 修正：收起时一个也不展示
 
   return (
@@ -138,41 +184,58 @@ export default function GroupChatInfoPanel({
           {/* 群成员 */}
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <h2 className="text-lg font-semibold mb-3">
-              群成员 ({memberCount})
+              群成员 ({memberAddresses.length || memberCount})
             </h2>
-            <div className="grid grid-cols-5 gap-y-4 text-center">
-              {members.slice(0, 9).map((member) => (
-                <div key={member.id} className="flex flex-col items-center">
-                  <Image
-                    src={member.avatar}
-                    alt={member.name}
-                    width={40}
-                    height={40}
-                    className="rounded-md"
-                  />
-                  <span className="text-xs mt-1 truncate w-10">
-                    {member.name}
-                  </span>
-                </div>
-              ))}
-              {memberCount > 9 && (
-                <div className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-md bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
-                    +{memberCount - 9}
+
+            {isMembersLoading ? (
+              // 加载中的骨架屏
+              <div className="grid grid-cols-5 gap-4 text-center">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-md bg-gray-200 animate-pulse" />
+                    <div className="w-10 h-3 mt-1 bg-gray-200 animate-pulse rounded" />
                   </div>
-                  <span className="text-xs mt-1">更多</span>
-                </div>
-              )}
-              <div className="flex flex-col items-center">
-                <div className="w-10 h-10 rounded-md bg-gray-200 flex items-center justify-center text-gray-500">
-                  +
-                </div>
-                <span className="text-xs mt-1">邀请</span>
+                ))}
               </div>
-            </div>
-            <div className="flex justify-center mt-4">
-              <button className="text-blue-500 text-sm">查看所有群成员</button>
-            </div>
+            ) : memberAddresses.length === 0 ? (
+              // 没有成员
+              <div className="text-center text-gray-400 py-4">暂无成员</div>
+            ) : (
+              // 成员列表
+              <div className="grid grid-cols-5 gap-4 text-center">
+                {displayedMembers.map((address) => (
+                  <MemberItem key={address} address={address as Address} />
+                ))}
+
+                {/* 邀请按钮 */}
+                <div className="flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300">
+                    <span className="text-xl">+</span>
+                  </div>
+                  <span className="text-xs mt-1 text-gray-500">邀请</span>
+                </div>
+              </div>
+            )}
+
+            {/* 更多群成员按钮 */}
+            {memberAddresses.length > 14 && (
+              <div className="flex justify-center mt-4">
+                <button
+                  className="text-blue-500 text-sm flex items-center gap-1"
+                  onClick={() => setShowAllMembers(!showAllMembers)}
+                >
+                  {showAllMembers ? (
+                    <>
+                      收起 <span className="text-xs">▲</span>
+                    </>
+                  ) : (
+                    <>
+                      更多群成员 <span className="text-xs">▼</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 群信息 */}
@@ -183,9 +246,15 @@ export default function GroupChatInfoPanel({
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
               <span className="text-gray-700">群二维码</span>
-              <Image src="/qrcode.png" alt="QR Code" width={24} height={24} />
+              <Image
+                src="/chats/qrcode.png"
+                alt="QR Code"
+                width={24}
+                height={24}
+              />
             </div>
-            <div className="py-2">
+            {/* 我的群聊 */}
+            {/* <div className="py-2">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-gray-700">
                   我的群聊 ({myGroupsData.length})
@@ -216,17 +285,19 @@ export default function GroupChatInfoPanel({
                   </div>
                 ))}
               </div>
-            </div>
+            </div> */}
           </div>
 
           {/* 置顶公告聊天 */}
           <div className="bg-white rounded-lg p-4 shadow-sm">
             <div className="flex justify-between items-center py-2">
               <span className="text-gray-700">置顶公告聊天</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" value="" className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-              </label>
+              <Switch
+                checked={isPinAnnouncementEnabled}
+                onCheckedChange={setIsPinAnnouncementEnabled}
+                uncheckedColorClass="bg-gray-200"
+                checkedColorClass="bg-blue-500"
+              />
             </div>
           </div>
 
