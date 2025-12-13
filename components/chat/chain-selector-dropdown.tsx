@@ -32,17 +32,15 @@ export function ChainSelectorDropdown() {
     <div className="relative">
       {/* Trigger Button - 只显示图标+箭头 */}
       <button
-        className="flex items-center gap-1.5 px-2 py-1.5 bg-white hover:bg-gray-50 rounded-lg border border-gray-200 transition-colors"
+        className="relative z-20 flex items-center gap-1.5 px-2 py-1.5 bg-white hover:bg-gray-50 rounded-lg border border-gray-200 transition-colors cursor-pointer"
         onClick={() => setIsOpen(!isOpen)}
+        type="button"
       >
-        <div className="w-5 h-5 rounded-full overflow-hidden relative flex-shrink-0">
-          <Image
-            src={selectedChain.icon}
-            alt={selectedChain.name}
-            fill
-            className="object-cover"
-          />
-        </div>
+        <img
+          src={selectedChain.icon}
+          alt={selectedChain.name}
+          className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+        />
         <ChevronDown
           size={14}
           className={`text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}

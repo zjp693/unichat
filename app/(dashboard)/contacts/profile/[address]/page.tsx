@@ -1,38 +1,49 @@
 'use client';
 
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { TopNavbar } from '@/components/ui/top-navbar';
+import { useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import Image from 'next/image';
-import {
-  ArrowLeft,
-  MoreHorizontal,
-  MessageCircle,
-  Phone,
-  UserPlus
-} from 'lucide-react';
+import { Address } from 'viem';
+import { useAccount } from 'wagmi';
+import { PageHeader } from '@/components/ui/page-header';
+import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
+import { usePeerProfile } from '@/hooks/usePeerProfile';
+import { IPFSImg } from '@/components/ui/ipfs-img';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default function ProfilePage() {
+export default function ContactProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const address = params.address as string;
-  const isFriend = searchParams.get('type') === 'friend';
+  const { isConnected } = useAccount();
 
-  // Mock 数据
-  const userData = {
-    name: 'James',
-    avatar: '/me/me2.png',
-    walletAddress: address || '0x052cc4e91eaDC9a40BF66F4b6f62BE4F9c0559ab',
-    friendNote: '工作伙伴',
-    friendMemo: '重要联系人'
-  };
+  // 获取链上 Profile（带缓存）
+  const { profile, isLoading, hasProfile } = usePeerProfile(address as Address);
 
+  // 提取显示数据
+  const displayName = useMemo(() => {
+    if (hasProfile && (profile as any)?.name) {
+      return (profile as any).name;
+    }
+    // 无 Profile，显示地址缩写
+    return address
+      ? `${address.slice(0, 6)}...${address.slice(-4)}`
+      : '未知用户';
+  }, [hasProfile, profile, address]);
+
+  const avatarCid = useMemo(() => {
+    if (hasProfile && (profile as any)?.avatarCid) {
+      return (profile as any).avatarCid;
+    }
+    return ''; // 空字符串，IPFSImg 会使用 fallbackSrc
+  }, [hasProfile, profile]);
+
+  // 复制地址
   const copyAddress = async () => {
     try {
-      await navigator.clipboard.writeText(userData.walletAddress);
+      await navigator.clipboard.writeText(address);
       toast({
         title: '复制成功',
         description: '钱包地址已复制到剪贴板',
@@ -47,115 +58,102 @@ export default function ProfilePage() {
     }
   };
 
-  const handleBack = () => {
-    router.back();
+  // 发消息
+  const handleSendMessage = () => {
+    router.push(`/chat/${address}?type=private`);
+  };
+
+  // 添加好友
+  const handleAddFriend = () => {
+    toast({
+      title: '功能开发中',
+      description: '添加好友功能即将上线'
+    });
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* TopNavbar 组件 */}
-      <TopNavbar />
-
+    <div className="flex flex-col min-h-screen bg-[#f5f5f5]">
       {/* 顶部导航栏 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-        <button onClick={handleBack} className="p-1">
-          <ArrowLeft className="h-6 w-6 text-gray-900" />
-        </button>
-        <h1 className="text-base font-medium text-center flex-1">
-          点击头像 ({isFriend ? '好友' : '非好友'})
-        </h1>
-        <button className="p-1">
-          <MoreHorizontal className="h-6 w-6 text-gray-900" />
-        </button>
+      <div className="flex items-center px-4 py-3 bg-white">
+        {isConnected ? <ChainSelectorDropdown /> : <appkit-button />}
       </div>
 
-      {/* 用户信息区域 */}
-      <div className="bg-white px-4 py-6">
-        <div className="flex flex-col items-center">
+      {/* 二级导航 - 返回 */}
+      <PageHeader />
+
+      {/* 用户信息卡片 */}
+      <div className="bg-white px-4 py-5">
+        <div className="flex items-start gap-3">
           {/* 头像 */}
-          <div className="w-20 h-20 rounded-full overflow-hidden mb-4">
-            <Image
-              src={userData.avatar}
-              alt={userData.name}
-              width={80}
-              height={80}
-              className="w-full h-full object-cover"
-            />
+          <div className="w-14 h-14 rounded-sm overflow-hidden flex-shrink-0">
+            {isLoading ? (
+              <Skeleton className="w-full h-full" />
+            ) : (
+              <IPFSImg
+                src={avatarCid}
+                fallbackSrc="/me/me2.png"
+                alt={displayName}
+                width={56}
+                height={56}
+                className="w-full h-full object-cover"
+              />
+            )}
           </div>
 
-          {/* 名字 */}
-          <h2 className="text-lg font-medium text-gray-900 mb-2">
-            {userData.name}
-          </h2>
-
-          {/* 钱包地址 */}
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-500 break-all font-mono">
-              {userData.walletAddress}
-            </span>
-            <button
-              onClick={copyAddress}
-              className="flex-shrink-0 p-1 hover:bg-gray-100 rounded"
-            >
-              <img
-                src="/contacts/copy.svg"
-                alt="复制"
-                className="w-3.5 h-3.5 object-cover"
-              />
-            </button>
+          {/* 名字和地址 */}
+          <div className="flex-1 min-w-0 pt-0.5">
+            {isLoading ? (
+              <Skeleton className="h-5 w-24 mb-2" />
+            ) : (
+              <h2 className="text-base font-medium text-gray-900 mb-1">
+                {displayName}
+              </h2>
+            )}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-[#909399] break-all font-mono leading-relaxed">
+                {address}
+              </span>
+              <button onClick={copyAddress} className="flex-shrink-0 p-0.5">
+                <img
+                  src="/contacts/copy.svg"
+                  alt="复制"
+                  className="w-3.5 h-3.5 object-cover opacity-60"
+                />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 朋友资料卡片（仅好友显示） */}
-      {isFriend && (
-        <div className="mx-4 mt-4 bg-[#f5f5f5] rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <h3 className="text-sm font-medium text-gray-900 mb-1">
-                朋友资料
-              </h3>
-              <p className="text-xs text-gray-500">添加朋友的备注名、备忘等</p>
-            </div>
-            <svg
-              className="w-4 h-4 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </div>
-        </div>
-      )}
+      {/* 发消息按钮 */}
+      <button
+        onClick={handleSendMessage}
+        className="w-full flex items-center justify-center gap-2 py-4 mt-3 bg-white text-[#8B5CF6] font-medium border-b border-gray-100"
+      >
+        <img
+          src="/profile/message.png"
+          alt="发消息"
+          className="w-5 h-5 object-contain"
+        />
+        <span>发消息</span>
+      </button>
 
-      {/* 操作按钮区域 */}
-      <div className="flex-1 px-4 pt-6 pb-4">
-        <div className="space-y-3">
-          {/* 发消息按钮 */}
-          <button className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-gray-200 rounded-lg text-[#8B5CF6] font-medium">
-            <MessageCircle className="w-5 h-5" />
-            <span>发消息</span>
-          </button>
+      {/* 添加好友按钮 */}
+      <button
+        onClick={handleAddFriend}
+        className="w-full flex items-center justify-center gap-2 py-4 bg-white text-[#8B5CF6] font-medium"
+      >
+        <img
+          src="/profile/friend.png"
+          alt="添加好友"
+          className="w-5 h-5 object-contain"
+        />
+        <span>添加好友</span>
+      </button>
 
-          {/* 第二个按钮 - 根据是否好友显示不同 */}
-          {isFriend ? (
-            <button className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-gray-200 rounded-lg text-[#8B5CF6] font-medium">
-              <Phone className="w-5 h-5" />
-              <span>语音聊天</span>
-            </button>
-          ) : (
-            <button className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white border border-gray-200 rounded-lg text-[#8B5CF6] font-medium">
-              <UserPlus className="w-5 h-5" />
-              <span>添加好友</span>
-            </button>
-          )}
-        </div>
+      {/* 底部指示条 */}
+      <div className="mt-auto pb-2 flex justify-center">
+        <div className="w-32 h-1 bg-gray-800 rounded-full" />
       </div>
     </div>
   );

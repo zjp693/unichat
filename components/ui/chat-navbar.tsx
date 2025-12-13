@@ -7,10 +7,12 @@ import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
 import { CountrySelectionSheet } from '@/components/chat/country-selection-sheet';
 import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
+import { WalletQRCodeSheet } from '@/components/chat/WalletQRCodeSheet';
 
 export function ChatNavbar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCountryModalOpen, setIsCountryModalOpen] = useState(false);
+  const [isQRCodeOpen, setIsQRCodeOpen] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState('Viet Nam');
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -47,6 +49,11 @@ export function ChatNavbar() {
     setIsDropdownOpen(false);
   };
 
+  const handleScanClick = () => {
+    setIsDropdownOpen(false);
+    router.push('/scan');
+  };
+
   const openCountryModal = () => {
     setIsDropdownOpen(false);
     setIsCountryModalOpen(true);
@@ -63,7 +70,10 @@ export function ChatNavbar() {
         {/* Right: Icons Group */}
         <div className="flex items-center gap-4 text-gray-700">
           {/* Scan Icon */}
-          <button className="p-1 rounded-full">
+          <button
+            className="p-1 rounded-full"
+            onClick={() => setIsQRCodeOpen(true)}
+          >
             <Image src="/chats/QRcode.png" alt="Scan" width={22} height={22} />
           </button>
 
@@ -101,7 +111,7 @@ export function ChatNavbar() {
                   <MenuItem
                     icon="/chats/Scan.png"
                     label="Scan"
-                    onClick={handleItemClick}
+                    onClick={handleScanClick}
                   />
                   <MenuItem
                     icon="/chats/payment.png"
@@ -143,6 +153,12 @@ export function ChatNavbar() {
         onClose={() => setIsCountryModalOpen(false)}
         defaultCountry={selectedCountry}
         onSelect={(country) => setSelectedCountry(country)}
+      />
+
+      {/* Wallet QR Code Sheet */}
+      <WalletQRCodeSheet
+        isOpen={isQRCodeOpen}
+        onClose={() => setIsQRCodeOpen(false)}
       />
     </>
   );
