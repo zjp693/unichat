@@ -1,6 +1,32 @@
 import { Address } from '@/lib/utils';
 import type { Message } from './types';
+import type { ChatItem } from '@/lib/types/chat';
+import type { CommunityWithStatus } from '@/lib/types/community';
 import dayjs from 'dayjs';
+
+/**
+ * 将链上群聊数据转换为 ChatItem 格式
+ */
+export function convertCommunityToChat(
+  community: CommunityWithStatus
+): ChatItem {
+  return {
+    id: community.communityAddress,
+    name: community.name,
+    avatar: community.avatarCid || '/me/me1.png',
+    lastMessage: community.communityAddress, // 显示群聊地址而不是代币地址
+    time: '-',
+    isGroup: true,
+    level: community.maxTier as 1 | 2 | 3 | 4 | 5 | 6,
+    memberCount: 0, // 可以后续从合约获取
+    groupCondition: `档位 ${community.maxTier}`,
+    address: community.communityAddress,
+    // 添加状态标识
+    canJoin: community.canJoin,
+    isJoined: community.isJoined,
+    proofData: community.proofData
+  };
+}
 
 /**
  * 生成红包分配方案
