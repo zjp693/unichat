@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { X } from 'lucide-react';
-import { KeyPair, chatEncryption } from '@/lib/encryption';
-import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
+import { type KeyPair, chatEncryption } from '@/lib/keyManagement';
+import { useKeyManagement } from '@/hooks/useKeyManagement';
 import { useRegisterPublicKey } from '@/lib/DirectMessageAbi';
 import { useAccount } from 'wagmi';
 
@@ -25,7 +25,7 @@ export const KeyGenerationModal = ({
   const [privateKeyInput, setPrivateKeyInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
-  const { saveKeyToStorage, generateNewKeyPair } = useKeyManagementRedux();
+  const { saveKeyToStorage, generateNewKeyPair } = useKeyManagement();
   const { address } = useAccount();
   const { writeContractAsync } = useRegisterPublicKey();
 

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Message } from '@/lib/chat/types';
-import type { KeyPair } from '@/lib/encryption';
+import type { KeyPair } from '@/lib/keyManagement';
+import { chatEncryption } from '@/lib/keyManagement';
 import type { Address } from 'viem';
 import {
   DirectMessageAbi,
@@ -22,7 +23,6 @@ interface UseMessageActionsProps {
     kind?: 0 | 1,
     cid?: string
   ) => Promise<`0x${string}`>;
-  encryptMessage: (content: string, publicKey: string) => string;
   setPendingGroupMessage?: (msg: string) => void;
   setShowSendModeModal?: (show: boolean) => void;
   setShowKeyModal?: (show: boolean) => void;
@@ -43,7 +43,6 @@ export function useMessageActions({
   publicClient,
   writeContract,
   sendGroupMessage,
-  encryptMessage,
   setPendingGroupMessage,
   setShowSendModeModal,
   setShowKeyModal
@@ -176,7 +175,7 @@ export function useMessageActions({
       let encryptedContent: string;
       try {
         console.log('🔐 开始单公钥加密（只用接收者公钥）...');
-        encryptedContent = encryptMessage(
+        encryptedContent = chatEncryption.encryptMessage(
           originalMessageText,
           recipientPublicKey
         );
@@ -355,11 +354,11 @@ export function useMessageActions({
       sendGroupMessage,
       recipientAddress,
       publicClient,
-      encryptMessage,
       writeContract,
       setPendingGroupMessage,
       setShowSendModeModal,
-      setShowKeyModal
+      setShowKeyModal,
+      keys
     ]
   );
 
@@ -407,7 +406,7 @@ export function useMessageActions({
           recipientPublicKey = result as string;
 
           // 加密消息（使用原始内容）
-          const encryptedContent = encryptMessage(
+          const encryptedContent = chatEncryption.encryptMessage(
             failedMessage.originalContent || failedMessage.content,
             recipientPublicKey
           );
@@ -461,9 +460,9 @@ export function useMessageActions({
       currentAddress,
       recipientAddress,
       publicClient,
-      encryptMessage,
       writeContract,
-      sendGroupMessage
+      sendGroupMessage,
+      keys
     ]
   );
 

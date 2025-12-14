@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Message } from '@/lib/chat/types';
-import type { KeyPair } from '@/lib/encryption';
+import type { KeyPair } from '@/lib/keyManagement';
+import { chatEncryption } from '@/lib/keyManagement';
 import type { Address, Abi } from 'viem';
 import type { ChatInputAreaRef } from '@/components/chat/ChatInputArea';
 import communityABI from '@/contract/abi/community.json';
@@ -25,11 +26,6 @@ interface UseEncryptionActionsProps {
   publicClient: any;
 
   // Functions
-  decryptMessages: (
-    contents: string[],
-    privateKey: string
-  ) => { success: boolean; decrypted?: string }[];
-  encryptMessage: (content: string, publicKey: string) => string;
   sendGroupMessage: (
     content: string,
     kind?: 0 | 1,
@@ -57,8 +53,6 @@ export function useEncryptionActions({
   pendingGroupMessage,
   currentAddress,
   groupAddress,
-  decryptMessages,
-  encryptMessage,
   sendGroupMessage,
   scrollToBottom,
   inputRef,
@@ -109,7 +103,10 @@ export function useEncryptionActions({
       }
 
       try {
-        const results = decryptMessages(encryptedContents, key.privateKey);
+        const results = chatEncryption.decryptMessages(
+          encryptedContents,
+          key.privateKey
+        );
 
         // 创建 ID 到解密结果的映射（使用消息 ID 而不是 content 来匹配）
         const decryptedMap = new Map<string, string>();
@@ -151,7 +148,6 @@ export function useEncryptionActions({
     [
       selectedMessageId,
       messages,
-      decryptMessages,
       setMessages,
       setShowDecryptModal,
       setSelectedMessageId
@@ -202,7 +198,10 @@ export function useEncryptionActions({
         try {
           // 使用用户的公钥加密（群聊中每个人用自己的私钥解密）
           const userPublicKey = keys[0].publicKey;
-          contentToSend = encryptMessage(messageContent, userPublicKey);
+          contentToSend = chatEncryption.encryptMessage(
+            messageContent,
+            userPublicKey
+          );
           console.log('✅ 群聊消息加密成功');
         } catch (error) {
           console.error('❌ 群聊消息加密失败:', error);
@@ -325,13 +324,13 @@ export function useEncryptionActions({
       keys,
       setShowGenerationModal,
       setPendingGroupMessage,
-      encryptMessage,
       groupAddress,
       currentAddress,
       setMessages,
       scrollToBottom,
       sendGroupMessage,
-      publicClient
+      publicClient,
+      inputRef
     ]
   );
 

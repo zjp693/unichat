@@ -1,5 +1,11 @@
+/**
+ * 密钥加密工具
+ * 提供 RSA + AES 混合加密能力
+ */
+
 import JSEncrypt from 'jsencrypt';
 import CryptoJS from 'crypto-js';
+import type { DecryptResult } from './types';
 
 // 从环境变量读取默认私钥（用于解密使用默认公钥加密的消息）
 const DEFAULT_PRIVATE_KEY_FROM_ENV =
@@ -14,15 +20,9 @@ if (!DEFAULT_PRIVATE_KEY_FROM_ENV) {
 
 export const DEFAULT_PRIVATE_KEY = DEFAULT_PRIVATE_KEY_FROM_ENV || '';
 
-export interface KeyPair {
-  id: string;
-  name: string;
-  publicKey: string;
-  privateKey: string;
-  createdAt: string;
-  password?: string; // 可选的密码字段
-}
-
+/**
+ * 聊天加密工具类
+ */
 export class ChatEncryption {
   private jsEncrypt: JSEncrypt;
 
@@ -46,13 +46,15 @@ export class ChatEncryption {
     return bytes.toString(CryptoJS.enc.Utf8);
   }
 
-  // 修改默认密钥位数为1024位
+  /**
+   * 生成 RSA 密钥对
+   * @param keySize 密钥位数，默认 1024
+   */
   generateKeyPair(keySize: number = 1024): {
     publicKey: string;
     privateKey: string;
   } {
     try {
-      // 直接使用JSEncrypt生成密钥对，确保兼容性
       const jsEncrypt = new JSEncrypt({ default_key_size: keySize.toString() });
       jsEncrypt.getKey();
 
@@ -70,10 +72,14 @@ export class ChatEncryption {
     }
   }
 
-  // 单公钥加密
+  /**
+   * 单公钥加密
+   * @param message 明文消息
+   * @param publicKey 接收者公钥
+   * @returns 加密后的消息
+   */
   encryptMessage(message: string, publicKey: string): string {
     try {
-      // 验证输入参数
       if (!message || typeof message !== 'string') {
         throw new Error('消息内容无效');
       }
@@ -81,7 +87,7 @@ export class ChatEncryption {
         throw new Error('公钥无效');
       }
 
-      const MAX_MESSAGE_LENGTH = 10000; // 限制为1万字
+      const MAX_MESSAGE_LENGTH = 10000;
       let processedMessage = message;
 
       if (message.length > MAX_MESSAGE_LENGTH) {
@@ -89,7 +95,6 @@ export class ChatEncryption {
         processedMessage = message.substring(0, MAX_MESSAGE_LENGTH);
       }
 
-      // 验证公钥格式
       if (!this.validatePublicKey(publicKey)) {
         throw new Error('公钥格式无效，无法加密');
       }
@@ -97,26 +102,21 @@ export class ChatEncryption {
       const jsEncrypt = new JSEncrypt();
       jsEncrypt.setPublicKey(publicKey);
 
-      // 生成 AES 密钥并加密消息
       const aesKey = this._generateAesKey();
       const aesEncryptedMessage = this._encryptWithAes(
         processedMessage,
         aesKey
       );
 
-      // 使用 RSA 公钥加密 AES 密钥
       const rsaEncryptedAesKey = jsEncrypt.encrypt(aesKey);
 
       if (!rsaEncryptedAesKey) {
         throw new Error('RSA 密钥加密失败');
       }
 
-      // 组合加密后的 AES 密钥和加密后的消息内容
       return `${rsaEncryptedAesKey}:${aesEncryptedMessage}`;
     } catch (error) {
       console.error('加密错误详情:', error);
-      console.error('消息长度:', message?.length);
-      console.error('公钥长度:', publicKey?.length);
       throw new Error(
         `消息加密失败: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -136,7 +136,6 @@ export class ChatEncryption {
     recipientPublicKey: string
   ): string {
     try {
-      // 验证输入参数
       if (!message || typeof message !== 'string') {
         throw new Error('消息内容无效');
       }
@@ -147,7 +146,7 @@ export class ChatEncryption {
         throw new Error('接收者公钥无效');
       }
 
-      const MAX_MESSAGE_LENGTH = 10000; // 限制为1万字
+      const MAX_MESSAGE_LENGTH = 10000;
       let processedMessage = message;
 
       if (message.length > MAX_MESSAGE_LENGTH) {
@@ -198,7 +197,7 @@ export class ChatEncryption {
       }
       console.log('✅ AES 密钥已用接收者公钥加密');
 
-      // 5. 组合三段：[给发送者的key]:[给接收者的key]:[加密消息]
+      // 5. 组合三段
       const result = `${senderEncryptedAesKey}:${recipientEncryptedAesKey}:${aesEncryptedMessage}`;
 
       console.log('✅ 双公钥加密完成:', {
@@ -232,7 +231,6 @@ export class ChatEncryption {
 
       const parts = encryptedMessage.split(':');
 
-      // 只支持单公钥格式（2段）
       if (parts.length !== 2) {
         throw new Error(
           `消息格式不正确，应为2段（单公钥格式），当前为${parts.length}段`
@@ -264,21 +262,18 @@ export class ChatEncryption {
    * 批量解密消息
    * @param encryptedMessages 加密消息数组
    * @param privateKey 用户私钥
-   * @returns 解密结果数组，包含成功解密的消息和解密失败的错误信息
+   * @returns 解密结果数组
    */
   decryptMessages(
     encryptedMessages: string[],
     privateKey: string
-  ): Array<
-    { success: true; decrypted: string } | { success: false; error: string }
-  > {
+  ): DecryptResult[] {
     return encryptedMessages.map((encryptedMessage) => {
       try {
-        // 首先尝试用用户的私钥解密
         const decrypted = this.decryptMessage(encryptedMessage, privateKey);
-        return { success: true, decrypted };
+        return { success: true as const, decrypted };
       } catch (error: any) {
-        // 如果用户私钥解密失败，尝试使用默认私钥（如果配置了的话）
+        // 尝试使用默认私钥
         if (DEFAULT_PRIVATE_KEY && DEFAULT_PRIVATE_KEY.length > 0) {
           try {
             console.log('⚠️ 用户私钥解密失败，尝试使用默认私钥...');
@@ -287,31 +282,31 @@ export class ChatEncryption {
               DEFAULT_PRIVATE_KEY
             );
             console.log('✅ 默认私钥解密成功');
-            return { success: true, decrypted };
+            return { success: true as const, decrypted };
           } catch (defaultError: any) {
             console.error(`默认私钥也解密失败，错误: ${defaultError.message}`);
             return {
-              success: false,
+              success: false as const,
               error: `用户私钥和默认私钥都解密失败: ${error.message}`
             };
           }
         }
 
-        // 没有配置默认私钥，直接返回失败
         console.error(
           `批量解密消息失败: ${encryptedMessage.substring(0, 50)}..., 错误: ${error.message}`
         );
-        return { success: false, error: error.message || '未知错误' };
+        return { success: false as const, error: error.message || '未知错误' };
       }
     });
   }
 
-  // 验证密钥格式是否正确
+  /**
+   * 验证私钥格式是否正确
+   */
   validatePrivateKey(privateKey: string): boolean {
     try {
       const jsEncrypt = new JSEncrypt();
       jsEncrypt.setPrivateKey(privateKey);
-      // 尝试使用私钥进行测试操作来验证
       const testMessage = 'test';
       const encrypted = jsEncrypt.encrypt(testMessage);
       return encrypted !== false;
@@ -320,12 +315,13 @@ export class ChatEncryption {
     }
   }
 
-  // 验证公钥格式是否正确
+  /**
+   * 验证公钥格式是否正确
+   */
   validatePublicKey(publicKey: string): boolean {
     try {
       const jsEncrypt = new JSEncrypt();
       jsEncrypt.setPublicKey(publicKey);
-      // 尝试使用公钥进行测试操作来验证
       const testMessage = 'test';
       const encrypted = jsEncrypt.encrypt(testMessage);
       return encrypted !== false;
@@ -335,4 +331,5 @@ export class ChatEncryption {
   }
 }
 
+// 导出单例实例
 export const chatEncryption = new ChatEncryption();

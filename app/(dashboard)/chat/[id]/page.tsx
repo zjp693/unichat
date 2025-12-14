@@ -8,7 +8,8 @@ import { Address } from 'viem';
 
 import { ChatNavigationBar } from '@/components/chat/chat-navigation-bar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
+import { useKeyManagement } from '@/hooks/useKeyManagement';
+import { chatEncryption } from '@/lib/keyManagement';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { useSendMessage } from '@/lib/DirectMessageAbi';
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage';
@@ -83,8 +84,7 @@ export default function ChatPage() {
 
   // --- 基础钩子 ---
   const router = useRouter();
-  const { keys, loadKeysFromStorage, decryptMessages, encryptMessage } =
-    useKeyManagementRedux();
+  const { keys, loadKeysFromStorage } = useKeyManagement();
 
   // --- Wagmi 钩子 ---
   const { address: currentAddress } = useAccount();
@@ -206,8 +206,6 @@ export default function ChatPage() {
     pendingGroupMessage,
     currentAddress: currentAddress as Address,
     groupAddress,
-    decryptMessages,
-    encryptMessage,
     sendGroupMessage,
     scrollToBottom,
     inputRef: chatInputAreaRef,
@@ -226,7 +224,6 @@ export default function ChatPage() {
     publicClient,
     writeContract: writeContractAsync,
     sendGroupMessage,
-    encryptMessage,
     setPendingGroupMessage: (msg) => dispatch(setPendingGroupMessage(msg)),
     setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open)),
     setShowKeyModal: (open) => dispatch(setShowKeyModal(open))

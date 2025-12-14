@@ -10,14 +10,14 @@ import {
   REGISTER
 } from 'redux-persist';
 import storage from 'redux-persist/lib/storage';
-import keyManagementReducer from './keyManagementSlice';
+import { keyManagementReducer } from './keyManagement';
 import searchHistoryReducer from './searchHistorySlice';
 import chatReducer from './chatSlice';
 
 const persistConfig = {
   key: 'unichat-root',
   storage,
-  whitelist: ['searchHistory'] // 只持久化搜索历史
+  whitelist: ['searchHistory', 'keyManagement'] // 持久化搜索历史和密钥管理
 };
 
 const rootReducer = combineReducers({
