@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Contact, formatNetWorth } from '@/lib/contacts';
 import type { CelebrityFromContract } from '@/lib/contacts';
-import { setSelectedCelebrityDirect } from '@/hooks/useSelectedCelebrity';
+import { useSelectedCelebrity } from '@/hooks/useSelectedCelebrity';
 import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface CelebrityListItemProps {
@@ -21,6 +21,8 @@ export function CelebrityListItem({
   contractData,
   dataIndex
 }: CelebrityListItemProps) {
+  const { setSelectedCelebrity } = useSelectedCelebrity();
+
   // 获取合约原始数据以获取CID
   const originalData =
     contractData && typeof dataIndex === 'number'
@@ -34,7 +36,7 @@ export function CelebrityListItem({
   const detailUrl = `/celebrity/${contact.id}?name=${encodeURIComponent(contact.name)}&cid=${encodeURIComponent(avatarCid)}&address=${encodeURIComponent(contact.walletAddress)}`;
 
   const handleClick = () => {
-    setSelectedCelebrityDirect(contact);
+    setSelectedCelebrity(contact);
   };
 
   return (

@@ -14,7 +14,7 @@ import {
 import { useCommunityMessages } from '@/hooks/useCommunityMessages';
 import { useListenCommunityMessage } from '@/hooks/useListenCommunityMessage';
 import type { Message } from '@/lib/chat/types';
-import type { KeyPair } from '@/lib/encryption';
+import type { KeyPair } from '@/lib/keyManagement';
 import type { Address } from 'viem';
 import dayjs from 'dayjs';
 import { MESSAGES_PER_LOAD } from '@/lib/chat/constants';

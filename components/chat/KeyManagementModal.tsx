@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, Copy, Key, ChevronDown } from 'lucide-react';
-import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
-import { KeyPair, chatEncryption } from '@/lib/encryption';
+import { useKeyManagement } from '@/hooks/useKeyManagement';
+import { type KeyPair, chatEncryption } from '@/lib/keyManagement';
 import { cn } from '@/lib/utils';
 import { useRegisterPublicKey } from '@/lib/DirectMessageAbi';
 import { useAccount } from 'wagmi';
@@ -25,7 +25,7 @@ export const KeyManagementModal = ({
   onBatchDecrypt
 }: KeyManagementModalProps) => {
   const { keys, loading, generateNewKeyPair, saveKeyToStorage } =
-    useKeyManagementRedux();
+    useKeyManagement();
   const { address } = useAccount();
   const { writeContractAsync } = useRegisterPublicKey();
 

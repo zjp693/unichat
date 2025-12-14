@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronDown } from 'lucide-react';
-import { useKeyManagementRedux } from '@/hooks/useKeyManagementRedux';
-import { KeyPair } from '@/lib/encryption';
+import { useKeyManagement } from '@/hooks/useKeyManagement';
+import type { KeyPair } from '@/lib/keyManagement';
 
 interface DecryptionModalProps {
   isOpen: boolean;
@@ -20,7 +20,7 @@ export const DecryptionModal = ({
   onKeySelect,
   onBatchDecrypt
 }: DecryptionModalProps) => {
-  const { keys, setSelectedKeyId } = useKeyManagementRedux();
+  const { keys, setSelectedKeyId } = useKeyManagement();
   const [privateKeyInput, setPrivateKeyInput] = useState('');
   const [selectedKeyId, setSelectedKeyIdLocal] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);

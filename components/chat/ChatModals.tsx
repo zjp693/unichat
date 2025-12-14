@@ -6,7 +6,7 @@ import { DecryptionModal } from '@/components/chat/DecryptionModal';
 import { MessageSendModeModal } from '@/components/chat/MessageSendModeModal';
 import GroupChatInfoPanel from '@/components/chat/GroupChatInfoPanel';
 import PrivateChatSettingsPanel from '@/components/chat/PrivateChatSettingsPanel';
-import type { KeyPair } from '@/lib/encryption';
+import type { KeyPair } from '@/lib/keyManagement';
 import {
   setShowGenerationModal,
   setShowDecryptModal,

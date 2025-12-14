@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import type { Contact } from '@/lib/contacts';
 
 interface ChatState {
   // --- UI 面板控制 ---
@@ -20,6 +21,10 @@ interface ChatState {
   // --- 聊天列表时间戳 ---
   // 存储每个聊天的最后消息时间戳 { [chatId]: timestamp }
   timestampMap: Record<string, number>;
+
+  // --- 选中的名人（按钱包地址隔离）---
+  // { '0xAAA...': Contact, '0xBBB...': Contact }
+  selectedCelebrityByWallet: Record<string, Contact | null>;
 }
 
 const initialState: ChatState = {
@@ -33,7 +38,8 @@ const initialState: ChatState = {
   showSendModeModal: false,
   selectedMessageId: null,
   pendingGroupMessage: '',
-  timestampMap: {}
+  timestampMap: {},
+  selectedCelebrityByWallet: {}
 };
 
 const chatSlice = createSlice({
@@ -84,6 +90,32 @@ const chatSlice = createSlice({
     // 重置所有 UI 状态 (离开聊天页面时使用)
     resetChatState(state) {
       return initialState;
+    },
+
+    // --- 选中名人管理 ---
+    // 设置指定钱包的选中名人
+    setSelectedCelebrity(
+      state,
+      action: PayloadAction<{
+        walletAddress: string;
+        celebrity: Contact | null;
+      }>
+    ) {
+      const { walletAddress, celebrity } = action.payload;
+      if (walletAddress) {
+        state.selectedCelebrityByWallet[walletAddress] = celebrity;
+      }
+    },
+    // 清除指定钱包的选中名人
+    clearSelectedCelebrity(state, action: PayloadAction<string>) {
+      const walletAddress = action.payload;
+      if (walletAddress && state.selectedCelebrityByWallet[walletAddress]) {
+        delete state.selectedCelebrityByWallet[walletAddress];
+      }
+    },
+    // 清除所有钱包的选中名人
+    clearAllSelectedCelebrities(state) {
+      state.selectedCelebrityByWallet = {};
     }
   }
 });
@@ -101,7 +133,10 @@ export const {
   setPendingGroupMessage,
   updateTimestamp,
   clearTimestampMap,
-  resetChatState
+  resetChatState,
+  setSelectedCelebrity,
+  clearSelectedCelebrity,
+  clearAllSelectedCelebrities
 } = chatSlice.actions;
 
 export default chatSlice.reducer;
