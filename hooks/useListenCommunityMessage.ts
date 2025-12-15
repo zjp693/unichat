@@ -58,6 +58,7 @@ export function useListenCommunityMessage(
         // Fetch full message details
         let content = '';
         let cid = '';
+        let kind = 0; // 默认明文
 
         if (publicClient && seq !== undefined) {
           console.log('📨 [群聊监听] 正在获取消息详情, seq:', seq);
@@ -69,7 +70,8 @@ export function useListenCommunityMessage(
           if (msg) {
             content = msg.content;
             cid = msg.cid;
-            console.log('📨 [群聊监听] 获取到详情:', { content, cid });
+            kind = msg.kind; // 保存 kind 字段
+            console.log('📨 [群聊监听] 获取到详情:', { content, cid, kind });
           }
         }
 
@@ -99,7 +101,7 @@ export function useListenCommunityMessage(
           type: type as any,
           content: finalContent,
           recipient: communityAddress as Address,
-          isEncrypted: false,
+          isEncrypted: kind === 1, // kind: 0=明文, 1=密文
           originalContent: content,
           isGroupMessage: true,
           senderAddress: sender

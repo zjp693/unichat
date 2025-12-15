@@ -230,13 +230,19 @@ export default function ChatPage() {
   });
 
   // --- Effects ---
+  // 加载密钥和初始化客户端状态
   useEffect(() => {
     loadKeysFromStorage();
     setIsClient(true);
+  }, [loadKeysFromStorage]);
+
+  // 组件卸载时清理状态（空依赖数组确保只在卸载时执行）
+  useEffect(() => {
     return () => {
       dispatch(resetChatState());
     };
-  }, [loadKeysFromStorage, dispatch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 空依赖，只在组件真正卸载时执行
 
   // --- Render ---
   return (

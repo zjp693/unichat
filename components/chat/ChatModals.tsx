@@ -1,5 +1,5 @@
-import React from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import React, { useSyncExternalStore } from 'react';
+import { useDispatch } from 'react-redux';
 import { KeyManagementModal } from '@/components/chat/KeyManagementModal';
 import { KeyGenerationModal } from '@/components/chat/KeyGenerationModal';
 import { DecryptionModal } from '@/components/chat/DecryptionModal';
@@ -15,7 +15,7 @@ import {
   setShowPrivateChatSettingsPanel,
   setShowKeyModal
 } from '@/lib/chatSlice';
-import type { RootState } from '@/lib/store';
+import { store } from '@/lib/store';
 
 interface ChatModalsProps {
   // Key Generation
@@ -44,6 +44,14 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
   memberCount
 }) => {
   const dispatch = useDispatch();
+
+  // 使用 useSyncExternalStore 直接订阅 store
+  const chatState = useSyncExternalStore(
+    store.subscribe,
+    () => store.getState().chat,
+    () => store.getState().chat // SSR 回退
+  );
+
   const {
     showGenerationModal,
     showDecryptModal,
@@ -51,7 +59,7 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
     showGroupInfoPanel,
     showPrivateChatSettingsPanel,
     showKeyModal
-  } = useSelector((state: RootState) => state.chat);
+  } = chatState;
 
   return (
     <>

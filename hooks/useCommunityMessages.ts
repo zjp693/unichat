@@ -100,7 +100,7 @@ export function useCommunityMessages(
           type: type as any,
           content: content,
           recipient: communityAddress as Address,
-          isEncrypted: false,
+          isEncrypted: msg.kind === 1, // kind: 0=明文, 1=密文
           originalContent: msg.content,
           isGroupMessage: true,
           senderAddress: msg.sender
