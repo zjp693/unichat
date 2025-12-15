@@ -16,9 +16,7 @@ export function useChatParams() {
     searchParams.get('type') === 'group' ? 'group' : 'private';
 
   // 群聊参数
-  const invitedMembersMessage = searchParams.get('invitedMembers')
-    ? decodeURIComponent(searchParams.get('invitedMembers') as string)
-    : null;
+  const invitedMembersMessage = searchParams.get('invitedMembers') || null;
 
   const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
 
@@ -30,19 +28,13 @@ export function useChatParams() {
     | 5
     | 6;
 
-  const groupCondition = searchParams.get('groupCondition')
-    ? decodeURIComponent(searchParams.get('groupCondition') as string)
-    : undefined;
+  const groupCondition = searchParams.get('groupCondition') || undefined;
 
-  const groupName = searchParams.get('name')
-    ? decodeURIComponent(searchParams.get('name') as string)
-    : null;
+  const groupName = searchParams.get('name') || null;
 
   const groupAddress = searchParams.get('address') || conversationId;
 
-  const groupAvatar = searchParams.get('avatar')
-    ? decodeURIComponent(searchParams.get('avatar') as string)
-    : null;
+  const groupAvatar = searchParams.get('avatar') || null;
 
   // 私聊参数
   // 验证并使用 conversationId 作为接收者地址（私聊时）

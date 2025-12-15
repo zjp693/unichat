@@ -105,24 +105,27 @@ export function ChatListItem({
       ? todayCount
       : undefined;
 
+  // 统一的群聊跳转函数
+  const navigateToGroupChat = () => {
+    const params = new URLSearchParams({
+      type: 'group',
+      name: chat.name ?? '',
+      address: chat.address ?? chat.id,
+      level: String(chat.level ?? 1),
+      memberCount: String(chat.memberCount ?? 0),
+      groupCondition: chat.groupCondition ?? '',
+      avatar: chat.avatar ?? ''
+    });
+    router.push(`/chat/${chat.id}?${params.toString()}`);
+  };
+
   const handleChatClick = () => {
     if (chat.isGroup && !chat.isJoined) {
       return;
     }
 
     if (chat.isGroup) {
-      const params = new URLSearchParams({
-        type: 'group',
-        ...(chat.name && { name: encodeURIComponent(chat.name) }),
-        ...(chat.address && { address: chat.address }),
-        ...(chat.level && { level: chat.level.toString() }),
-        ...(chat.memberCount && { memberCount: chat.memberCount.toString() }),
-        ...(chat.groupCondition && {
-          groupCondition: encodeURIComponent(chat.groupCondition)
-        }),
-        ...(chat.avatar && { avatar: encodeURIComponent(chat.avatar) })
-      });
-      router.push(`/chat/${chat.id}?${params.toString()}`);
+      navigateToGroupChat();
     } else {
       router.push(`/chat/${chat.id}?type=private`);
     }
@@ -153,17 +156,7 @@ export function ChatListItem({
         onJoinSuccess();
       }
 
-      setTimeout(() => {
-        const params = new URLSearchParams({
-          type: 'group',
-          name: encodeURIComponent(chat.name),
-          address: chat.address || chat.id,
-          level: (chat.level || 1).toString(),
-          memberCount: (chat.memberCount || 0).toString(),
-          groupCondition: encodeURIComponent(chat.groupCondition || '')
-        });
-        router.push(`/chat/${chat.id}?${params.toString()}`);
-      }, 500);
+      setTimeout(() => navigateToGroupChat(), 500);
     } else {
       console.error('❌ [加入群聊] 加入失败:', result.error);
       toast({
