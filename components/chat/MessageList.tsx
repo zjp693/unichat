@@ -34,6 +34,256 @@ interface MessageListProps {
   hasMore?: boolean;
 }
 
+// ==================== 子组件 ====================
+
+/** 系统时间消息 */
+const SystemTimeMessage: React.FC<{ content: string }> = ({ content }) => (
+  <div className="flex justify-center text-gray-500 text-xs my-2">
+    <span className="bg-gray-200 px-3 py-1 rounded-lg">{content}</span>
+  </div>
+);
+
+/** 系统消息 */
+const SystemMessage: React.FC<{ content: string }> = ({ content }) => (
+  <div className="flex justify-center text-gray-500 text-sm my-2">
+    <span className="bg-gray-200 px-3 py-1 rounded-lg">{content}</span>
+  </div>
+);
+
+/** 加载更多指示器 */
+const LoadingIndicator: React.FC = () => (
+  <div className="flex justify-center items-center py-4">
+    <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg px-4 py-2">
+      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+      <span className="text-sm font-medium bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        加载中...
+      </span>
+    </div>
+  </div>
+);
+
+/** 消息状态图标（发送中/失败） */
+interface MessageStatusIconProps {
+  status: Message['status'];
+  onRetry: () => void;
+}
+
+const MessageStatusIcon: React.FC<MessageStatusIconProps> = ({
+  status,
+  onRetry
+}) => (
+  <div className="flex items-end pb-0.5 flex-shrink-0 w-5 h-5">
+    {status === 'sending' && (
+      <Loader2 className="h-5 w-5 animate-spin text-gray-400 flex-shrink-0" />
+    )}
+    {status === 'failed' && (
+      <button
+        onClick={onRetry}
+        className="cursor-pointer hover:opacity-80 transition-opacity"
+        title="点击重新发送"
+      >
+        <Image
+          src="/chats/Sigh.png"
+          alt="发送失败"
+          width={20}
+          height={20}
+          className="flex-shrink-0"
+        />
+      </button>
+    )}
+  </div>
+);
+
+/** 消息气泡 Props */
+interface MessageBubbleProps {
+  message: Message;
+  chatType: 'private' | 'group';
+  onDecryptClick: (messageId: string) => void;
+  longPress: {
+    handleLongPressStart: (
+      message: Message,
+      event: React.TouchEvent | React.MouseEvent
+    ) => void;
+    handleLongPressEnd: (event: React.TouchEvent | React.MouseEvent) => void;
+    handleContextMenu: (message: Message, event: React.MouseEvent) => void;
+  };
+}
+
+/** 消息气泡组件 */
+const MessageBubble: React.FC<MessageBubbleProps> = ({
+  message,
+  chatType,
+  onDecryptClick,
+  longPress
+}) => (
+  <div
+    className={cn(
+      'rounded-lg px-3 py-2 text-sm shadow-sm select-none max-w-[75vw]',
+      message.sender === 'user'
+        ? 'bg-[#5637f5] text-white'
+        : 'bg-white text-black'
+    )}
+    style={{
+      WebkitUserSelect: 'none',
+      WebkitTouchCallout: 'none',
+      userSelect: 'none',
+      overflowWrap: 'anywhere',
+      wordBreak: 'break-word'
+    }}
+    onTouchStart={(e) => longPress.handleLongPressStart(message, e)}
+    onTouchEnd={(e) => longPress.handleLongPressEnd(e)}
+    onTouchCancel={(e) => longPress.handleLongPressEnd(e)}
+    onMouseDown={(e) => longPress.handleLongPressStart(message, e)}
+    onMouseUp={(e) => longPress.handleLongPressEnd(e)}
+    onMouseLeave={(e) => longPress.handleLongPressEnd(e)}
+    onContextMenu={(e) => longPress.handleContextMenu(message, e)}
+  >
+    <p className="whitespace-pre-wrap break-all">{message.content}</p>
+    {(message.isEncrypted || message.originalContent) && (
+      <div className="flex items-center justify-between mt-2 min-w-[12rem]">
+        <div className="flex items-center gap-2">
+          {/* 解密按钮 - 只有密文消息且非自己发送时显示 */}
+          {message.sender !== 'user' && message.isEncrypted && (
+            <button
+              onClick={() => onDecryptClick(message.id)}
+              className={cn(
+                'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
+                'bg-[#fef0ee] hover:bg-[#fde0dc]'
+              )}
+            >
+              <Image
+                src="/chats/keyIcon.png"
+                alt="解密"
+                width={14}
+                height={14}
+              />
+              <span className="text-[#606266] ml-1">未解密</span>
+            </button>
+          )}
+          {/* 计数器按钮 - 仅群聊显示 */}
+          {chatType === 'group' && (
+            <div
+              className={cn(
+                'flex items-center rounded-md px-2 py-1 text-xs font-medium',
+                message.sender === 'user' ? 'bg-[#785ff7]' : 'bg-[#e9f9ee]'
+              )}
+            >
+              <Image
+                src="/chats/news.png"
+                alt="评论"
+                width={14}
+                height={14}
+                className="mr-1"
+              />
+              {message.isEncrypted ? '1' : '0'}
+            </div>
+          )}
+        </div>
+        <span
+          className={cn(
+            'text-xs',
+            message.sender === 'user' ? 'text-white/70' : 'text-gray-400'
+          )}
+        >
+          {dayjs(message.timestamp).format('MM/DD HH:mm:ss')}
+        </span>
+      </div>
+    )}
+  </div>
+);
+
+// ==================== 自定义 Hook ====================
+
+/**
+ * 长按复制功能 Hook
+ * 处理长按/右键触发的复制菜单逻辑
+ */
+const useLongPressCopy = () => {
+  const { toast } = useToast();
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressTriggeredRef = useRef(false);
+
+  // 复制消息内容
+  const handleCopyMessage = async () => {
+    if (selectedMessage) {
+      try {
+        await navigator.clipboard.writeText(selectedMessage.content);
+        toast({
+          title: '复制成功',
+          description: '消息内容已复制到剪贴板',
+          variant: 'success'
+        });
+      } catch (error) {
+        console.error('复制失败:', error);
+        toast({
+          title: '复制失败',
+          description: '无法复制内容',
+          variant: 'destructive'
+        });
+      }
+      setSelectedMessage(null);
+    }
+  };
+
+  // 长按开始
+  const handleLongPressStart = (
+    message: Message,
+    event: React.TouchEvent | React.MouseEvent
+  ) => {
+    // PC端：只响应左键点击
+    if ('button' in event && event.button !== 0) {
+      return;
+    }
+
+    isLongPressTriggeredRef.current = false;
+    const clientX =
+      'touches' in event ? event.touches[0].clientX : event.clientX;
+    const clientY =
+      'touches' in event ? event.touches[0].clientY : event.clientY;
+
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressTriggeredRef.current = true;
+      setSelectedMessage(message);
+      setMenuPosition({ x: clientX, y: clientY });
+    }, 500);
+  };
+
+  // 长按结束/取消
+  const handleLongPressEnd = (event: React.TouchEvent | React.MouseEvent) => {
+    if (isLongPressTriggeredRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  // 右键菜单
+  const handleContextMenu = (message: Message, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedMessage(message);
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+
+  return {
+    selectedMessage,
+    menuPosition,
+    handleCopyMessage,
+    handleLongPressStart,
+    handleLongPressEnd,
+    handleContextMenu,
+    closeMenu: () => setSelectedMessage(null)
+  };
+};
+
+// ==================== 主组件 ====================
+
 export const MessageList: React.FC<MessageListProps> = ({
   messages,
   currentAddress,
@@ -51,86 +301,11 @@ export const MessageList: React.FC<MessageListProps> = ({
   hasMore
 }) => {
   const router = useRouter();
-  const { toast } = useToast();
   const topSentinelRef = React.useRef<HTMLDivElement>(null);
   const [isObserverEnabled, setIsObserverEnabled] = React.useState(false);
 
-  // 长按复制功能状态
-  const [selectedMessageForCopy, setSelectedMessageForCopy] =
-    useState<Message | null>(null);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isLongPressTriggeredRef = useRef(false); // 标记是否已触发长按
-
-  // 复制消息内容
-  const handleCopyMessage = async () => {
-    if (selectedMessageForCopy) {
-      try {
-        await navigator.clipboard.writeText(selectedMessageForCopy.content);
-        toast({
-          title: '复制成功',
-          description: '消息内容已复制到剪贴板',
-          variant: 'success'
-        });
-      } catch (error) {
-        console.error('复制失败:', error);
-        toast({
-          title: '复制失败',
-          description: '无法复制内容',
-          variant: 'destructive'
-        });
-      }
-      setSelectedMessageForCopy(null);
-    }
-  };
-
-  // 长按开始
-  const handleLongPressStart = (
-    message: Message,
-    event: React.TouchEvent | React.MouseEvent
-  ) => {
-    // PC端：只响应左键点击
-    if ('button' in event && event.button !== 0) {
-      return;
-    }
-
-    isLongPressTriggeredRef.current = false; // 重置标志
-    const clientX =
-      'touches' in event ? event.touches[0].clientX : event.clientX;
-    const clientY =
-      'touches' in event ? event.touches[0].clientY : event.clientY;
-
-    longPressTimerRef.current = setTimeout(() => {
-      isLongPressTriggeredRef.current = true; // 标记已触发长按
-      setSelectedMessageForCopy(message);
-      setMenuPosition({ x: clientX, y: clientY });
-    }, 500);
-  };
-
-  // 长按结束/取消
-  const handleLongPressEnd = (event: React.TouchEvent | React.MouseEvent) => {
-    // 如果长按已触发，阻止默认行为（防止浏览器菜单）
-    if (isLongPressTriggeredRef.current) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-
-    // 清理定时器
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  };
-
-  // 阻止浏览器右键菜单，并显示我们的菜单
-  const handleContextMenu = (message: Message, event: React.MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    // 显示自定义复制菜单
-    setSelectedMessageForCopy(message);
-    setMenuPosition({ x: event.clientX, y: event.clientY });
-  };
+  // 长按复制功能
+  const longPress = useLongPressCopy();
 
   // 延迟启用 Observer，防止初始渲染时误触
   React.useEffect(() => {
@@ -166,28 +341,12 @@ export const MessageList: React.FC<MessageListProps> = ({
     <div className="p-4 space-y-5 !pt-0">
       <div ref={topSentinelRef} style={{ height: '1px', width: '100%' }} />
       {/* 加载更多消息的指示器 */}
-      {isLoadingMore && (
-        <div className="flex justify-center items-center py-4">
-          <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg px-4 py-2">
-            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-            <span className="text-sm font-medium bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              加载中...
-            </span>
-          </div>
-        </div>
-      )}
+      {isLoadingMore && <LoadingIndicator />}
 
       {messages.map((message) => {
         if (message.type === 'system-time') {
           return (
-            <div
-              key={message.id}
-              className="flex justify-center text-gray-500 text-xs my-2"
-            >
-              <span className="bg-gray-200 px-3 py-1 rounded-lg">
-                {message.content}
-              </span>
-            </div>
+            <SystemTimeMessage key={message.id} content={message.content} />
           );
         } else if (message.type === 'red-packet-claim') {
           try {
@@ -218,16 +377,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             return null;
           }
         } else if (message.type === 'system') {
-          return (
-            <div
-              key={message.id}
-              className="flex justify-center text-gray-500 text-sm my-2"
-            >
-              <span className="bg-gray-200 px-3 py-1 rounded-lg">
-                {message.content}
-              </span>
-            </div>
-          );
+          return <SystemMessage key={message.id} content={message.content} />;
         } else {
           // 普通消息行
           return (
@@ -317,27 +467,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                 >
                   {/* 状态图标 */}
                   {message.sender === 'user' && (
-                    <div className="flex items-end pb-0.5 flex-shrink-0 w-5 h-5">
-                      {message.status === 'sending' && (
-                        <Loader2 className="h-5 w-5 animate-spin text-gray-400 flex-shrink-0" />
-                      )}
-
-                      {message.status === 'failed' && (
-                        <button
-                          onClick={() => handleRetryMessage(message)}
-                          className="cursor-pointer hover:opacity-80 transition-opacity"
-                          title="点击重新发送"
-                        >
-                          <Image
-                            src="/chats/Sigh.png"
-                            alt="发送失败"
-                            width={20}
-                            height={20}
-                            className="flex-shrink-0"
-                          />
-                        </button>
-                      )}
-                    </div>
+                    <MessageStatusIcon
+                      status={message.status}
+                      onRetry={() => handleRetryMessage(message)}
+                    />
                   )}
 
                   {message.type === 'red-packet' ? (
@@ -355,91 +488,12 @@ export const MessageList: React.FC<MessageListProps> = ({
                       }
                     })()
                   ) : (
-                    <div
-                      className={cn(
-                        'rounded-lg px-3 py-2 text-sm shadow-sm select-none',
-                        message.sender === 'user'
-                          ? 'bg-[#5637f5] text-white'
-                          : 'bg-white text-black'
-                      )}
-                      style={{
-                        WebkitUserSelect: 'none',
-                        WebkitTouchCallout: 'none',
-                        userSelect: 'none'
-                      }}
-                      onTouchStart={(e) => handleLongPressStart(message, e)}
-                      onTouchEnd={(e) => handleLongPressEnd(e)}
-                      onTouchCancel={(e) => handleLongPressEnd(e)}
-                      onMouseDown={(e) => handleLongPressStart(message, e)}
-                      onMouseUp={(e) => handleLongPressEnd(e)}
-                      onMouseLeave={(e) => handleLongPressEnd(e)}
-                      onContextMenu={(e) => handleContextMenu(message, e)}
-                    >
-                      <p className="whitespace-pre-wrap break-all">
-                        {message.content}
-                      </p>
-                      {(message.isEncrypted || message.originalContent) && (
-                        <div className="flex items-center justify-between mt-2 min-w-[12rem]">
-                          <div className="flex items-center gap-2">
-                            {/* 解密按钮 */}
-                            {message.sender !== 'user' &&
-                              (chatType === 'private' ||
-                                message.isEncrypted) && (
-                                <button
-                                  onClick={() => {
-                                    handleDecryptClick(message.id);
-                                  }}
-                                  disabled={!message.isEncrypted}
-                                  className={cn(
-                                    'flex items-center rounded-md px-2 py-1 transition-colors text-xs font-medium',
-                                    'bg-[#fef0ee]',
-                                    message.isEncrypted && 'hover:bg-black/20',
-                                    'disabled:opacity-80 disabled:cursor-not-allowed'
-                                  )}
-                                >
-                                  <Image
-                                    src="/chats/keyIcon.png"
-                                    alt="解密"
-                                    width={14}
-                                    height={14}
-                                    className="mr-1"
-                                  />
-                                </button>
-                              )}
-                            {/* 计数器按钮 - 仅群聊显示 */}
-                            {chatType === 'group' && (
-                              <div
-                                className={cn(
-                                  'flex items-center rounded-md px-2 py-1 text-xs font-medium',
-                                  message.sender === 'user'
-                                    ? 'bg-[#785ff7]'
-                                    : 'bg-[#e9f9ee]'
-                                )}
-                              >
-                                <Image
-                                  src="/chats/news.png"
-                                  alt="评论"
-                                  width={14}
-                                  height={14}
-                                  className="mr-1"
-                                />
-                                {message.isEncrypted ? '1' : '0'}
-                              </div>
-                            )}
-                          </div>
-                          <span
-                            className={cn(
-                              'text-xs',
-                              message.sender === 'user'
-                                ? 'text-white/70'
-                                : 'text-gray-400'
-                            )}
-                          >
-                            {dayjs(message.timestamp).format('MM/DD HH:mm:ss')}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    <MessageBubble
+                      message={message}
+                      chatType={chatType}
+                      onDecryptClick={handleDecryptClick}
+                      longPress={longPress}
+                    />
                   )}
                 </div>
               </div>
@@ -450,10 +504,10 @@ export const MessageList: React.FC<MessageListProps> = ({
 
       {/* 长按复制浮动菜单 */}
       <MessageContextMenu
-        isOpen={!!selectedMessageForCopy}
-        position={menuPosition}
-        onCopy={handleCopyMessage}
-        onClose={() => setSelectedMessageForCopy(null)}
+        isOpen={!!longPress.selectedMessage}
+        position={longPress.menuPosition}
+        onCopy={longPress.handleCopyMessage}
+        onClose={longPress.closeMenu}
       />
     </div>
   );

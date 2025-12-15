@@ -168,8 +168,7 @@ export function useEncryptionActions({
     (messageId: string) => {
       const message = messages.find((msg) => msg.id === messageId);
       if (!message || !message.isEncrypted) return;
-      setSelectedMessageId(messageId); // <-- 新增：设置被点击的消息ID
-      // 直接打开解密弹窗
+      setSelectedMessageId(messageId);
       setShowDecryptModal(true);
     },
     [messages, setSelectedMessageId, setShowDecryptModal]

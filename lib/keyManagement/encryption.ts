@@ -253,7 +253,7 @@ export class ChatEncryption {
       console.log('✅ 消息解密成功');
       return decrypted;
     } catch (error: any) {
-      console.error('❌ 解密错误:', error);
+      console.warn('⚠️ 解密错误:', error.message || error);
       throw new Error(`消息解密失败: ${error.message || error}`);
     }
   }
@@ -276,7 +276,7 @@ export class ChatEncryption {
         // 尝试使用默认私钥
         if (DEFAULT_PRIVATE_KEY && DEFAULT_PRIVATE_KEY.length > 0) {
           try {
-            console.log('⚠️ 用户私钥解密失败，尝试使用默认私钥...');
+            console.warn('⚠️ 用户私钥解密失败，尝试使用默认私钥...');
             const decrypted = this.decryptMessage(
               encryptedMessage,
               DEFAULT_PRIVATE_KEY
@@ -284,7 +284,9 @@ export class ChatEncryption {
             console.log('✅ 默认私钥解密成功');
             return { success: true as const, decrypted };
           } catch (defaultError: any) {
-            console.error(`默认私钥也解密失败，错误: ${defaultError.message}`);
+            console.warn(
+              `⚠️ 默认私钥也解密失败，错误: 消息解密失败: ${defaultError.message}`
+            );
             return {
               success: false as const,
               error: `用户私钥和默认私钥都解密失败: ${error.message}`
@@ -292,8 +294,8 @@ export class ChatEncryption {
           }
         }
 
-        console.error(
-          `批量解密消息失败: ${encryptedMessage.substring(0, 50)}..., 错误: ${error.message}`
+        console.warn(
+          `⚠️ 批量解密消息失败: ${encryptedMessage.substring(0, 50)}..., 错误: ${error.message}`
         );
         return { success: false as const, error: error.message || '未知错误' };
       }

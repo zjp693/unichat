@@ -4,7 +4,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, MoreVertical, Copy, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
 
 // ==================== 类型定义 ====================
 
@@ -172,15 +172,26 @@ const BottomSection: React.FC<BottomSectionProps> = ({
   onAddressCopy
 }) => {
   const [avatarError, setAvatarError] = useState(false);
+  const { toast } = useToast();
 
   const handleAddressCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(chatInfo.address);
+      toast({
+        title: '复制成功',
+        description: '地址已复制到剪贴板',
+        variant: 'success'
+      });
       onAddressCopy?.(chatInfo.address);
     } catch (error) {
       console.error('复制地址失败:', error);
+      toast({
+        title: '复制失败',
+        description: '无法访问剪贴板',
+        variant: 'destructive'
+      });
     }
-  }, [chatInfo.address, onAddressCopy]);
+  }, [chatInfo.address, onAddressCopy, toast]);
 
   const handleBack = useCallback(() => {
     onBack?.();

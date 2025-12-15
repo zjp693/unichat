@@ -1,5 +1,5 @@
 import { Address } from 'viem';
-import { erc20Abi, formatUnits } from 'viem';
+import { erc20Abi, formatUnits, maxUint256 } from 'viem';
 
 /**
  * 获取代币精度
@@ -71,7 +71,7 @@ export async function checkTokenBalance(
  * 检查并执行 ERC20 Token 授权
  * @param tokenAddress 代币合约地址
  * @param spenderAddress 被授权的合约地址（通常是红包合约）
- * @param amount 需要授权的金额（wei）
+ * @param amount 需要授权的金额（wei）- 用于检查当前授权是否足够
  * @param userAddress 用户地址
  * @param publicClient Wagmi 的 publicClient
  * @param approveFunc Wagmi 的 writeContractAsync 函数
@@ -105,13 +105,15 @@ export async function approveTokenIfNeeded(
     return true;
   }
 
-  // 请求授权
-  console.log('⏳ 请求 Token 授权...');
+  // 请求无限授权（MaxUint256）
+  // 行业惯例：Uniswap、Aave 等主流 DeFi 都使用无限授权
+  // 优点：用户只需首次授权一次，后续操作无需再授权，节省 gas
+  console.log('⏳ 请求 Token 无限授权...');
   const approveTxHash = await approveFunc({
     address: tokenAddress,
     abi: erc20Abi,
     functionName: 'approve',
-    args: [spenderAddress, amount]
+    args: [spenderAddress, maxUint256]
   });
 
   console.log('⏳ 等待授权确认...', approveTxHash);

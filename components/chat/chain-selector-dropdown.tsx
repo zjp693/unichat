@@ -4,18 +4,18 @@ import Image from 'next/image';
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-// 硬编码链列表（暂时使用统一图标）
+// 链列表（使用各链专属图标）
 const chains = [
-  { id: 1, name: 'Ethereum', icon: '/shop/airdrop.png' },
-  { id: 2, name: 'Unichain', icon: '/shop/airdrop.png' },
-  { id: 3, name: 'Polygon', icon: '/shop/airdrop.png' },
-  { id: 4, name: 'Arbitrum', icon: '/shop/airdrop.png' },
-  { id: 5, name: 'OP Mainnet', icon: '/shop/airdrop.png' },
-  { id: 6, name: 'Base', icon: '/shop/airdrop.png' },
-  { id: 7, name: 'BNB Chain', icon: '/shop/airdrop.png' },
-  { id: 8, name: 'Blast', icon: '/shop/airdrop.png' },
-  { id: 9, name: 'Avalanche', icon: '/shop/airdrop.png' },
-  { id: 10, name: 'Celo', icon: '/shop/airdrop.png' }
+  { id: 1, name: 'Ethereum', icon: '/chain/Ethereum.png' },
+  { id: 2, name: 'Unichain', icon: '/chain/Unichain.png' },
+  { id: 3, name: 'Polygon', icon: '/chain/Polygon.png' },
+  { id: 4, name: 'Arbitrum', icon: '/chain/Arbitrum.png' },
+  { id: 5, name: 'OP Mainnet', icon: '/chain/OP Mainnet.png' },
+  { id: 6, name: 'Base', icon: '/chain/Base.png' },
+  { id: 7, name: 'BNB Chain', icon: '/chain/BNB Chain.png' },
+  { id: 8, name: 'Blast', icon: '/chain/Blast.png' },
+  { id: 9, name: 'Avalanche', icon: '/chain/Avalanche.png' },
+  { id: 10, name: 'Celo', icon: '/chain/Celo.png' }
 ];
 
 export function ChainSelectorDropdown() {
@@ -70,6 +70,7 @@ export function ChainSelectorDropdown() {
                       src={chain.icon}
                       alt={chain.name}
                       fill
+                      sizes="24px"
                       className="object-cover"
                     />
                   </div>
