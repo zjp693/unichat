@@ -17,14 +17,13 @@ interface Country {
   code: string;
 }
 
-// Country List
 const countries: Country[] = [
-  { name: '中国', flag: '/top/usa.png', code: 'CN' },
-  { name: 'កម្ពុជា', flag: '/top/usa.png', code: 'KH' },
-  { name: 'America', flag: '/top/usa.png', code: 'US' },
-  { name: 'Viet Nam', flag: '/top/usa.png', code: 'VN' },
-  { name: 'ประเทศไทย', flag: '/top/usa.png', code: 'TH' },
-  { name: 'भारत', flag: '/top/usa.png', code: 'IN' }
+  { name: '中国', flag: '/nation/China.png', code: 'CN' },
+  { name: 'កម្ពុជា', flag: '/nation/Cambodia.png', code: 'KH' },
+  { name: 'America', flag: '/nation/USA.png', code: 'US' },
+  { name: 'Viet Nam', flag: '/nation/Viet Nam.png', code: 'VN' },
+  { name: 'ประเทศไทย', flag: '/nation/Thailand.png', code: 'TH' },
+  { name: 'भारत', flag: '/nation/India.png', code: 'IN' }
 ];
 
 interface CountrySelectionSheetProps {
@@ -124,8 +123,14 @@ function CountryOption({
       `}
       onClick={onSelect}
     >
-      <div className="w-8 h-6 mr-3 rounded shadow-sm overflow-hidden relative border border-black/5 flex-shrink-0">
-        <Image src={flag} alt={name} fill className="object-cover" />
+      <div className="w-9 h-9 mr-3 rounded-sm shadow-sm overflow-hidden relative border border-black/5 flex-shrink-0">
+        <Image
+          src={flag}
+          alt={name}
+          fill
+          sizes="40px"
+          className="object-cover"
+        />
       </div>
       <span
         className={`text-sm font-medium truncate ${isSelected ? 'text-[#5637f5]' : 'text-gray-700'}`}
