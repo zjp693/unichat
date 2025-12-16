@@ -11,16 +11,25 @@ export function useChatParams() {
   const searchParams = useSearchParams();
 
   // 基础参数
-  const conversationId = params.id as string;
-  const chatType: ChatType =
-    searchParams.get('type') === 'group' ? 'group' : 'private';
+  const conversationId = (params?.id as string) || '';
+
+  // 安全地获取 searchParams 值
+  const getParam = (key: string): string | null => {
+    try {
+      return searchParams?.get(key) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const chatType: ChatType = getParam('type') === 'group' ? 'group' : 'private';
 
   // 群聊参数
-  const invitedMembersMessage = searchParams.get('invitedMembers') || null;
+  const invitedMembersMessage = getParam('invitedMembers');
 
-  const memberCount = parseInt(searchParams.get('memberCount') || '0', 10);
+  const memberCount = parseInt(getParam('memberCount') || '0', 10);
 
-  const groupLevel = parseInt(searchParams.get('level') || '1', 10) as
+  const groupLevel = parseInt(getParam('level') || '1', 10) as
     | 1
     | 2
     | 3
@@ -28,13 +37,13 @@ export function useChatParams() {
     | 5
     | 6;
 
-  const groupCondition = searchParams.get('groupCondition') || undefined;
+  const groupCondition = getParam('groupCondition') || undefined;
 
-  const groupName = searchParams.get('name') || null;
+  const groupName = getParam('name');
 
-  const groupAddress = searchParams.get('address') || conversationId;
+  const groupAddress = getParam('address') || conversationId;
 
-  const groupAvatar = searchParams.get('avatar') || null;
+  const groupAvatar = getParam('avatar');
 
   // 私聊参数
   // 验证并使用 conversationId 作为接收者地址（私聊时）
