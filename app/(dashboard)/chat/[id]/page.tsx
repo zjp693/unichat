@@ -495,15 +495,18 @@ function ChatContent() {
 
 export default function ChatPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex flex-col h-screen bg-gray-50 items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-        </div>
-      }
-    >
+    <Suspense fallback={<ChatLoadingFallback />}>
       <ChatContent />
     </Suspense>
+  );
+}
+
+// Loading fallback component
+function ChatLoadingFallback() {
+  return (
+    <div className="flex flex-col h-screen bg-gray-50 items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+    </div>
   );
 }
 
