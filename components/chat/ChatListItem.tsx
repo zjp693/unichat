@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useReadContract } from 'wagmi';
+import { useDispatch } from 'react-redux';
 import { Address, Abi } from 'viem';
 import communityABI from '@/contract/abi/community.json';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ import { usePeerProfile } from '@/hooks/usePeerProfile';
 import { useJoinCommunity } from '@/hooks/useJoinCommunity';
 import { useChatTimestamp } from '@/hooks/useChatTimestamp';
 import { useCountReceivedTodayBetween } from '@/lib/DirectMessageAbi';
+import { setChatMeta } from '@/lib/chatMetaSlice';
 import type { ChatItem } from '@/lib/types/chat';
 
 interface ChatListItemProps {
@@ -29,6 +31,7 @@ export function ChatListItem({
   onJoinSuccess
 }: ChatListItemProps) {
   const router = useRouter();
+  const dispatch = useDispatch();
   const { toast } = useToast();
   const { joinCommunity, isJoining } = useJoinCommunity();
 
@@ -107,16 +110,22 @@ export function ChatListItem({
 
   // 统一的群聊跳转函数
   const navigateToGroupChat = () => {
-    const params = new URLSearchParams({
-      type: 'group',
-      name: chat.name ?? '',
-      address: chat.address ?? chat.id,
-      level: String(chat.level ?? 1),
-      memberCount: String(chat.memberCount ?? 0),
-      groupCondition: chat.groupCondition ?? '',
-      avatar: chat.avatar ?? ''
-    });
-    router.push(`/chat/${chat.id}?${params.toString()}`);
+    // 存储群聊元信息到 Redux
+    dispatch(
+      setChatMeta({
+        chatId: chat.id,
+        meta: {
+          type: 'group',
+          name: chat.name ?? '',
+          address: chat.address ?? chat.id,
+          level: chat.level ?? 1,
+          memberCount: chat.memberCount ?? 0,
+          groupCondition: chat.groupCondition ?? '',
+          avatar: chat.avatar ?? ''
+        }
+      })
+    );
+    router.push(`/chat/${chat.id}?type=group`);
   };
 
   const handleChatClick = () => {

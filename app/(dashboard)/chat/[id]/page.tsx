@@ -23,6 +23,7 @@ import { useEncryptionActions } from '@/hooks/chat/actions/useEncryptionActions'
 import { useMessageActions } from '@/hooks/chat/actions/useMessageActions';
 import { useMessageLoader } from '@/hooks/chat/data/useMessageLoader';
 import { useCommunityMembersCount } from '@/hooks/useCommunityMembers';
+import { useCommunityMeta } from '@/hooks/useCommunityMeta';
 import {
   ChatInputArea,
   ChatInputAreaRef
@@ -109,6 +110,9 @@ function ChatContent() {
   // --- 群成员数量（实时从链上获取）---
   const { memberCount: realTimeMemberCount, isLoading: isMemberCountLoading } =
     useCommunityMembersCount(chatType === 'group' ? groupAddress : undefined);
+
+  // --- 群聊元信息（进入页面后从链上刷新）---
+  useCommunityMeta(chatType === 'group' ? groupAddress : undefined);
 
   // 使用实时成员数，如果加载中则使用 URL 参数的回退值
   const displayMemberCount =
