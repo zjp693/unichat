@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { useAccount, useChainId, useChains, usePublicClient } from 'wagmi';
@@ -49,7 +49,7 @@ import {
 import type { RootState } from '@/lib/store';
 import type { Message } from '@/lib/chat/types';
 
-export default function ChatPage() {
+function ChatContent() {
   const dispatch = useDispatch();
 
   // --- Redux State ---
@@ -490,6 +490,20 @@ export default function ChatPage() {
           );
         })()}
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col h-screen bg-gray-50 items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      }
+    >
+      <ChatContent />
+    </Suspense>
   );
 }
 
