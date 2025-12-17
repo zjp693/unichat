@@ -42,27 +42,33 @@ export const KeyManagementModal = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const prevIsOpenRef = useRef(false);
 
-  // 只在弹框首次打开时设置初始步骤和默认选择的密钥
+  // 只在弹框打开状态变化时设置初始步骤和默认选择的密钥
   useEffect(() => {
-    if (isOpen) {
+    // 只在从关闭变为打开时初始化
+    if (isOpen && !prevIsOpenRef.current) {
       const currentStep = keys.length > 0 ? 'select' : 'generate';
       setStep(currentStep);
 
-      // 如果有密钥且没有选中的密钥，默认选择第一个
-      if (keys.length > 0 && !selectedKeyId) {
+      // 如果有密钥，默认选择第一个
+      if (keys.length > 0) {
         setSelectedKeyId(keys[0].id);
       }
 
       // 每次打开弹窗时清空密码输入框
       setPrivateKeyInput('');
-    } else {
+    }
+
+    if (!isOpen && prevIsOpenRef.current) {
       // 关闭弹窗时重置所有状态
       setPrivateKeyInput('');
       setPasswordInput('');
       setIsDropdownOpen(false);
     }
-  }, [isOpen, keys, selectedKeyId]);
+
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, keys.length]);
 
   // 点击外部关闭下拉列表
   useEffect(() => {

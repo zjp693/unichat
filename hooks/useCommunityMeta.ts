@@ -1,6 +1,6 @@
 import { useReadContract } from 'wagmi';
 import { Address } from 'viem';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import communityFactoryABI from '@/contract/abi/CommunityFactory.json';
 import { FACTORY_ADDRESS } from '@/lib/viem';
@@ -22,6 +22,7 @@ interface CommunityMetadata {
  */
 export function useCommunityMeta(communityAddress?: string) {
   const dispatch = useDispatch();
+  const lastUpdatedAddressRef = useRef<string | null>(null);
 
   const { data, isLoading, error } = useReadContract({
     address: FACTORY_ADDRESS,
@@ -35,9 +36,14 @@ export function useCommunityMeta(communityAddress?: string) {
 
   const metadata = data as CommunityMetadata | undefined;
 
-  // 获取到数据后同步到 Redux
+  // 获取到数据后同步到 Redux（每个地址只更新一次）
   useEffect(() => {
-    if (metadata && communityAddress) {
+    if (
+      metadata &&
+      communityAddress &&
+      lastUpdatedAddressRef.current !== communityAddress
+    ) {
+      lastUpdatedAddressRef.current = communityAddress;
       dispatch(
         updateChatMeta({
           chatId: communityAddress,

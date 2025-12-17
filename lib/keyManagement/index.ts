@@ -20,7 +20,6 @@ export {
   deleteKey,
   setSelectedKey,
   clearError,
-  migrateKeys,
   clearWalletKeys
 } from './slice';
 
@@ -32,11 +31,3 @@ export {
   selectKeyManagementLoading,
   selectKeyManagementError
 } from './selectors';
-
-// ===== 迁移工具 =====
-export {
-  checkNeedsMigration,
-  getOldKeys,
-  clearOldKeys,
-  migrateOldKeys
-} from './migration';
