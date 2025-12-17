@@ -85,7 +85,7 @@ function ChatContent() {
 
   // --- 基础钩子 ---
   const router = useRouter();
-  const { keys, loadKeysFromStorage } = useKeyManagement();
+  const { keys } = useKeyManagement();
 
   // --- Wagmi 钩子 ---
   const { address: currentAddress } = useAccount();
@@ -234,11 +234,10 @@ function ChatContent() {
   });
 
   // --- Effects ---
-  // 加载密钥和初始化客户端状态
+  // 初始化客户端状态
   useEffect(() => {
-    loadKeysFromStorage();
     setIsClient(true);
-  }, [loadKeysFromStorage]);
+  }, []);
 
   // 组件卸载时清理状态（空依赖数组确保只在卸载时执行）
   useEffect(() => {

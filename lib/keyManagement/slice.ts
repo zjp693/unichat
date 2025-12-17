@@ -103,28 +103,6 @@ const keyManagementSlice = createSlice({
     },
 
     /**
-     * 迁移旧密钥数据到指定钱包
-     */
-    migrateKeys(
-      state,
-      action: PayloadAction<{ walletAddress: string; keys: KeyPair[] }>
-    ) {
-      const { walletAddress, keys } = action.payload;
-      if (!walletAddress || !keys.length) return;
-
-      if (!state.keysByWallet[walletAddress]) {
-        state.keysByWallet[walletAddress] = [];
-      }
-
-      // 合并密钥，避免重复（按 id 去重）
-      const existingIds = new Set(
-        state.keysByWallet[walletAddress].map((k) => k.id)
-      );
-      const newKeys = keys.filter((k) => !existingIds.has(k.id));
-      state.keysByWallet[walletAddress].push(...newKeys);
-    },
-
-    /**
      * 清除指定钱包的所有密钥
      */
     clearWalletKeys(state, action: PayloadAction<string>) {
@@ -162,7 +140,6 @@ export const {
   deleteKey,
   setSelectedKey,
   clearError,
-  migrateKeys,
   clearWalletKeys
 } = keyManagementSlice.actions;
 
