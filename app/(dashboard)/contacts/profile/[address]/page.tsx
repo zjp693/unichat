@@ -109,18 +109,20 @@ export default function ContactProfilePage() {
                 {displayName}
               </h2>
             )}
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-[#909399] break-all font-mono leading-relaxed">
-                {address}
-              </span>
-              <button onClick={copyAddress} className="flex-shrink-0 p-0.5">
+            {/* 地址 + 复制按钮 inline 布局 */}
+            <p className="text-xs text-[#909399] break-all font-mono leading-relaxed">
+              {address}
+              <button
+                onClick={copyAddress}
+                className="inline-flex items-center align-middle ml-1 p-0.5"
+              >
                 <img
                   src="/contacts/copy.svg"
                   alt="复制"
                   className="w-3.5 h-3.5 object-cover opacity-60"
                 />
               </button>
-            </div>
+            </p>
           </div>
         </div>
       </div>

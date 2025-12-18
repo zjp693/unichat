@@ -68,34 +68,58 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 1. 查询用户的 proof 数据
-    const userProofs = await getUserProofs(address);
+    // 1. 获取所有群聊列表（从 Factory 合约）
+    const allCommunitiesResponse = await fetch(
+      `${request.nextUrl.origin}/api/communities/list`
+    );
+    const allCommunitiesResult = await allCommunitiesResponse.json();
 
-    if (userProofs.length === 0) {
+    if (
+      !allCommunitiesResult.success ||
+      !allCommunitiesResult.data?.communities
+    ) {
+      console.error('❌ 获取群聊列表失败');
       return NextResponse.json({
         success: true,
         data: { communities: [] }
       });
     }
 
-    // 2. 批量处理每个群聊的状态
-    const statusPromises = userProofs.map(async (proof) => {
-      const parsedProof = parseProof(proof.proof);
-      const isJoined = await checkMembership(proof.community, address);
+    const allCommunities = allCommunitiesResult.data.communities;
+
+    // 2. 查询用户的 proof 数据（用于判断 canJoin）
+    const userProofs = await getUserProofs(address);
+
+    // 3. 并发查询所有群聊的状态
+    const statusPromises = allCommunities.map(async (community: any) => {
+      // 查数据库：用户是否有这个群聊的 proof？
+      const proof = userProofs.find(
+        (p) =>
+          p.community.toLowerCase() === community.communityAddress.toLowerCase()
+      );
+      const parsedProof = proof ? parseProof(proof.proof) : [];
       const hasValidProof = parsedProof.length > 0;
 
+      // ✅ 查链上：用户是否已加入？（不管有没有 proof 都查）
+      const isJoined = await checkMembership(
+        community.communityAddress,
+        address
+      );
+
       return {
-        communityAddress: proof.community,
+        communityAddress: community.communityAddress,
         canJoin: hasValidProof,
         isJoined,
-        proofData: {
-          maxTier: proof.max_tier,
-          epoch: proof.epoch,
-          validUntil: proof.valid_until,
-          nonce: proof.nonce,
-          proof: parsedProof,
-          leafHash: proof.leaf_hash
-        }
+        proofData: proof
+          ? {
+              maxTier: proof.max_tier,
+              epoch: proof.epoch,
+              validUntil: proof.valid_until,
+              nonce: proof.nonce,
+              proof: parsedProof,
+              leafHash: proof.leaf_hash
+            }
+          : undefined
       };
     });
 
