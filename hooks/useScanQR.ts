@@ -66,7 +66,11 @@ export function useScanQR() {
         { facingMode: 'environment' },
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 },
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const boxSize = Math.floor(minEdge * 0.7);
+            return { width: boxSize, height: boxSize };
+          },
           aspectRatio: 1.0
         },
         handleScanSuccess,

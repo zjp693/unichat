@@ -1,7 +1,6 @@
 'use client';
 
 import { PageHeader } from '@/components/ui/page-header';
-import { ScanBox } from '@/components/scan/ScanBox';
 import { ScanToolbar } from '@/components/scan/ScanToolbar';
 import { ScanErrorOverlay } from '@/components/scan/ScanErrorOverlay';
 import { useScanQR } from '@/hooks/useScanQR';
@@ -52,9 +51,6 @@ export default function ScanPage() {
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
         {/* 遮罩 */}
         <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px]" />
-
-        {/* 扫描框 */}
-        <ScanBox isScanning={isScanning} />
 
         {/* 提示文字 */}
         <p className="mt-8 text-white/80 text-sm font-medium tracking-wide drop-shadow-md">
