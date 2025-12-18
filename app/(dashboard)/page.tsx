@@ -5,6 +5,7 @@ import { useAccount } from 'wagmi';
 import { Address } from 'viem';
 import { ChatNavbar } from '@/components/ui/chat-navbar';
 import { ChatListItem } from '@/components/chat/ChatListItem';
+import { ChatListSkeleton } from '@/components/chat/ChatListSkeleton';
 import { NewUserSetupModal } from '@/components/profile/NewUserSetupModal';
 import { useToast } from '@/hooks/use-toast';
 import { useGetPeersOf } from '@/lib/DirectMessageAbi';
@@ -107,11 +108,8 @@ export default function ChatPage() {
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
           </div>
-        ) : (isPeersLoading || isCommunitiesLoading) &&
-          allChats.length === 0 ? (
-          <div className="flex items-center justify-center h-full min-h-[400px]">
-            <p className="text-sm text-gray-400">加载中...</p>
-          </div>
+        ) : isPeersLoading || isCommunitiesLoading ? (
+          <ChatListSkeleton count={5} />
         ) : allChats.length === 0 ? (
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">暂无聊天记录</p>
