@@ -6,9 +6,13 @@ import { Search, X, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { TopNavbar } from '@/components/ui/top-navbar';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 import Image from 'next/image';
+import { Address } from 'viem';
 import { useSearchHistory } from '@/hooks/useSearchHistory';
+import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import type { SearchHistoryItem } from '@/lib/searchHistorySlice';
 
 export default function SearchPage() {
@@ -53,7 +57,7 @@ export default function SearchPage() {
       // 延迟一下模拟搜索效果
       const timer = setTimeout(() => {
         setSearchResult({
-          name: 'test-James',
+          name: `${searchTerm.slice(0, 6)}...${searchTerm.slice(-4)}`,
           address: searchTerm,
           avatar: '/me/me2.png'
         });
@@ -97,6 +101,13 @@ export default function SearchPage() {
     }
   };
 
+  // 获取搜索结果用户的 Profile（头像和昵称）
+  const {
+    avatarCid,
+    name: profileName,
+    isLoading: isLoadingProfile
+  } = usePeerAvatar(searchResult?.address as Address);
+
   // 点击搜索结果，跳转到聊天页
   const handleResultClick = () => {
     if (!searchResult) return;
@@ -116,18 +127,18 @@ export default function SearchPage() {
       <TopNavbar />
 
       {/* 搜索栏 */}
-      <div className="flex items-center  px-2 py-3 bg-white border-gray-200">
-        <Button
-          variant="ghost"
-          className="h-8 w-8 p-0 hover:bg-[transparent]"
+      <div className="flex items-center gap-2 px-3 py-3 bg-white border-gray-200">
+        <button
           onClick={() => router.back()}
+          aria-label="返回"
+          className="flex items-center active:scale-95 transition-transform"
         >
           <img
             src="/contacts/arrow_left.png"
             alt="返回"
-            className="h-4 object-cover"
+            className="h-4 w-4 object-contain"
           />
-        </Button>
+        </button>
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
           <Input
@@ -156,7 +167,7 @@ export default function SearchPage() {
         {!searchTerm ? (
           /* 搜索历史 */
           displayedHistory.length > 0 ? (
-            <div className="px-4 py-4">
+            <div className="px-4 pb-4">
               {/* 标题栏 */}
               <div className="flex items-center justify-between pb-1.5 mb-3 border-b">
                 <h3 className="text-sm text-gray-500">最近在搜</h3>
@@ -221,7 +232,7 @@ export default function SearchPage() {
         ) : (
           /* 搜索结果 */
           searchResult && (
-            <div className="px-4 py-4">
+            <div className="px-4 pb-4">
               {/* 分类标题 */}
               <h3 className="text-sm  py-3 font-medium text-gray-600 mb-2 border-b">
                 联系人
@@ -232,23 +243,40 @@ export default function SearchPage() {
                 className="flex items-center pt-2 bg-white cursor-pointer rounded-lg transition-colors"
                 onClick={handleResultClick}
               >
-                <div className="h-12 w-12 rounded-sm overflow-hidden border border-gray-200 flex-shrink-0">
-                  <Image
-                    src={searchResult.avatar}
-                    alt={searchResult.name}
-                    width={48}
-                    height={48}
-                    className="h-full w-full object-cover"
-                  />
+                {/* 头像容器 */}
+                <div className="h-14 w-14 rounded-sm overflow-hidden flex-shrink-0">
+                  {isLoadingProfile ? (
+                    <Skeleton className="h-full w-full" />
+                  ) : (
+                    <IPFSImg
+                      src={avatarCid}
+                      fallbackSrc="/me/me2.png"
+                      alt={profileName || searchResult.name}
+                      className="h-full w-full object-cover"
+                      width={56}
+                      height={56}
+                      enableLogging={true}
+                      maxRetries={5}
+                    />
+                  )}
                 </div>
 
                 <div className="flex-1 ml-3 min-w-0">
-                  <h3 className="font-medium text-sm mb-1">
-                    {searchResult.name}
-                  </h3>
-                  <p className="text-xs text-gray-500 truncate">
-                    {searchResult.address}
-                  </p>
+                  {isLoadingProfile ? (
+                    <>
+                      <Skeleton className="h-4 w-24 mb-2" />
+                      <Skeleton className="h-3 w-32" />
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="font-medium text-base mb-2">
+                        {profileName || searchResult.name}
+                      </h3>
+                      <p className="text-xs text-gray-500 font-mono">
+                        {searchResult.address}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

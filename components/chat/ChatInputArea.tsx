@@ -10,6 +10,14 @@ import { Button } from '@/components/ui/button';
 import { FOOTER_HEIGHT } from '@/lib/chat/constants';
 import { setIsActionsOpen } from '@/lib/chatSlice';
 
+// 检测是否为移动设备
+const isMobileDevice = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+};
+
 export interface ChatInputAreaRef {
   setValue: (value: string) => void;
 }
@@ -84,14 +92,19 @@ export const ChatInputArea = forwardRef<ChatInputAreaRef, ChatInputAreaProps>(
           onChange={(e) => setInputMessage(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              onSend();
+              // PC端：Enter发送消息
+              // 移动端：Enter换行（不阻止默认行为）
+              if (!isMobileDevice()) {
+                e.preventDefault();
+                onSend();
+              }
+              // 移动端：不preventDefault，让Enter正常换行
             } else {
               handleKeyDown(e);
             }
           }}
           onClick={() => dispatch(setIsActionsOpen(false))}
-          enterKeyHint="send"
+          enterKeyHint="enter"
           placeholder=""
           className="flex-1 bg-white border-none rounded-sm px-1 py-2 text-base focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none resize-none"
           style={{
