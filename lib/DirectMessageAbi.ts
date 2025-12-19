@@ -63,7 +63,10 @@ export function useGetMessageCount(
           ? options.query.enabled
           : true) &&
         !!addressA &&
-        !!addressB
+        !!addressB,
+      staleTime: 1000 * 30, // 30秒内数据视为新鲜
+      gcTime: 1000 * 60 * 5, // 5分钟后垃圾回收
+      refetchOnWindowFocus: false // 禁用窗口聚焦刷新
     }
   });
 }
@@ -90,7 +93,11 @@ export function useGetMessages(
     query: {
       // 只有当所有参数都有效时才启用查询
       enabled:
-        !!addressA && !!addressB && start !== undefined && count !== undefined
+        !!addressA && !!addressB && start !== undefined && count !== undefined,
+      staleTime: 1000 * 60 * 2, // 2分钟内数据视为新鲜
+      gcTime: 1000 * 60 * 10, // 10分钟后垃圾回收
+      refetchOnWindowFocus: false, // 禁用窗口聚焦刷新
+      refetchOnReconnect: false // 禁用重连刷新
     }
   });
 }

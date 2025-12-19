@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { publicClient } from '@/lib/viem';
 import { getUserProofs } from '@/lib/db';
+import {
+  getCommunityList,
+  CommunityMetadata
+} from '@/lib/communities/getCommunityList';
 import communityABI from '@/contract/abi/community.json';
 import { Abi } from 'viem';
 
@@ -8,26 +12,19 @@ export const dynamic = 'force-dynamic';
 
 /**
  * 解析 proof 字段
- * 数据库格式: [0xabc...,0xdef...] (字符串，缺少引号)
- * 目标格式: ["0xabc...","0xdef..."] (JSON 数组)
  */
 function parseProof(proofData: string | any[]): string[] {
   try {
-    // 如果已经是数组，直接返回
     if (Array.isArray(proofData)) {
       return proofData;
     }
-
-    // 如果是字符串，修复格式并解析
     if (typeof proofData === 'string') {
       const fixed = proofData
         .replace(/\[/g, '["')
         .replace(/\]/g, '"]')
         .replace(/,/g, '","');
-
       return JSON.parse(fixed);
     }
-
     return [];
   } catch (error) {
     console.error('❌ Proof 解析失败:', error);
@@ -36,24 +33,45 @@ function parseProof(proofData: string | any[]): string[] {
 }
 
 /**
- * 检查用户是否已加入群聊
+ * 批量检查用户是否已加入多个群聊（使用 multicall）
  */
-async function checkMembership(
-  communityAddress: string,
+async function batchCheckMembership(
+  communities: CommunityMetadata[],
   userAddress: string
-): Promise<boolean> {
+): Promise<Map<string, boolean>> {
+  const resultMap = new Map<string, boolean>();
+
+  if (communities.length === 0) {
+    return resultMap;
+  }
+
   try {
-    const isJoined = await publicClient.readContract({
-      address: communityAddress as `0x${string}`,
+    // 构建 multicall 请求
+    const calls = communities.map((community) => ({
+      address: community.communityAddress as `0x${string}`,
       abi: communityABI.abi as Abi,
       functionName: 'isActiveMember',
       args: [userAddress as `0x${string}`]
+    }));
+
+    // 使用 multicall 批量调用
+    const results = await publicClient.multicall({
+      contracts: calls
     });
-    return Boolean(isJoined);
+
+    // 解析结果
+    communities.forEach((community, index) => {
+      const result = results[index];
+      const isJoined =
+        result.status === 'success' ? Boolean(result.result) : false;
+      resultMap.set(community.communityAddress.toLowerCase(), isJoined);
+    });
   } catch (error) {
-    console.error(`❌ 检查群聊 ${communityAddress} 成员状态失败:`, error);
-    return false;
+    console.error('❌ 批量检查成员状态失败:', error);
+    // 失败时返回空 map，所有群聊默认未加入
   }
+
+  return resultMap;
 }
 
 export async function GET(request: NextRequest) {
@@ -68,31 +86,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 1. 获取所有群聊列表（从 Factory 合约）
-    const allCommunitiesResponse = await fetch(
-      `${request.nextUrl.origin}/api/communities/list`
-    );
-    const allCommunitiesResult = await allCommunitiesResponse.json();
+    // 1. 获取群聊列表
+    const { communities: allCommunities } = await getCommunityList();
 
-    if (
-      !allCommunitiesResult.success ||
-      !allCommunitiesResult.data?.communities
-    ) {
-      console.error('❌ 获取群聊列表失败');
+    if (!allCommunities.length) {
       return NextResponse.json({
         success: true,
         data: { communities: [] }
       });
     }
 
-    const allCommunities = allCommunitiesResult.data.communities;
+    // 2. 并行执行：查询 proof + 批量检查成员状态
+    const [userProofs, membershipMap] = await Promise.all([
+      getUserProofs(address),
+      batchCheckMembership(allCommunities, address)
+    ]);
 
-    // 2. 查询用户的 proof 数据（用于判断 canJoin）
-    const userProofs = await getUserProofs(address);
-
-    // 3. 并发查询所有群聊的状态
-    const statusPromises = allCommunities.map(async (community: any) => {
-      // 查数据库：用户是否有这个群聊的 proof？
+    // 3. 组装结果
+    const communities = allCommunities.map((community) => {
       const proof = userProofs.find(
         (p) =>
           p.community.toLowerCase() === community.communityAddress.toLowerCase()
@@ -100,14 +111,11 @@ export async function GET(request: NextRequest) {
       const parsedProof = proof ? parseProof(proof.proof) : [];
       const hasValidProof = parsedProof.length > 0;
 
-      // ✅ 查链上：用户是否已加入？（不管有没有 proof 都查）
-      const isJoined = await checkMembership(
-        community.communityAddress,
-        address
-      );
+      const isJoined =
+        membershipMap.get(community.communityAddress.toLowerCase()) || false;
 
       return {
-        communityAddress: community.communityAddress,
+        ...community,
         canJoin: hasValidProof,
         isJoined,
         proofData: proof
@@ -122,8 +130,6 @@ export async function GET(request: NextRequest) {
           : undefined
       };
     });
-
-    const communities = await Promise.all(statusPromises);
 
     return NextResponse.json({
       success: true,
