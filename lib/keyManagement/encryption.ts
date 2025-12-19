@@ -87,7 +87,7 @@ export class ChatEncryption {
         throw new Error('公钥无效');
       }
 
-      const MAX_MESSAGE_LENGTH = 10000;
+      const MAX_MESSAGE_LENGTH = 230;
       let processedMessage = message;
 
       if (message.length > MAX_MESSAGE_LENGTH) {
@@ -146,7 +146,7 @@ export class ChatEncryption {
         throw new Error('接收者公钥无效');
       }
 
-      const MAX_MESSAGE_LENGTH = 10000;
+      const MAX_MESSAGE_LENGTH = 300;
       let processedMessage = message;
 
       if (message.length > MAX_MESSAGE_LENGTH) {

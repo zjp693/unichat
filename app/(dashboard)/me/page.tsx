@@ -8,6 +8,7 @@ import { useAccount, useEnsName } from 'wagmi';
 import { useToast } from '@/hooks/use-toast';
 import { useUserProfiles, useProfile } from '@/hooks/useProfileCheck';
 import { IPFSImg } from '@/components/ui/ipfs-img';
+import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 
 interface MenuItem {
   id: string;
@@ -136,30 +137,8 @@ export default function MePage() {
   return (
     <div className="flex flex-col h-full ">
       {/* 顶部导航栏 */}
-      <div className="flex justify-evenly items-center p-4 bg-white">
-        {/* <Button variant="outline" className="px-4 py-1 text-sm">
-          <Image
-            src="/top/bnb.png"
-            alt="usa"
-            className="object-cover mr-1"
-            width={19}
-            height={19}
-          />
-          BNB Chain
-        </Button> */}
-        <appkit-button />
-        <Button variant="outline" className="flex items-center space-x-1">
-          <div className="inline-block align-middle mr-1 w-4 h-4 rounded-full overflow-hidden">
-            <Image
-              src="/top/usa.png"
-              alt="usa"
-              className="w-full h-full object-cover"
-              width={20}
-              height={20}
-            />
-          </div>
-          <span className="text-sm">USA</span>
-        </Button>
+      <div className="flex items-center py-4 px-4 bg-white">
+        <ChainSelectorDropdown />
       </div>
       {/* <div className="p-4 border-b bg-white">
         <ChevronLeft className="h-5 w-5 text-xl" />

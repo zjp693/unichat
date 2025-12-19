@@ -18,41 +18,49 @@ import { useChatTimestamp } from '@/hooks/useChatTimestamp';
 import { useCountReceivedTodayBetween } from '@/lib/DirectMessageAbi';
 import { setChatMeta } from '@/lib/chatMetaSlice';
 import type { ChatItem } from '@/lib/types/chat';
+import type { ProfileView } from '@/lib/UniChatProfileAbi';
 
 interface ChatListItemProps {
   chat: ChatItem;
   currentAddress?: Address;
   onJoinSuccess?: () => void;
+  peerProfile?: ProfileView; // 批量预获取的 Profile（可选）
 }
 
 export function ChatListItem({
   chat,
   currentAddress,
-  onJoinSuccess
+  onJoinSuccess,
+  peerProfile
 }: ChatListItemProps) {
   const router = useRouter();
   const dispatch = useDispatch();
   const { toast } = useToast();
   const { joinCommunity, isJoining } = useJoinCommunity();
 
-  // 获取对方 Profile（仅私聊）
-  const { profile, isLoading: isLoadingProfile } = usePeerProfile(
-    !chat.isGroup ? (chat.id as Address) : undefined
-  );
+  // 获取对方 Profile（仅私聊且没有传入 peerProfile 时才查询）
+  const { profile: fallbackProfile, isLoading: isFallbackLoading } =
+    usePeerProfile(
+      !chat.isGroup && !peerProfile ? (chat.id as Address) : undefined
+    );
+
+  // 优先使用传入的 peerProfile，否则使用回退查询的结果
+  const profile = peerProfile || fallbackProfile;
+  const isLoadingProfile = !peerProfile && isFallbackLoading;
 
   // 提取头像 CID 和名称
   const avatarCid = useMemo(() => {
     if (chat.isGroup) {
       return chat.avatar || '';
     }
-    return (profile as any)?.avatarCid || '';
+    return profile?.avatarCid || '';
   }, [chat.isGroup, chat.avatar, profile]);
 
   const displayName = useMemo(() => {
     if (chat.isGroup) {
       return chat.name;
     }
-    return (profile as any)?.name || chat.name;
+    return profile?.name || chat.name;
   }, [chat.isGroup, chat.name, profile]);
 
   // 获取群聊消息总数（只有已加入的群聊才获取）

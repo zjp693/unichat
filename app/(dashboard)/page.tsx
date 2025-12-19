@@ -13,6 +13,7 @@ import { useChatListSync } from '@/hooks/useChatListSync';
 import { useCommunitiesWithStatus } from '@/hooks/useCommunities';
 import { useProfileCheck } from '@/hooks/useProfileCheck';
 import { useSortedChats } from '@/hooks/useSortedChats';
+import { useBatchPeerProfiles } from '@/hooks/useBatchPeerProfiles';
 import { convertCommunityToChat } from '@/lib/chat/utils';
 import type { ChatItem } from '@/lib/types/chat';
 
@@ -92,6 +93,12 @@ export default function ChatPage() {
   // 使用 useSortedChats 按最后消息时间排序
   const allChats = useSortedChats(allChatsRaw);
 
+  // 批量获取所有私聊的 Profile（P0 优化：减少 RPC 调用）
+  const privateChatAddresses = useMemo(() => {
+    return privateChats.map((chat) => chat.id as Address);
+  }, [privateChats]);
+  const { profileMap } = useBatchPeerProfiles(privateChatAddresses);
+
   return (
     <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
@@ -122,6 +129,11 @@ export default function ChatPage() {
                 chat={chat}
                 currentAddress={currentAddress}
                 onJoinSuccess={refetchCommunities}
+                peerProfile={
+                  chat.isGroup
+                    ? undefined
+                    : profileMap.get(chat.id.toLowerCase())
+                }
               />
             ))}
           </div>

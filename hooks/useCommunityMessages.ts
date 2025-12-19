@@ -30,7 +30,10 @@ export function useCommunityMessages(
     abi: communityABI.abi as Abi,
     functionName: 'communityMessageCount',
     query: {
-      enabled: enabled && !!communityAddress
+      enabled: enabled && !!communityAddress,
+      staleTime: 1000 * 30, // 30秒内数据视为新鲜
+      gcTime: 1000 * 60 * 5, // 5分钟后垃圾回收
+      refetchOnWindowFocus: false // 禁用窗口聚焦刷新
     }
   });
 
@@ -60,7 +63,11 @@ export function useCommunityMessages(
     functionName: 'getPlaintextMessages',
     args: [BigInt(start), BigInt(count)],
     query: {
-      enabled: enabled && !!communityAddress && count > 0
+      enabled: enabled && !!communityAddress && count > 0,
+      staleTime: 1000 * 60 * 2, // 2分钟内数据视为新鲜
+      gcTime: 1000 * 60 * 10, // 10分钟后垃圾回收
+      refetchOnWindowFocus: false, // 禁用窗口聚焦刷新
+      refetchOnReconnect: false // 禁用重连刷新
     }
   });
 

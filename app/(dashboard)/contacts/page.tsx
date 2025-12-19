@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useReadContract, useAccount } from 'wagmi';
-import { TopNavbar } from '@/components/ui/top-navbar';
+import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 import {
   Contact,
   prepareGetByAddressCall,
@@ -380,12 +380,14 @@ export default function ContactsPage() {
   return (
     <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
-      <TopNavbar className="flex-shrink-0" />
+      <div className="flex items-center py-4 px-4 bg-white">
+        <ChainSelectorDropdown />
+      </div>
 
       {/* 标题 */}
-      <div className="px-4 py-2 bg-white flex-shrink-0">
+      {/* <div className="px-4 py-2 bg-white flex-shrink-0">
         <h1 className="text-base font-medium text-center">通讯录</h1>
-      </div>
+      </div> */}
 
       {/* 搜索栏  */}
       <div className="px-4 py-3 bg-white flex-shrink-0">

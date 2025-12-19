@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 import {
   Search,
   CirclePlus,
@@ -59,7 +60,14 @@ const discoverItems: DiscoverItem[] = [
     id: 'unishop.ai',
     title: 'UNISHOP.AI',
     subtitle: 'back',
-    icon: <Image src="/discover/unishop.png" alt="unishop.ai" width={30} height={30} />,
+    icon: (
+      <Image
+        src="/discover/unishop.png"
+        alt="unishop.ai"
+        width={30}
+        height={30}
+      />
+    ),
     type: 'group'
     // badgeCount: 1
   },
@@ -71,7 +79,9 @@ const discoverItems: DiscoverItem[] = [
   {
     id: 'exchange',
     title: 'Uniswap.org exchange',
-    icon: <Image src="/discover/uniswap.png" alt="uniswap" width={30} height={30} />,
+    icon: (
+      <Image src="/discover/uniswap.png" alt="uniswap" width={30} height={30} />
+    ),
     type: 'group'
   },
   {
@@ -120,30 +130,8 @@ export default function DiscoverPage() {
   return (
     <div className="flex flex-col h-full">
       {/* 顶部导航 */}
-      <div className="flex justify-evenly items-center p-4 bg-white">
-        {/* <Button variant="outline" className="px-4 py-1 text-sm">
-          <Image
-            src="/top/bnb.png"
-            alt="usa"
-            className="object-cover mr-1"
-            width={19}
-            height={19}
-          />
-          BNB Chain
-        </Button> */}
-        <appkit-button/>
-        <Button variant="outline" className="flex items-center space-x-1">
-          <div className="inline-block align-middle mr-1 w-4 h-4 rounded-full overflow-hidden">
-            <Image
-              src="/top/usa.png"
-              alt="usa"
-              className="w-full h-full object-cover"
-              width={20}
-              height={20}
-            />
-          </div>
-          <span className="text-sm">USA</span>
-        </Button>
+      <div className="flex items-center py-4 px-4 bg-white">
+        <ChainSelectorDropdown />
       </div>
 
       {/* 搜索栏 */}
@@ -163,7 +151,7 @@ export default function DiscoverPage() {
             key={item.id}
             className={`overflow-hidden bg-white ${item.type && 'mb-2'}`}
           >
-            <div 
+            <div
               className="flex relative items-center h-[50px] px-4 cursor-pointer hover:bg-gray-50"
               onClick={() => handleItemClick(item)}
             >
