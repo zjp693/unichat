@@ -49,11 +49,11 @@ export default function ScanPage() {
 
       {/* 遮罩层 UI */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
-        {/* 遮罩 */}
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px]" />
+        {/* 透明占位框：将文字挤到扫描区域下方，大小与扫描框保持一致 */}
+        <div className="w-[70vw] h-[70vw] max-w-[300px] max-h-[300px] sm:w-[320px] sm:h-[320px]" />
 
         {/* 提示文字 */}
-        <p className="mt-8 text-white/80 text-sm font-medium tracking-wide drop-shadow-md">
+        <p className="mt-8 text-white/90 text-sm font-medium tracking-wide drop-shadow-md bg-black/20 px-4 py-1 rounded-full backdrop-blur-sm">
           {isProcessing ? '正在识别图片...' : '将二维码放入框内，即可自动扫描'}
         </p>
 
