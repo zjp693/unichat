@@ -57,7 +57,21 @@ export function parseQRCode(content: string): QRCodeData {
     }
   }
 
-  // 2. 无法识别
+  // 2. 尝试提取纯地址或其他钱包格式（兼容 TP、Bitget 等钱包）
+  // 匹配完整的 42 位以太坊地址（0x + 40位十六进制 = 42位）
+  const addressMatch = trimmedContent.match(/\b0x[a-fA-F0-9]{40}\b/);
+  if (addressMatch) {
+    const extractedAddress = addressMatch[0];
+    if (isValidEthereumAddress(extractedAddress)) {
+      return {
+        type: 'user',
+        address: extractedAddress,
+        raw: trimmedContent
+      };
+    }
+  }
+
+  // 3. 无法识别
   return { type: 'unknown', raw: trimmedContent };
 }
 
