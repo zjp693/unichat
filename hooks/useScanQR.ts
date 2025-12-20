@@ -26,30 +26,25 @@ export function useScanQR() {
     if (navigator.vibrate) navigator.vibrate(50);
     stopScanning();
 
-    setTotalAttempts((prev) => {
-      const newCount = prev + 1;
-      try {
-        const data = parseQRCode(decodedText);
-        if (data.type === 'user' && data.address) {
-          toast({
-            title: `扫描成功 (${newCount} 次)`,
-            description: `已识别用户地址 ${data.address}`,
-            variant: 'default'
-          });
-          router.push(`/contacts/profile/${data.address}`);
-        } else {
-          throw new Error('无效的二维码类型');
-        }
-      } catch (err) {
+    try {
+      const data = parseQRCode(decodedText);
+      if (data.type === 'user' && data.address) {
         toast({
-          title: `识别失败 (${newCount} 次)`,
-          description: '请扫描有效的 UniChat 用户二维码',
-          variant: 'destructive'
+          title: '扫描成功',
+          variant: 'default'
         });
-        setTimeout(() => startScanning(), 1000);
+        router.push(`/contacts/profile/${data.address}`);
+      } else {
+        throw new Error('无效的二维码类型');
       }
-      return newCount;
-    });
+    } catch (err) {
+      toast({
+        title: '识别失败',
+        description: '未识别到有效的钱包地址，请扫描包含以太坊地址的二维码',
+        variant: 'destructive'
+      });
+      setTimeout(() => startScanning(), 1000);
+    }
   };
 
   // 启动扫描并处理权限错误
