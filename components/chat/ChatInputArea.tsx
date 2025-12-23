@@ -5,10 +5,16 @@ import React, {
   useEffect
 } from 'react';
 import Image from 'next/image';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { useDebounce } from 'ahooks';
 import { Button } from '@/components/ui/button';
 import { FOOTER_HEIGHT } from '@/lib/chat/constants';
-import { setIsActionsOpen } from '@/lib/chatSlice';
+import {
+  setIsActionsOpen,
+  setDraftInput,
+  clearDraftInput
+} from '@/lib/chatSlice';
+import type { RootState } from '@/lib/store';
 
 // 检测是否为移动设备
 const isMobileDevice = (): boolean => {
@@ -23,6 +29,7 @@ export interface ChatInputAreaRef {
 }
 
 interface ChatInputAreaProps {
+  conversationId: string;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleSendMessage: (content: string) => void;
@@ -38,10 +45,38 @@ const MIN_HEIGHT = LINE_HEIGHT * MIN_ROWS + PADDING; // 40px
 const MAX_HEIGHT = LINE_HEIGHT * MAX_ROWS + PADDING; // 160px
 
 export const ChatInputArea = forwardRef<ChatInputAreaRef, ChatInputAreaProps>(
-  ({ inputRef, handleKeyDown, handleSendMessage, handleOpenActions }, ref) => {
+  (
+    {
+      conversationId,
+      inputRef,
+      handleKeyDown,
+      handleSendMessage,
+      handleOpenActions
+    },
+    ref
+  ) => {
     const dispatch = useDispatch();
-    const [inputMessage, setInputMessage] = useState('');
+
+    // 从 Redux 读取草稿
+    const draftContent = useSelector(
+      (state: RootState) => state.chat.draftInputs[conversationId] || ''
+    );
+
+    const [inputMessage, setInputMessage] = useState(draftContent);
     const [textareaHeight, setTextareaHeight] = useState(MIN_HEIGHT);
+
+    // 使用 ahooks 的 useDebounce（300ms）
+    const debouncedInput = useDebounce(inputMessage, { wait: 300 });
+
+    // Effect 1: conversationId 切换时恢复草稿
+    useEffect(() => {
+      setInputMessage(draftContent);
+    }, [conversationId]);
+
+    // Effect 2: 防抖后的值变化时保存到 Redux
+    useEffect(() => {
+      dispatch(setDraftInput({ conversationId, content: debouncedInput }));
+    }, [debouncedInput, conversationId, dispatch]);
 
     useImperativeHandle(ref, () => ({
       setValue: (value: string) => {
@@ -74,6 +109,8 @@ export const ChatInputArea = forwardRef<ChatInputAreaRef, ChatInputAreaProps>(
       setInputMessage('');
       // 重置高度为最小值
       setTextareaHeight(MIN_HEIGHT);
+      // 清除草稿
+      dispatch(clearDraftInput(conversationId));
     };
 
     return (

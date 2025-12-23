@@ -310,6 +310,7 @@ function ChatContent() {
         >
           <ChatInputArea
             ref={chatInputAreaRef}
+            conversationId={conversationId as string}
             inputRef={inputRef}
             handleKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {

@@ -21,10 +21,17 @@ const persistConfig = {
   whitelist: ['searchHistory', 'keyManagement', 'chatMeta'] // 持久化搜索历史、密钥管理和聊天元信息
 };
 
+// Chat Slice 嵌套持久化配置（只持久化必要字段）
+const chatPersistConfig = {
+  key: 'unichat-chat',
+  storage,
+  whitelist: ['draftInputs', 'timestampMap', 'selectedCelebrityByWallet']
+};
+
 const rootReducer = combineReducers({
   keyManagement: keyManagementReducer,
   searchHistory: searchHistoryReducer,
-  chat: chatReducer,
+  chat: persistReducer(chatPersistConfig, chatReducer), // 应用嵌套持久化
   chatMeta: chatMetaReducer
 });
 
