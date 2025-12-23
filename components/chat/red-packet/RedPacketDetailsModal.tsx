@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import * as React from 'react';
 import {
@@ -11,8 +11,16 @@ import { ChevronLeft } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { useReadContract, useAccount } from 'wagmi';
-import { RedPacketAbi, RED_PACKET_CONTRACT_ADDRESS } from '@/lib/RedPacketAbi';
+import {
+  useReadContract,
+  useAccount,
+  useWaitForTransactionReceipt
+} from 'wagmi';
+import {
+  RedPacketAbi,
+  RED_PACKET_CONTRACT_ADDRESS,
+  useRefundExpiredPacket
+} from '@/lib/RedPacketAbi';
 import { formatUnits, erc20Abi, getAddress } from 'viem';
 import { FormattedAmount } from './utils';
 import { ClaimerAvatar, ClaimerName } from './ClaimerInfo';
@@ -56,6 +64,15 @@ export function RedPacketDetailsModal({
 }: RedPacketDetailsModalProps) {
   const { toast } = useToast();
   const { address: currentAddress } = useAccount();
+
+  // 退款相关
+  const { writeContractAsync: refundPacket } = useRefundExpiredPacket();
+  const [txHash, setTxHash] = React.useState<`0x${string}` | undefined>();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    useWaitForTransactionReceipt({
+      hash: txHash
+    });
+  const [isRefunding, setIsRefunding] = React.useState(false);
 
   // 1. 获取红包基本信息
   const { data: packet, refetch: refetchPacket } = useReadContract({
@@ -207,6 +224,70 @@ export function RedPacketDetailsModal({
       variant: 'success'
     });
   };
+
+  // 处理退款
+  const handleRefund = async () => {
+    if (!packetId || isRefunding || isConfirming) return;
+
+    try {
+      setIsRefunding(true);
+
+      const hash = await refundPacket({
+        address: RED_PACKET_CONTRACT_ADDRESS,
+        abi: RedPacketAbi,
+        functionName: 'refundExpiredPacket',
+        args: [BigInt(packetId)]
+      });
+
+      setTxHash(hash);
+
+      toast({
+        title: '交易已提交',
+        description: '等待区块链确认...',
+        variant: 'default'
+      });
+    } catch (error: any) {
+      console.warn('退款失败:', error);
+
+      const errorMsg = error.message?.toLowerCase() || '';
+      if (
+        errorMsg.includes('user rejected') ||
+        errorMsg.includes('user denied') ||
+        errorMsg.includes('cancelled')
+      ) {
+        console.log('👤 用户取消了退款');
+        toast({
+          title: '已取消',
+          description: '您已取消退款操作',
+          variant: 'default'
+        });
+        setIsRefunding(false);
+        return;
+      }
+
+      toast({
+        title: '退款失败',
+        description: error.shortMessage || '请稍后重试',
+        variant: 'destructive'
+      });
+      setIsRefunding(false);
+    }
+  };
+
+  // 交易确认后刷新数据
+  React.useEffect(() => {
+    if (isConfirmed && txHash) {
+      toast({
+        title: '退款成功',
+        description: '红包已退款给创建者',
+        variant: 'success'
+      });
+      refetchPacket();
+      refetchRecords();
+      setTxHash(undefined);
+      setIsRefunding(false);
+    }
+  }, [isConfirmed, txHash, refetchPacket, refetchRecords, toast]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -380,7 +461,75 @@ export function RedPacketDetailsModal({
         </div>
 
         <div className="bg-[#f7f7f7] py-4 text-center text-[12px] text-gray-400 shrink-0">
-          未领取的红包，将于5天后发起退款
+          {(() => {
+            // 检查红包是否已领完
+            if (claimedCount >= totalCount && totalCount > 0) {
+              return '红包已领完';
+            }
+
+            // 检查红包是否已过期
+            const now = Math.floor(Date.now() / 1000);
+            const creationTime =
+              packetData?.creationTime || packetData?.createdAt || 0;
+            const expiryDuration = packetData?.expiryDuration || 0;
+            const expiryTime = packetData?.expiryTime || 0;
+
+            const isExpired =
+              (expiryTime > 0 && now > expiryTime) ||
+              (creationTime > 0 &&
+                expiryDuration > 0 &&
+                now > creationTime + expiryDuration);
+
+            if (isExpired) {
+              const isRefunded = packetData?.status === 3;
+              const isCreator =
+                currentAddress &&
+                packetData?.creator &&
+                currentAddress.toLowerCase() ===
+                  packetData.creator.toLowerCase();
+
+              return (
+                <>
+                  {isRefunded ? '红包已退款' : '红包已过期'}
+                  {!isRefunded && claimedCount < totalCount && (
+                    <>
+                      {' '}
+                      <button
+                        onClick={handleRefund}
+                        disabled={isRefunding || isConfirming}
+                        className={`text-[#576b95] ${isRefunding || isConfirming ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:underline'}`}
+                      >
+                        {isRefunding || isConfirming
+                          ? isConfirming
+                            ? '确认中'
+                            : '提交中'
+                          : isCreator
+                            ? '点击退款'
+                            : '帮TA退款'}
+                      </button>
+                    </>
+                  )}
+                </>
+              );
+            }
+
+            // 计算剩余天数
+            let remainingSeconds = 0;
+            if (expiryTime > 0) {
+              remainingSeconds = expiryTime - now;
+            } else if (creationTime > 0 && expiryDuration > 0) {
+              remainingSeconds = creationTime + expiryDuration - now;
+            }
+
+            if (remainingSeconds > 0) {
+              const remainingDays = Math.ceil(
+                remainingSeconds / (24 * 60 * 60)
+              );
+              return `未领取的红包，将于${remainingDays}天后发起退款`;
+            }
+
+            return '未领取的红包，将于5天后发起退款';
+          })()}
         </div>
       </DialogContent>
     </Dialog>

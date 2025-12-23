@@ -288,6 +288,9 @@ function ChatContent() {
               recipientAddress={recipientAddress}
               chatType={chatType}
               handleOpenRedPacket={handleOpenRedPacket}
+              handleViewRedPacketDetails={(packet) =>
+                setDetailsRedPacket(packet)
+              }
               handleRetryMessage={handleRetryMessage}
               handleDecryptClick={handleDecryptClick}
               isLoadingMore={isFetchingMore}

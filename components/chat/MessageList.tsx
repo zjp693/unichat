@@ -21,6 +21,7 @@ interface MessageListProps {
   recipientAddress: Address;
   chatType: 'private' | 'group';
   handleOpenRedPacket: (packet: any) => void;
+  handleViewRedPacketDetails: (packet: any) => void;
   handleRetryMessage: (msg: Message) => void;
   handleDecryptClick: (msgId: string) => void;
   isLoadingMore: boolean;
@@ -290,6 +291,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   recipientAddress,
   chatType,
   handleOpenRedPacket,
+  handleViewRedPacketDetails,
   handleRetryMessage,
   handleDecryptClick,
   isLoadingMore,
@@ -480,7 +482,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                         return (
                           <RedPacketMessageWrapper
                             config={config}
-                            onClick={() => handleOpenRedPacket(message)}
+                            onOpenPacket={() => handleOpenRedPacket(message)}
+                            onViewDetails={() =>
+                              handleViewRedPacketDetails(message)
+                            }
                           />
                         );
                       } catch (e) {

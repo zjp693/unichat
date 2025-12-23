@@ -201,3 +201,11 @@ export function useGetDefaultExpiryDuration() {
     functionName: 'defaultExpiryDuration'
   });
 }
+
+/**
+ * 钩子: 退款过期红包
+ * 任何人都可以调用，资金将退回给红包创建者
+ */
+export function useRefundExpiredPacket() {
+  return useWriteContract();
+}
