@@ -3,6 +3,7 @@ import type { Message } from '@/lib/chat/types';
 import type { KeyPair } from '@/lib/keyManagement';
 import { chatEncryption } from '@/lib/keyManagement';
 import type { Address } from 'viem';
+import { getAddress } from 'viem';
 import {
   DirectMessageAbi,
   DIRECT_MESSAGE_CONTRACT_ADDRESS
@@ -56,9 +57,6 @@ export function useMessageActions({
 
       const originalMessageText = content;
       console.log('🔵 [消息操作] 开始处理发送消息:', originalMessageText);
-
-      // 1. 获取接收者公钥 (仅私聊需要)
-      let recipientPublicKey: string;
 
       if (chatType === 'group') {
         // 群聊逻辑
@@ -130,72 +128,72 @@ export function useMessageActions({
       }
 
       // 私聊逻辑
-      try {
-        // 0. 检查是否有密钥
-        if (keys.length === 0) {
-          console.warn('⚠️ 未检测到密钥，请先生成密钥');
-          if (setShowKeyModal) {
-            setShowKeyModal(true);
-          } else {
-            alert('请先生成密钥对以发送加密消息');
-          }
-          return;
-        }
-
-        if (!currentAddress || !recipientAddress) {
-          throw new Error('地址无效');
-        }
-
-        if (!publicClient) {
-          throw new Error('Public client 未初始化');
-        }
-
-        // 尝试从合约获取接收者公钥
-        const result = await publicClient.readContract({
-          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
-          abi: DirectMessageAbi,
-          functionName: 'getPublicKeyOrDefault',
-          args: [recipientAddress]
-        });
-
-        if (!result || (typeof result === 'string' && result.length === 0)) {
-          throw new Error('获取公钥失败');
-        }
-
-        recipientPublicKey = result as string;
-        console.log('🔑 获取到接收者公钥:', recipientPublicKey);
-      } catch (error) {
-        console.error('❌ 获取公钥失败:', error);
-        alert('无法获取接收者公钥，无法发送加密消息。');
-        // setInputMessage(originalMessageText); // Input restoration should be handled by caller if needed, but here we assume success or alert
+      if (!currentAddress || !recipientAddress) {
+        alert('地址无效或未连接钱包');
         return;
       }
 
-      // 3. 单公钥加密消息（只用接收者公钥）
-      let encryptedContent: string;
-      try {
-        console.log('🔐 开始单公钥加密（只用接收者公钥）...');
-        encryptedContent = chatEncryption.encryptMessage(
-          originalMessageText,
-          recipientPublicKey
-        );
-        console.log('✅ 单公钥加密成功');
-      } catch (error) {
-        console.error('❌ 加密失败:', error);
-        alert(
-          '加密失败: ' + (error instanceof Error ? error.message : '未知错误')
-        );
-        // setInputMessage(originalMessageText); // Input restoration
+      if (!publicClient) {
+        console.error('Public client 未初始化');
         return;
+      }
+
+      // 1. 尝试从合约获取接收者公钥 (不使用默认公钥，不缓存)
+      let recipientPublicKey = '';
+      try {
+        const result = await publicClient.readContract({
+          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+          abi: DirectMessageAbi,
+          functionName: 'getPublicKey',
+          args: [getAddress(recipientAddress)]
+        });
+
+        if (result && typeof result === 'string' && result.length > 0) {
+          recipientPublicKey = result;
+          // console.log('🔑 获取到接收者公钥:', recipientPublicKey);
+        } else {
+          console.log('⚠️ 接收者未注册公钥，将发送明文消息');
+        }
+      } catch (error) {
+        console.warn('⚠️ 未获取到接收者公钥，将发送明文消息:');
+        // console.log(error);
+        // 这里的错误不应该阻断发送，而是回退到明文
+      }
+
+      // 2. 根据是否有公钥决定是否加密
+      let contentToSend: string;
+      let isEncrypted = false;
+
+      if (recipientPublicKey) {
+        // 有公钥，进行单公钥加密
+        try {
+          console.log('🔐 开始单公钥加密（只用接收者公钥）...');
+          contentToSend = chatEncryption.encryptMessage(
+            originalMessageText,
+            recipientPublicKey
+          );
+          isEncrypted = true;
+          console.log('✅ 单公钥加密成功');
+        } catch (error) {
+          console.error('❌ 加密失败:', error);
+          alert(
+            '加密失败: ' + (error instanceof Error ? error.message : '未知错误')
+          );
+          return;
+        }
+      } else {
+        // 无公钥，发送明文
+        contentToSend = originalMessageText;
+        isEncrypted = false;
       }
 
       const newMessageObject: Message = {
         id: Date.now().toString(),
-        content: encryptedContent,
+        content: contentToSend,
         sender: 'user',
         timestamp: new Date(),
         type: 'text',
-        isEncrypted: true,
+        isEncrypted: isEncrypted,
         originalContent: originalMessageText,
         status: 'sending',
         recipient: recipientAddress // <-- 使用动态接收者地址作为 recipient
@@ -269,7 +267,7 @@ export function useMessageActions({
           address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
           abi: DirectMessageAbi,
           functionName: 'sendMessage',
-          args: [recipientAddress, encryptedContent],
+          args: [getAddress(recipientAddress), contentToSend],
           account: currentAddress
         });
 
@@ -286,7 +284,7 @@ export function useMessageActions({
             address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
             abi: DirectMessageAbi,
             functionName: 'messageCount',
-            args: [currentAddress, recipientAddress]
+            args: [currentAddress, getAddress(recipientAddress)]
           });
 
           if (count && Number(count) > 0) {
@@ -298,7 +296,7 @@ export function useMessageActions({
               functionName: 'getMessages',
               args: [
                 currentAddress,
-                recipientAddress,
+                getAddress(recipientAddress),
                 BigInt(lastIndex),
                 BigInt(1)
               ]
@@ -306,8 +304,8 @@ export function useMessageActions({
 
             if (result && Array.isArray(result) && result.length > 0) {
               const lastMsg = result[0];
-              // 检查内容是否匹配 (比较加密后的内容)
-              if (lastMsg.content === encryptedContent) {
+              // 检查内容是否匹配
+              if (lastMsg.content === contentToSend) {
                 console.log('✅ [兜底] [私聊] 手动拉取成功，更新消息状态');
                 const realId = `${lastMsg.timestamp}-${lastMsg.sender.toLowerCase()}-${Date.now()}`;
 
@@ -386,37 +384,45 @@ export function useMessageActions({
             throw new Error('地址无效');
           }
 
-          // 获取对方公钥
-          let recipientPublicKey: string;
-          if (!publicClient) {
-            throw new Error('Public client 未初始化');
+          // 获取对方公钥 (不缓存)
+          let recipientPublicKey = '';
+          try {
+            const result = await publicClient.readContract({
+              address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+              abi: DirectMessageAbi,
+              functionName: 'getPublicKey',
+              args: [getAddress(recipientAddress)]
+            });
+
+            if (result && typeof result === 'string' && result.length > 0) {
+              recipientPublicKey = result;
+            }
+          } catch (error) {
+            console.warn('⚠️ 重发时获取公钥失败，将使用明文:', error);
           }
 
-          const result = await publicClient.readContract({
-            address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
-            abi: DirectMessageAbi,
-            functionName: 'getPublicKeyOrDefault',
-            args: [recipientAddress as Address]
-          });
+          // 准备消息内容
+          let contentToSend: string;
+          const originalText =
+            failedMessage.originalContent || failedMessage.content;
 
-          if (!result || (typeof result === 'string' && result.length === 0)) {
-            throw new Error('获取公钥失败');
+          if (recipientPublicKey) {
+            // 有公钥，加密
+            contentToSend = chatEncryption.encryptMessage(
+              originalText,
+              recipientPublicKey
+            );
+          } else {
+            // 无公钥，明文
+            contentToSend = originalText;
           }
-
-          recipientPublicKey = result as string;
-
-          // 加密消息（使用原始内容）
-          const encryptedContent = chatEncryption.encryptMessage(
-            failedMessage.originalContent || failedMessage.content,
-            recipientPublicKey
-          );
 
           // 发送到合约
           await writeContract({
             address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
             abi: DirectMessageAbi,
             functionName: 'sendMessage',
-            args: [recipientAddress, encryptedContent],
+            args: [getAddress(recipientAddress), contentToSend],
             account: currentAddress
           });
 
