@@ -9,7 +9,8 @@ import type { RedPacketConfig } from './types';
 
 interface RedPacketMessageWrapperProps {
   config: RedPacketConfig;
-  onClick?: () => void;
+  onOpenPacket?: () => void;
+  onViewDetails?: () => void;
 }
 
 /**
@@ -18,7 +19,8 @@ interface RedPacketMessageWrapperProps {
  */
 export function RedPacketMessageWrapper({
   config,
-  onClick
+  onOpenPacket,
+  onViewDetails
 }: RedPacketMessageWrapperProps) {
   const { address: currentAddress } = useAccount();
 
@@ -83,5 +85,18 @@ export function RedPacketMessageWrapper({
     return 'active';
   }, [config.status, hasClaimed, packet]);
 
-  return <RedPacketMessage config={config} status={status} onClick={onClick} />;
+  // 根据状态决定点击行为
+  const handleClick = () => {
+    if (status === 'active') {
+      // 未领取 → 打开领取弹框
+      onOpenPacket?.();
+    } else {
+      // 已领取/已过期/已领完 → 打开详情页
+      onViewDetails?.();
+    }
+  };
+
+  return (
+    <RedPacketMessage config={config} status={status} onClick={handleClick} />
+  );
 }

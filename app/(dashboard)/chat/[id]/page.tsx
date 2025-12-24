@@ -224,13 +224,11 @@ function ChatContent() {
     groupAddress,
     setMessages,
     scrollToBottom,
-    keys,
     publicClient,
     writeContract: writeContractAsync,
     sendGroupMessage,
     setPendingGroupMessage: (msg) => dispatch(setPendingGroupMessage(msg)),
-    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open)),
-    setShowKeyModal: (open) => dispatch(setShowKeyModal(open))
+    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open))
   });
 
   // --- Effects ---
@@ -288,6 +286,9 @@ function ChatContent() {
               recipientAddress={recipientAddress}
               chatType={chatType}
               handleOpenRedPacket={handleOpenRedPacket}
+              handleViewRedPacketDetails={(packet) =>
+                setDetailsRedPacket(packet)
+              }
               handleRetryMessage={handleRetryMessage}
               handleDecryptClick={handleDecryptClick}
               isLoadingMore={isFetchingMore}
@@ -310,6 +311,7 @@ function ChatContent() {
         >
           <ChatInputArea
             ref={chatInputAreaRef}
+            conversationId={conversationId as string}
             inputRef={inputRef}
             handleKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {

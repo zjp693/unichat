@@ -301,7 +301,7 @@ export function SendRedPacketModal({
 
           {/* Footer Note */}
           <div className="mt-auto pt-8 text-center text-xs text-gray-400">
-            未领取的红包，将于 24 小时后发起退款
+            未领取的红包,将于5天后发起退款
           </div>
         </div>
 

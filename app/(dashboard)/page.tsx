@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAccount } from 'wagmi';
+import { useDispatch } from 'react-redux';
 import { Address } from 'viem';
 import { ChatNavbar } from '@/components/ui/chat-navbar';
 import { ChatListItem } from '@/components/chat/ChatListItem';
@@ -15,11 +16,14 @@ import { useProfileCheck } from '@/hooks/useProfileCheck';
 import { useSortedChats } from '@/hooks/useSortedChats';
 import { useBatchPeerProfiles } from '@/hooks/useBatchPeerProfiles';
 import { convertCommunityToChat } from '@/lib/chat/utils';
+import { clearAllDrafts } from '@/lib/chatSlice';
 import type { ChatItem } from '@/lib/types/chat';
 
 export default function ChatPage() {
   const { address: currentAddress, isConnected } = useAccount();
+  const dispatch = useDispatch();
   const { toast } = useToast();
+  const prevAddressRef = useRef<string | undefined>(undefined);
 
   // 新用户检测
   const { isNewUser, isLoading: isCheckingProfile } = useProfileCheck();
@@ -31,6 +35,14 @@ export default function ChatPage() {
       setShowSetupModal(true);
     }
   }, [isNewUser, isCheckingProfile]);
+
+  // 账户切换时清除所有草稿
+  useEffect(() => {
+    if (prevAddressRef.current && prevAddressRef.current !== currentAddress) {
+      dispatch(clearAllDrafts());
+    }
+    prevAddressRef.current = currentAddress;
+  }, [currentAddress, dispatch]);
 
   // 获取链上群聊数据
   const {

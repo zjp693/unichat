@@ -390,12 +390,12 @@ export function useMessageLoader({
 
         if (!isRelated) return;
 
-        console.log('📨 [消息监听] [私聊] 收到区块链消息事件:', {
-          from,
-          to,
-          contentLen: content.length
-        });
-
+        // console.log('📨 [消息监听] [私聊] 收到区块链消息事件:', {
+        //   from,
+        //   to,
+        //   contentLen: content.length
+        // });
+        console.log('📨 [消息监听] [私聊] 收到区块链消息事件:');
         // 处理自己发送的消息确认
         if (isFromMe) {
           setMessages((prev) =>

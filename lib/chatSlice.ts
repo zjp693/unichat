@@ -25,6 +25,10 @@ interface ChatState {
   // --- 选中的名人（按钱包地址隔离）---
   // { '0xAAA...': Contact, '0xBBB...': Contact }
   selectedCelebrityByWallet: Record<string, Contact | null>;
+
+  // --- 草稿输入内容 ---
+  // 存储每个聊天的草稿内容 { [conversationId]: draftContent }
+  draftInputs: Record<string, string>;
 }
 
 const initialState: ChatState = {
@@ -39,7 +43,8 @@ const initialState: ChatState = {
   selectedMessageId: null,
   pendingGroupMessage: '',
   timestampMap: {},
-  selectedCelebrityByWallet: {}
+  selectedCelebrityByWallet: {},
+  draftInputs: {}
 };
 
 const chatSlice = createSlice({
@@ -89,7 +94,39 @@ const chatSlice = createSlice({
     },
     // 重置所有 UI 状态 (离开聊天页面时使用)
     resetChatState(state) {
-      return initialState;
+      state.isActionsOpen = false;
+      state.panelHeight = 0;
+      state.showGroupInfoPanel = false;
+      state.showPrivateChatSettingsPanel = false;
+      state.showKeyModal = false;
+      state.showDecryptModal = false;
+      state.showGenerationModal = false;
+      state.showSendModeModal = false;
+      state.selectedMessageId = null;
+      state.pendingGroupMessage = '';
+      // 保留 draftInputs, timestampMap, selectedCelebrityByWallet
+    },
+
+    // --- 草稿输入管理 ---
+    // 设置草稿内容
+    setDraftInput(
+      state,
+      action: PayloadAction<{ conversationId: string; content: string }>
+    ) {
+      const { conversationId, content } = action.payload;
+      if (!content || content.trim() === '') {
+        delete state.draftInputs[conversationId];
+      } else {
+        state.draftInputs[conversationId] = content;
+      }
+    },
+    // 清除单个聊天的草稿
+    clearDraftInput(state, action: PayloadAction<string>) {
+      delete state.draftInputs[action.payload];
+    },
+    // 清除所有草稿
+    clearAllDrafts(state) {
+      state.draftInputs = {};
     },
 
     // --- 选中名人管理 ---
@@ -136,7 +173,10 @@ export const {
   resetChatState,
   setSelectedCelebrity,
   clearSelectedCelebrity,
-  clearAllSelectedCelebrities
+  clearAllSelectedCelebrities,
+  setDraftInput,
+  clearDraftInput,
+  clearAllDrafts
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

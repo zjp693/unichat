@@ -18,6 +18,7 @@ import { CelebrityListSkeleton } from './components/CelebrityListSkeleton';
 import { CelebrityListItemSkeleton } from './components/CelebrityListItemSkeleton';
 import { ContactListItem } from './components/ContactListItem';
 import { CelebrityListItem } from './components/CelebrityListItem';
+import { ContactListWithIndex } from './components/ContactListWithIndex';
 
 // Cursor 类型定义
 interface Cursor {
@@ -456,169 +457,9 @@ export default function ContactsPage() {
       </div>
 
       {/* 内容区域 */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 pb-[70px]">
+      <div className="flex-1 overflow-hidden bg-gray-50 pb-[70px]">
         {activeTab === 'contacts' ? (
-          <div className="">
-            {/* 未连接钱包提示 */}
-            {!isConnected && (
-              <div className="flex items-center justify-center h-full min-h-[400px]">
-                <div className="text-center">
-                  <p className="text-sm text-gray-400 mb-2">
-                    请连接钱包以查看联系人
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* 已连接钱包时显示内容 */}
-            {isConnected && (
-              <>
-                {/* 交易过的地址 - 分组标题 */}
-                {(filteredTradedContacts.length > 0 ||
-                  isLoadingRecent ||
-                  (hasLoadedRecent && filteredTradedContacts.length === 0)) && (
-                  <div className="">
-                    <h3 className="text-xs px-4 py-3 font-medium text-gray-600 bg-[#ececec]">
-                      交易过的地址
-                    </h3>
-                    <div className="bg-white px-1">
-                      {isLoadingRecent &&
-                      filteredTradedContacts.length === 0 ? (
-                        // 首次加载骨架屏
-                        Array.from({ length: 3 }).map((_, i) => (
-                          <div
-                            key={`skeleton-recent-${i}`}
-                            className="px-4 py-3 animate-pulse"
-                          >
-                            <div className="flex items-center space-x-3">
-                              <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-                              <div className="flex-1">
-                                <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
-                                <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : filteredTradedContacts.length > 0 ? (
-                        <>
-                          {filteredTradedContacts.map((contact, index) => (
-                            <ContactListItem
-                              key={contact.id}
-                              contact={contact}
-                              onCopyAddress={copyAddress}
-                              onViewTransactions={viewTransactions}
-                              isLast={
-                                index === filteredTradedContacts.length - 1 &&
-                                !hasMoreRecent
-                              }
-                            />
-                          ))}
-
-                          {/* 加载更多骨架屏 */}
-                          {isLoadingRecent &&
-                            filteredTradedContacts.length > 0 &&
-                            Array.from({ length: 2 }).map((_, i) => (
-                              <div
-                                key={`skeleton-more-${i}`}
-                                className="px-4 py-3 animate-pulse"
-                              >
-                                <div className="flex items-center space-x-3">
-                                  <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-                                  <div className="flex-1">
-                                    <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
-                                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-
-                          {/* 没有更多提示 */}
-                          {!isLoadingRecent &&
-                            !hasMoreRecent &&
-                            filteredTradedContacts.length > 0 && (
-                              <div className="h-8 flex items-center justify-center text-sm text-gray-400">
-                                没有更多了
-                              </div>
-                            )}
-
-                          {/* 分页 sentinel */}
-                          {hasMoreRecent && (
-                            <div
-                              id="recent-contacts-sentinel"
-                              className="h-1"
-                            />
-                          )}
-                        </>
-                      ) : (
-                        <div className="px-4 py-8 text-center text-sm text-gray-400">
-                          暂无交易过的地址
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* 共同好友的联系人 - 只在交易过的地址加载完成且没有更多数据时显示 */}
-            {hasLoadedRecent && !hasMoreRecent && (
-              <>
-                {isLoadingMutual ? (
-                  // 加载骨架屏
-                  <div className="">
-                    <h3 className="text-xs px-4 py-3 font-medium text-gray-600 bg-[#ececec]">
-                      多个共同好友交易的地址
-                    </h3>
-                    <div className="bg-white rounded-lg">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div
-                          key={`skeleton-mutual-${i}`}
-                          className="px-4 py-3 animate-pulse"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-                            <div className="flex-1">
-                              <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
-                              <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : filteredMutualContacts.length > 0 ? (
-                  <div className="">
-                    <h3 className="text-xs px-4 py-3 font-medium text-gray-600 bg-[#ececec]">
-                      多个共同好友交易的地址
-                    </h3>
-                    <div className="bg-white rounded-lg">
-                      {filteredMutualContacts.map((contact, index) => (
-                        <ContactListItem
-                          key={contact.id}
-                          contact={contact}
-                          onCopyAddress={copyAddress}
-                          onViewTransactions={viewTransactions}
-                          isLast={index === filteredMutualContacts.length - 1}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : hasLoadedMutual ? (
-                  // 已加载但为空，显示分组和提示
-                  <div className="">
-                    <h3 className="text-xs px-4 py-3 font-medium text-gray-600 bg-[#ececec]">
-                      多个共同好友交易的地址
-                    </h3>
-                    <div className="bg-white rounded-lg">
-                      <div className="px-4 py-8 text-center text-sm text-gray-400">
-                        暂无多个共同好友交易的地址
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </div>
+          <ContactListWithIndex />
         ) : (
           /* 名人列表 - 根据搜索类型显示不同数据 */
           <div className="">
