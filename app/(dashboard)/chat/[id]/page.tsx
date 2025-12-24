@@ -224,13 +224,11 @@ function ChatContent() {
     groupAddress,
     setMessages,
     scrollToBottom,
-    keys,
     publicClient,
     writeContract: writeContractAsync,
     sendGroupMessage,
     setPendingGroupMessage: (msg) => dispatch(setPendingGroupMessage(msg)),
-    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open)),
-    setShowKeyModal: (open) => dispatch(setShowKeyModal(open))
+    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open))
   });
 
   // --- Effects ---
