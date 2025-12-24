@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { ChevronLeft, MoreVertical, Copy, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { ChainSelectorDropdown } from './chain-selector-dropdown';
 
 // ==================== 类型定义 ====================
 
@@ -136,28 +137,8 @@ const TopSection: React.FC<TopSectionProps> = ({
         levelTheme.textColor
       )}
     >
-      {/* 钱包连接按钮 */}
-      {showWalletButton && (
-        <div className="flex-shrink-0">
-          <appkit-button />
-        </div>
-      )}
-
-      {/* 地区选择器 */}
-      <div className="flex items-center px-2 py-0 text-xs border h-7 border-white/30 rounded-lg bg-white">
-        {regionFlag && (
-          <div className="inline-block align-middle mr-3 w-4 h-4 rounded-full overflow-hidden">
-            <Image
-              src={regionFlag}
-              alt={regionCode}
-              width={16}
-              height={16}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-        <span className="font-bold text-black">{regionCode}</span>
-      </div>
+      {/* 链选择器 */}
+      <ChainSelectorDropdown />
     </div>
   );
 };
