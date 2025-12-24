@@ -16,13 +16,15 @@ export function ContactListItem({
   onViewTransactions,
   isLast
 }: ContactListItemProps) {
+  if (!contact) return null;
+
   return (
     <div
       className={`flex items-center px-4 py-3 ${!isLast ? 'border-b border-gray-100' : ''}`}
     >
       {/* 头像 */}
       <div className="relative mr-3">
-        <div className="w-12 h-12 rounded-lg overflow-hidden">
+        <div className="w-14 h-14 rounded-lg overflow-hidden">
           <AvatarWithSkeleton
             src={contact.avatar}
             alt={contact.name}
@@ -91,26 +93,7 @@ export function ContactListItem({
             </div>
           </div>
 
-          {/* 查看交易按钮 */}
-          <button
-            onClick={() => onViewTransactions(contact)}
-            className="text-xs text-gray-600 hover:text-gray-800 flex items-center flex-shrink-0"
-          >
-            <span>查看交易</span>
-            <svg
-              className="w-3 h-3 ml-1"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
+          {/* 查看交易按钮 - 已移除 */}
         </div>
       </div>
     </div>
