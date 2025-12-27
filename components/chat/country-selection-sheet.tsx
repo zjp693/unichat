@@ -9,21 +9,26 @@ import {
   SheetDescription
 } from '@/components/ui/sheet';
 import { useState, useEffect } from 'react';
+import type { Locale } from '@/i18n/config';
 
 // Define country type
 interface Country {
   name: string;
   flag: string;
   code: string;
+  locale: Locale; // 对应的语言代码
 }
 
+// 只保留2个国家用于测试
 const countries: Country[] = [
-  { name: '中国', flag: '/nation/China.png', code: 'CN' },
-  { name: 'កម្ពុជា', flag: '/nation/Cambodia.png', code: 'KH' },
-  { name: 'America', flag: '/nation/USA.png', code: 'US' },
-  { name: 'Viet Nam', flag: '/nation/Viet Nam.png', code: 'VN' },
-  { name: 'ประเทศไทย', flag: '/nation/Thailand.png', code: 'TH' },
-  { name: 'भारत', flag: '/nation/India.png', code: 'IN' }
+  { name: '中国', flag: '/nation/China.png', code: 'CN', locale: 'zh-CN' },
+  { name: 'America', flag: '/nation/USA.png', code: 'US', locale: 'en-US' }
+  // { name: '中国', flag: '/nation/China.png', code: 'CN' },
+  // { name: 'កម្ពុជា', flag: '/nation/Cambodia.png', code: 'KH' },
+  // { name: 'America', flag: '/nation/USA.png', code: 'US' },
+  // { name: 'Viet Nam', flag: '/nation/Viet Nam.png', code: 'VN' },
+  // { name: 'ประเทศไทย', flag: '/nation/Thailand.png', code: 'TH' },
+  // { name: 'भारत', flag: '/nation/India.png', code: 'IN' }
 ];
 
 interface CountrySelectionSheetProps {
@@ -37,7 +42,7 @@ export function CountrySelectionSheet({
   isOpen,
   onClose,
   onSelect,
-  defaultCountry = 'Viet Nam'
+  defaultCountry = '中国' // 改为中国
 }: CountrySelectionSheetProps) {
   const [selectedCountry, setSelectedCountry] = useState(defaultCountry);
 
@@ -49,10 +54,25 @@ export function CountrySelectionSheet({
   }, [isOpen, defaultCountry]);
 
   const handleConfirm = () => {
+    // 找到选中的国家对应的语言
+    const selectedCountryData = countries.find(
+      (c) => c.name === selectedCountry
+    );
+
+    if (selectedCountryData) {
+      // 保存语言到 localStorage
+      localStorage.setItem('preferred-locale', selectedCountryData.locale);
+      console.log('🌐 切换语言到:', selectedCountryData.locale);
+    }
+
     if (onSelect) {
       onSelect(selectedCountry);
     }
+
     onClose();
+
+    // 刷新页面以应用新语言
+    window.location.reload();
   };
 
   return (

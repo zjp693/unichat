@@ -13,7 +13,7 @@ export function ChatNavbar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCountryModalOpen, setIsCountryModalOpen] = useState(false);
   const [isQRCodeOpen, setIsQRCodeOpen] = useState(false);
-  const [selectedCountry, setSelectedCountry] = useState('Viet Nam');
+  const [selectedCountry, setSelectedCountry] = useState('中国'); // 默认中国
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();

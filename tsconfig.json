@@ -22,7 +22,9 @@
       "@/context": ["context"],
       "@/hooks/*": ["hooks/*"],
       "@/contract/*": ["contract/*"],
-      "@/types/*": ["types/*"]
+      "@/types/*": ["types/*"],
+      "@/i18n/*": ["i18n/*"],
+      "@/messages/*": ["messages/*"]
     },
     "plugins": [
       {
