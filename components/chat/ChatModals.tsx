@@ -32,6 +32,7 @@ interface ChatModalsProps {
   chatType: 'private' | 'group';
   conversationId: string;
   memberCount: number;
+  groupName?: string;
 }
 
 export const ChatModals: React.FC<ChatModalsProps> = ({
@@ -41,7 +42,8 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
   handleSendModeSelect,
   chatType,
   conversationId,
-  memberCount
+  memberCount,
+  groupName
 }) => {
   const dispatch = useDispatch();
 
@@ -98,6 +100,7 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
           conversationId={conversationId}
           chatType={chatType}
           memberCount={memberCount}
+          groupName={groupName}
           onClose={() => dispatch(setShowGroupInfoPanel(false))}
         />
       )}

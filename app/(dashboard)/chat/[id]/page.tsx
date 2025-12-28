@@ -368,6 +368,7 @@ function ChatContent() {
         chatType={chatType}
         conversationId={conversationId as string}
         memberCount={displayMemberCount}
+        groupName={groupName || undefined}
       />
 
       <OpenRedPacketModalNew

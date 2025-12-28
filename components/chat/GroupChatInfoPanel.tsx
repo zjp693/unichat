@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { useCommunityMembers } from '@/hooks/useCommunityMembers';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { IPFSImg } from '@/components/ui/ipfs-img';
+import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 import type { Address } from 'viem';
 
 // 定义布局常量，可以从公共文件导入或在此定义
@@ -52,6 +53,7 @@ interface GroupChatInfoPanelProps {
   conversationId: string;
   chatType: 'group' | 'private';
   memberCount: number;
+  groupName?: string;
   onClose: () => void;
 }
 
@@ -59,6 +61,7 @@ export default function GroupChatInfoPanel({
   conversationId,
   chatType,
   memberCount,
+  groupName: initialGroupName,
   onClose
 }: GroupChatInfoPanelProps) {
   // 获取群成员地址列表（最多获取100个）
@@ -77,9 +80,8 @@ export default function GroupChatInfoPanel({
     ? memberAddresses
     : memberAddresses.slice(0, 14);
 
-  // 群名称（可以后续从合约获取）
-  const groupName =
-    conversationId === 'g_my_first_group' ? '我的群聊' : '未知群聊';
+  // 群名称
+  const groupName = initialGroupName || '未知群聊';
 
   // 新增：模拟 "我的群聊" 数据
   const myGroupsData = [
@@ -129,16 +131,8 @@ export default function GroupChatInfoPanel({
           style={{ height: `${TOP_BAR_HEIGHT}px` }}
         >
           <div className="flex items-center gap-2">
-            <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">
-              BNB Chain
-            </button>
+            <ChainSelectorDropdown />
           </div>
-          <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">
-            Connect wallet
-          </button>
-          <button className="text-sm px-3 py-1 border border-gray-300 rounded-full">
-            🇺🇸 USA
-          </button>
         </div>
 
         {/* 页面标题栏 */}
@@ -174,15 +168,15 @@ export default function GroupChatInfoPanel({
 
       {/* 内容区域 */}
       <div
-        className="absolute w-full overflow-y-auto bg-white"
+        className="absolute w-full overflow-y-auto bg-[#ededed]"
         style={{
           top: `${TOTAL_HEADER_HEIGHT}px`,
           bottom: 0
         }}
       >
-        <div className="p-4 space-y-4">
+        <div className="space-y-3">
           {/* 群成员 */}
-          <div className="bg-white rounded-lg p-4 shadow-sm">
+          <div className="bg-white p-4">
             <h2 className="text-lg font-semibold mb-3">
               群成员 ({memberAddresses.length || memberCount})
             </h2>
@@ -209,10 +203,9 @@ export default function GroupChatInfoPanel({
 
                 {/* 邀请按钮 */}
                 <div className="flex flex-col items-center">
-                  <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300">
+                  <div className="w-12 h-12 rounded-md  flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300">
                     <span className="text-xl">+</span>
                   </div>
-                  <span className="text-xs mt-1 text-gray-500">邀请</span>
                 </div>
               </div>
             )}
@@ -239,7 +232,7 @@ export default function GroupChatInfoPanel({
           </div>
 
           {/* 群信息 */}
-          <div className="bg-white rounded-lg p-4 shadow-sm space-y-4">
+          <div className="bg-white px-4 space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
               <span className="text-gray-700">群名称</span>
               <span className="text-gray-500">{groupName}</span>
@@ -253,6 +246,25 @@ export default function GroupChatInfoPanel({
                 height={24}
               />
             </div>
+
+            {/* 群合约 */}
+            <div className="py-2">
+              <div className="text-gray-700 mb-1">群合约</div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400 break-all">
+                  {conversationId}
+                </span>
+                <button className="ml-2 p-1 rounded">
+                  <Image
+                    src="/contacts/copy.svg"
+                    alt="Copy"
+                    width={16}
+                    height={16}
+                  />
+                </button>
+              </div>
+            </div>
+
             {/* 我的群聊 */}
             {/* <div className="py-2">
               <div className="flex justify-between items-center mb-2">
@@ -288,8 +300,113 @@ export default function GroupChatInfoPanel({
             </div> */}
           </div>
 
+          {/* 代币发行信息 */}
+          <div className="bg-white p-4 space-y-3">
+            <div className="flex justify-between items-center py-2 border-b border-gray-200">
+              <span className="text-gray-700">代币发行名称</span>
+              <div className="flex items-center gap-1 text-gray-500">
+                <span>选择币种</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M9 6L15 12L9 18"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center py-2 border-b border-gray-200">
+              <span className="text-gray-700">代币发行数量</span>
+              <input
+                type="text"
+                placeholder="请填写数量"
+                className="text-right bg-transparent border-0 p-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 w-32"
+              />
+            </div>
+
+            <div className="py-2">
+              <div className="text-gray-700 mb-2">代币发行合约地址</div>
+              <input
+                type="text"
+                placeholder="请输入..."
+                className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0"
+              />
+            </div>
+          </div>
+
+          {/* 经济模型 */}
+          <div className="bg-white p-4">
+            <div className="text-gray-700 mb-2">经济模型</div>
+            <textarea
+              placeholder="请输入..."
+              rows={3}
+              className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none"
+            />
+          </div>
+
+          {/* 群制度 */}
+          <div className="bg-white p-4">
+            <div className="text-gray-700 mb-2">群制度</div>
+            <textarea
+              placeholder="请输入..."
+              rows={3}
+              className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none"
+            />
+          </div>
+
+          {/* 群公告 */}
+          <div className="bg-white p-4">
+            <div className="text-gray-700 mb-2">群公告</div>
+            <textarea
+              placeholder="请输入..."
+              rows={3}
+              className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none"
+            />
+          </div>
+
+          {/* 邀请新人排行榜 */}
+          <div className="bg-white p-4">
+            <div className="flex justify-between items-center py-2">
+              <span className="text-gray-700">邀请新人排行榜</span>
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                className="text-green-500"
+              >
+                <rect
+                  x="4"
+                  y="14"
+                  width="4"
+                  height="6"
+                  fill="currentColor"
+                  rx="1"
+                />
+                <rect
+                  x="10"
+                  y="8"
+                  width="4"
+                  height="12"
+                  fill="currentColor"
+                  rx="1"
+                />
+                <rect
+                  x="16"
+                  y="4"
+                  width="4"
+                  height="16"
+                  fill="currentColor"
+                  rx="1"
+                />
+              </svg>
+            </div>
+          </div>
+
           {/* 置顶公告聊天 */}
-          <div className="bg-white rounded-lg p-4 shadow-sm">
+          <div className="bg-white p-4">
             <div className="flex justify-between items-center py-2">
               <span className="text-gray-700">置顶公告聊天</span>
               <Switch
@@ -301,26 +418,87 @@ export default function GroupChatInfoPanel({
             </div>
           </div>
 
-          {/* 支付设置 */}
+          {/* 群代币信息分组 */}
+          <div className="bg-white p-4 space-y-3">
+            {/* 群代币合约地址 */}
+            <div className="pb-4 border-b border-gray-200">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-gray-700">群代币合约地址</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
+                    A
+                  </div>
+                  <span className="text-sm text-gray-700">Arbitum</span>
+                </div>
+              </div>
+              <input
+                type="text"
+                placeholder="请输入..."
+                className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0"
+              />
+            </div>
 
-          <div className="bg-white rounded-lg p-4 shadow-sm space-y-4">
-            <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
-              <span className="text-gray-700">Group digital currency</span>
-              <span className="text-gray-500">ETH &gt;</span>
+            {/* 代币名称 */}
+            <div className="flex justify-between items-center py-2 border-b border-gray-200">
+              <span className="text-gray-700">代币名称</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                    <circle cx="12" cy="12" r="10" fill="currentColor" />
+                  </svg>
+                </div>
+                <span className="text-sm text-gray-700">USDT0</span>
+              </div>
             </div>
-            <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
-              <span className="text-gray-700">Payment to join the group</span>
-              <span className="text-gray-500">1ETH &gt;</span>
-            </div>
-            <div className="flex justify-between items-center py-2 last:border-b-0">
-              <span className="text-gray-700">Chat payment</span>
-              <span className="text-gray-500">0.01ETH &gt;</span>
-            </div>
-          </div>
 
-          {/* 退出按钮 */}
-          <div className="bg-white rounded-lg p-4 shadow-sm text-center">
-            <button className="text-red-500 font-semibold">Exit</button>
+            {/* 进群费用 */}
+            <div className="flex justify-between items-center py-2 border-b border-gray-200">
+              <span className="text-gray-700">进群费用</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-gray-700">100</span>
+                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                    <circle cx="12" cy="12" r="10" fill="currentColor" />
+                  </svg>
+                </div>
+                <span className="text-sm text-gray-700">USDT0</span>
+              </div>
+            </div>
+
+            {/* 群聊建群分配比例 */}
+            <div className="pt-2">
+              <div className="flex justify-between items-center py-2 mb-4">
+                <span className="text-gray-700">群聊建群分配比例</span>
+                <span className="text-sm text-gray-700">100%/100%</span>
+              </div>
+
+              <div className="space-y-3 pl-4 bg-[#fbfbfb] py-3 px-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">
+                    群主可获得群收益
+                  </span>
+                  <span className="text-sm text-gray-700">9%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">
+                    邀请人可获得群收益
+                  </span>
+                  <span className="text-sm text-gray-700">31%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">
+                    群成员可获得群收益
+                  </span>
+                  <span className="text-sm text-gray-700">60%</span>
+                </div>
+              </div>
+            </div>
+            {/* 修改并保存按钮 */}
+            <div className="px-4 pb-8 pt-4">
+              <button className="w-full h-12 bg-green-500 text-white rounded-full text-base font-medium shadow-lg">
+                修改并保存
+              </button>
+            </div>
           </div>
         </div>
       </div>

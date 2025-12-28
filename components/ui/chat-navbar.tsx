@@ -8,11 +8,13 @@ import { useAccount } from 'wagmi';
 import { CountrySelectionSheet } from '@/components/chat/country-selection-sheet';
 import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 import { WalletQRCodeSheet } from '@/components/chat/WalletQRCodeSheet';
+import { CreateGroupSheet } from '@/components/chat/create-group-sheet';
 
 export function ChatNavbar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isCountryModalOpen, setIsCountryModalOpen] = useState(false);
   const [isQRCodeOpen, setIsQRCodeOpen] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState('中国'); // 默认中国
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -38,7 +40,7 @@ export function ChatNavbar() {
 
   const handleGroupChatClick = () => {
     setIsDropdownOpen(false);
-    router.push('/chat/create-group');
+    setIsCreateGroupOpen(true);
   };
 
   const handleSearchClick = () => {
@@ -159,6 +161,16 @@ export function ChatNavbar() {
       <WalletQRCodeSheet
         isOpen={isQRCodeOpen}
         onClose={() => setIsQRCodeOpen(false)}
+      />
+
+      {/* Create Group Sheet */}
+      <CreateGroupSheet
+        isOpen={isCreateGroupOpen}
+        onClose={() => setIsCreateGroupOpen(false)}
+        onCreateGroup={(data) => {
+          console.log('Create Group Data:', data);
+          // TODO: Implement contract interaction
+        }}
       />
     </>
   );
