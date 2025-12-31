@@ -14,7 +14,7 @@ interface ChatNavigationBarProps {
   chatInfo: {
     name: string;
     avatar?: string;
-    level?: 1 | 2 | 3 | 4 | 5 | 6;
+    level?: number;
     address: string;
     memberCount?: number;
     groupCondition?: string;
@@ -44,7 +44,7 @@ interface BottomSectionProps {
   chatInfo: {
     name: string;
     avatar?: string;
-    level?: 1 | 2 | 3 | 4 | 5 | 6;
+    level?: number;
     address: string;
     memberCount?: number;
     groupCondition?: string;
@@ -67,6 +67,12 @@ type LevelTheme = {
 // ==================== 常量定义 ====================
 
 const LEVEL_THEMES: Record<number, LevelTheme> = {
+  0: {
+    backgroundColor: '#f9fafb',
+    textColor: 'text-[#303133]',
+    badgeColor: 'bg-transparent',
+    opacity: 'bg-opacity-100'
+  },
   1: {
     backgroundColor: '#b9cef8',
     textColor: 'text-[#303133]',
@@ -107,7 +113,7 @@ const LEVEL_THEMES: Record<number, LevelTheme> = {
 
 // const DEFAULT_CHAIN = 'BNB Chain';
 const DEFAULT_REGION = 'USA';
-const DEFAULT_LEVEL = 1;
+const DEFAULT_LEVEL = 0;
 const DEFAULT_AVATAR = '/placeholder-user.jpg';
 
 // 等级对应的群条件金额
@@ -240,28 +246,30 @@ const BottomSection: React.FC<BottomSectionProps> = ({
           {/* 中间：聊天信息 */}
           <div className="flex-1 flex flex-col items-center justify-center px-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              {/* 头像 */}
-              <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
-                <Image
-                  src={
-                    avatarError
-                      ? DEFAULT_AVATAR
-                      : chatInfo.avatar || DEFAULT_AVATAR
-                  }
-                  alt={chatInfo.name}
-                  width={32}
-                  height={32}
-                  className="w-full h-full object-cover"
-                  onError={() => setAvatarError(true)}
-                />
-              </div>
+              {/* 头像 - 只有官方群才显示 */}
+              {(chatInfo.level ?? 0) > 0 && (
+                <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
+                  <Image
+                    src={
+                      avatarError
+                        ? DEFAULT_AVATAR
+                        : chatInfo.avatar || DEFAULT_AVATAR
+                    }
+                    alt={chatInfo.name}
+                    width={32}
+                    height={32}
+                    className="w-full h-full object-cover"
+                    onError={() => setAvatarError(true)}
+                  />
+                </div>
+              )}
 
               {/* 名称 + 等级徽章 */}
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-sm font-bold truncate max-w-[150px]">
                   {chatInfo.name}
                 </span>
-                {mode === 'group' && chatInfo.level && (
+                {mode === 'group' && (chatInfo.level ?? 0) > 0 && (
                   <div className="flex text-sm px-2 py-0.5">
                     LV{chatInfo.level}({chatInfo.memberCount || 0})
                     <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] ml-1 px-1">
@@ -269,6 +277,13 @@ const BottomSection: React.FC<BottomSectionProps> = ({
                     </div>
                   </div>
                 )}
+                {/* 针对 Level 0 (红包群) 只显示人数 */}
+                {mode === 'group' &&
+                  (!chatInfo.level || chatInfo.level === 0) && (
+                    <span className="text-sm text-gray-500 ml-2">
+                      ({chatInfo.memberCount || 0})
+                    </span>
+                  )}
               </div>
             </div>
 
@@ -283,16 +298,21 @@ const BottomSection: React.FC<BottomSectionProps> = ({
             </button>
 
             {/* 群条件 */}
-            {mode === 'group' && chatInfo.level && (
+            {/* 群条件 / 入群费 */}
+            {mode === 'group' && (
               <div
                 className={cn(
                   'text-xs mt-0.5 px-2 py-0.5 rounded',
-                  chatInfo.level === 1 || chatInfo.level === 4
-                    ? 'text-[#303133] bg-white/50'
-                    : 'text-white bg-white/30'
+                  !chatInfo.level || chatInfo.level === 0
+                    ? 'text-gray-500 bg-transparent px-0' // Level 0 样式
+                    : chatInfo.level === 1 || chatInfo.level === 4
+                      ? 'text-[#303133] bg-white/50'
+                      : 'text-white bg-white/30'
                 )}
               >
-                {LEVEL_CONDITIONS[chatInfo.level] || chatInfo.groupCondition}
+                {chatInfo.level && chatInfo.level > 0
+                  ? LEVEL_CONDITIONS[chatInfo.level]
+                  : chatInfo.groupCondition}
               </div>
             )}
           </div>
@@ -349,7 +369,10 @@ export const ChatNavigationBar = React.memo<ChatNavigationBarProps>(
     }, [mode, levelTheme]);
 
     return (
-      <div className={cn('w-full', className)} style={backgroundStyle}>
+      <div
+        className={cn('w-full border-b border-gray-200', className)}
+        style={backgroundStyle}
+      >
         {/* 顶部区域 */}
         <TopSection
           regionCode={regionCode}

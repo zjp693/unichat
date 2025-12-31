@@ -66,6 +66,7 @@ export function useChatParams() {
     memberCount,
     groupLevel,
     groupCondition,
-    invitedMembersMessage
+    invitedMembersMessage,
+    groupType: chatMeta?.groupType || 'community'
   };
 }

@@ -4,7 +4,14 @@ import {
   usePublicClient,
   useWriteContract
 } from 'wagmi';
-import { parseUnits, formatUnits, decodeEventLog, erc20Abi, Abi } from 'viem';
+import {
+  parseUnits,
+  formatUnits,
+  decodeEventLog,
+  erc20Abi,
+  Abi,
+  parseAbi
+} from 'viem';
 import type { Message } from '@/lib/chat/types';
 import { RedPacketConfig } from '@/components/chat/red-packet/types';
 import { Address } from '@/lib/utils';
@@ -19,6 +26,7 @@ import {
   DirectMessageAbi
 } from '@/lib/DirectMessageAbi';
 import communityABI from '@/contract/abi/community.json';
+import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 import {
   getTokenDecimals,
   checkTokenBalance,
@@ -36,6 +44,7 @@ interface UseRedPacketActionsProps {
   scrollToBottom: (behavior?: 'smooth' | 'auto') => void;
   currentAddress: Address;
   chatType: 'private' | 'group';
+  groupType?: 'community' | 'redpacket';
 }
 
 export function useRedPacketActions({
@@ -48,7 +57,8 @@ export function useRedPacketActions({
   selectedRedPacket,
   scrollToBottom,
   currentAddress,
-  chatType
+  chatType,
+  groupType = 'community'
 }: UseRedPacketActionsProps) {
   const publicClient = usePublicClient();
   const { writeContractAsync: approve } = useWriteContract();
@@ -59,10 +69,19 @@ export function useRedPacketActions({
   /**
    * 发送群聊红包
    * 新流程（优化为 2 步交易）：
+   *
+   * 官方群 (community):
    * 1. 计算金额：根据红包类型（普通/拼手气）计算总金额和份额。
    * 2. 余额检查：确保用户 Token 余额充足。
    * 3. 授权 (Approve)：检查并请求 ERC20 Token 授权给 RedPacket 合约。
    * 4. 一键发送：调用 Community 合约的 sendRedPacketMessage，内部自动创建红包并发送消息。
+   *
+   * 红包群 (redpacket):
+   * 1. 计算金额：只支持普通红包（单价 × 数量）
+   * 2. 余额检查：确保用户 Token 余额充足。
+   * 3. 授权 (Approve)：检查并请求 ERC20 Token 授权给群合约。
+   * 4. 创建红包：调用 RedPacketGroup 合约的 createNormalPacketAll。
+   * 5. 发送消息：调用 sendMainMessage 发送包含红包信息的消息。
    */
   const handleSendGroupRedPacket = useCallback(
     async (config: RedPacketConfig) => {
@@ -78,11 +97,6 @@ export function useRedPacketActions({
         type,
         message: memo
       } = config;
-      const isRandom = type === 'LUCKY';
-      const totalShares = BigInt(count || 1);
-      const expiryDuration = BigInt(24 * 60 * 60); // 默认 24 小时过期
-
-      // --- 1. 准备参数 & 计算金额 ---
 
       // 动态获取 Token 精度
       const decimals = await getTokenDecimals(
@@ -90,166 +104,342 @@ export function useRedPacketActions({
         publicClient
       );
 
-      let amount: bigint;
-      let shareAmounts: bigint[] = [];
+      // 🔀 根据群类型选择不同的处理逻辑
+      if (groupType === 'redpacket') {
+        // ========== 红包群逻辑 ==========
+        console.log('🎁 [红包群] 开始发送普通红包...');
 
-      if (isRandom) {
-        // 拼手气红包：输入的是【总金额】
+        // 红包群只支持普通红包
+        const perShare = parseUnits(inputAmount, decimals);
+        const totalAmount = perShare * BigInt(count || 1);
 
-        amount = parseUnits(inputAmount, decimals);
+        console.log('💰 [红包群] 参数准备:', {
+          inputAmount,
+          count,
+          decimals,
+          perShare: perShare.toString(),
+          totalAmount: totalAmount.toString()
+        });
 
-        // 前端生成随机份额 (文档未提及，但合约报错 Invalid shares length，推测需传入)
-        // 使用二倍均值法生成随机分配方案
-        let remainingAmount = amount;
-        let remainingCount = Number(totalShares);
+        try {
+          // 1. 检查余额
+          console.log('1️⃣ [红包群] 检查余额...');
+          const hasBalance = await checkTokenBalance(
+            tokenAddress as Address,
+            currentAddress,
+            totalAmount,
+            decimals,
+            publicClient
+          );
+          if (!hasBalance) return;
 
-        for (let i = 0; i < Number(totalShares) - 1; i++) {
-          const min = BigInt(1);
-          // 二倍均值法: 每次随机范围 [min, 剩余平均值 * 2]
-          const avg = remainingAmount / BigInt(remainingCount);
-          const max = avg * BigInt(2);
+          // 2. 检查当前授权额度
+          console.log('2️⃣ [红包群] 检查授权额度...');
+          const currentAllowance = (await publicClient?.readContract({
+            address: tokenAddress as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'allowance',
+            args: [currentAddress, groupAddress]
+          })) as bigint;
+          console.log('当前授权额度:', {
+            currentAllowance: currentAllowance?.toString(),
+            requiredAmount: totalAmount.toString(),
+            isEnough: currentAllowance >= totalAmount
+          });
 
-          // 简单的随机数生成 (0-100)
-          const random = BigInt(Math.floor(Math.random() * 100));
-          let share = (max * random) / BigInt(100);
+          // 3. 授权代币给群合约
+          console.log('3️⃣ [红包群] 授权代币...', {
+            tokenAddress,
+            spenderAddress: groupAddress,
+            amount: totalAmount.toString()
+          });
 
-          if (share < min) share = min;
+          await approveTokenIfNeeded(
+            tokenAddress as Address,
+            groupAddress as Address,
+            totalAmount,
+            currentAddress,
+            publicClient,
+            approve
+          );
 
-          // 确保剩余金额足够分给剩下的人 (每人至少 1 wei)
-          const minRemaining = BigInt(remainingCount - 1) * min;
-          if (remainingAmount - share < minRemaining) {
-            share = remainingAmount - minRemaining;
+          console.log('4️⃣ [红包群] 创建红包...', {
+            groupAddress,
+            tokenAddress,
+            totalAmount: totalAmount.toString(),
+            functionName: 'createNormalPacketAll',
+            args: [tokenAddress, totalAmount.toString()]
+          });
+
+          // 4. 创建红包
+          const createTxHash = await writeContract({
+            address: groupAddress,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'createNormalPacketAll',
+            args: [tokenAddress, totalAmount]
+          });
+
+          console.log('⏳ [红包群] 等待红包创建确认...', createTxHash);
+          const createReceipt = await publicClient?.waitForTransactionReceipt({
+            hash: createTxHash
+          });
+
+          console.log('✅ [红包群] 红包创建成功');
+
+          // 等待 1 秒，让网络状态稳定
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // 5. 从事件中解析 packetId
+          console.log(
+            '🔍 [红包群] 解析红包 ID，交易回执日志数量:',
+            createReceipt?.logs.length
+          );
+
+          const packetCreatedEvent = createReceipt?.logs
+            .map((log, index) => {
+              try {
+                const decoded = decodeEventLog({
+                  abi: RedPacketGroupABI.abi as Abi,
+                  data: log.data,
+                  topics: log.topics
+                });
+                console.log(
+                  `📋 [红包群] 日志 ${index}:`,
+                  decoded.eventName,
+                  decoded.args
+                );
+                return decoded;
+              } catch {
+                return null;
+              }
+            })
+            .find((event) => event?.eventName === 'PacketCreated');
+
+          console.log('🎯 [红包群] 找到的事件:', packetCreatedEvent);
+
+          const packetId = (packetCreatedEvent as any)?.args?.packetId;
+
+          if (!packetId) {
+            console.error('❌ [红包群] 无法从事件中获取红包 ID');
+            console.error('所有日志:', createReceipt?.logs);
+            throw new Error('无法获取红包 ID');
           }
 
-          shareAmounts.push(share);
-          remainingAmount -= share;
-          remainingCount--;
-        }
-        // 最后一个拿走剩余所有
-        shareAmounts.push(remainingAmount);
-      } else {
-        // 普通红包：输入的是【单价】，总金额 = 单价 * 数量
-        const perShare = parseUnits(inputAmount, decimals);
-        amount = perShare * totalShares;
-        // 普通红包 shareAmounts 留空，由合约均分
-        shareAmounts = [];
-      }
+          console.log('✅ [红包群] 红包创建成功, ID:', packetId.toString());
 
-      console.log('💰 [发送群红包] 参数准备:', {
-        type,
-        inputAmount,
-        count,
-        isRandom,
-        decimals,
-        calculatedTotalAmountWei: amount.toString(),
-        totalShares: totalShares.toString(),
-        shareAmounts: shareAmounts.map((s) => s.toString())
-      });
+          // 6. 发送消息
+          console.log('6️⃣ [红包群] 发送红包消息...');
 
-      try {
-        console.log('🚀 开始发送群红包流程...');
-
-        // 检查余额
-        const hasBalance = await checkTokenBalance(
-          tokenAddress as Address,
-          currentAddress,
-          amount,
-          decimals,
-          publicClient
-        );
-        if (!hasBalance) return;
-
-        // Token 授权
-        await approveTokenIfNeeded(
-          tokenAddress as Address,
-          RED_PACKET_CONTRACT_ADDRESS,
-          amount,
-          currentAddress,
-          publicClient,
-          approve
-        );
-
-        console.log('2️⃣ 调用群合约发送红包...');
-
-        // 调用群聊合约的 sendRedPacketMessage
-        // 参数: token, totalAmount, totalShares, isRandom, shareAmounts, expiryDuration, msgKind, memo
-        const txHash = await writeContract({
-          address: groupAddress,
-          abi: communityABI.abi as Abi,
-          functionName: 'sendRedPacketMessage',
-          args: [
-            tokenAddress,
-            amount,
-            totalShares,
-            isRandom,
-            shareAmounts,
-            expiryDuration,
-            0, // msgKind: 0 = 明文
-            memo || '恭喜发财，大吉大利'
-          ]
-        });
-
-        console.log('⏳ 等待交易确认...', txHash);
-        const receipt = await publicClient?.waitForTransactionReceipt({
-          hash: txHash
-        });
-
-        // 从日志中解析 PacketId (GroupPacketCreated)
-        const packetCreatedEvent = receipt?.logs
-          .map((log) => {
-            try {
-              return decodeEventLog({
-                abi: RedPacketAbi,
-                data: log.data,
-                topics: log.topics
-              });
-            } catch {
-              return null;
-            }
-          })
-          .find((event) => event?.eventName === 'GroupPacketCreated');
-
-        const packetId = (packetCreatedEvent as any)?.args?.id;
-
-        if (!packetId) {
-          throw new Error('无法获取红包 ID');
-        }
-
-        console.log('✅ 红包创建成功, ID:', packetId.toString());
-
-        // 构建乐观 UI 消息
-        const content = memo || '恭喜发财，大吉大利';
-        const optimisticMessage: Message = {
-          id: `temp-group-${Date.now()}`,
-          sender: 'user',
-          senderAddress: currentAddress,
-          content: JSON.stringify({
+          const messageContent = JSON.stringify({
             packetId: packetId.toString(),
-            message: content,
-            type: isRandom ? 'LUCKY' : 'NORMAL',
+            message: memo || '恭喜发财，大吉大利',
+            type: 'NORMAL',
             status: 'active',
-            amount: formatUnits(amount, decimals),
-            count: count
-          }),
-          timestamp: new Date(),
-          status: 'sent', // 交易已确认，直接设为 sent
-          type: 'red-packet',
-          recipient: groupAddress,
-          isEncrypted: false,
-          originalContent: null,
-          isGroupMessage: true
-        };
+            amount: formatUnits(totalAmount, decimals),
+            count: count,
+            tokenAddress: tokenAddress,
+            groupType: 'redpacket', // 标识这是红包群的红包
+            groupAddress: groupAddress // 保存群地址，用于查询
+          });
 
-        setMessages((prev) => [...prev, optimisticMessage]);
-        setIsActionsOpen(false);
-        scrollToBottom('smooth');
-      } catch (error) {
-        console.error('❌ 发送群红包失败:', error);
-        alert('发送失败，请查看控制台');
+          const sendTxHash = await writeContract({
+            address: groupAddress,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'sendMainMessage',
+            args: [messageContent]
+          });
+
+          console.log('⏳ [红包群] 等待消息发送确认...', sendTxHash);
+          await publicClient?.waitForTransactionReceipt({
+            hash: sendTxHash
+          });
+
+          console.log('✅ [红包群] 红包发送完成！');
+
+          // 6. 构建乐观 UI 消息
+          const optimisticMessage: Message = {
+            id: `temp-group-${Date.now()}`,
+            sender: 'user',
+            senderAddress: currentAddress,
+            content: messageContent,
+            timestamp: new Date(),
+            status: 'sent',
+            type: 'red-packet',
+            recipient: groupAddress,
+            isEncrypted: false,
+            originalContent: null,
+            isGroupMessage: true
+          };
+
+          setMessages((prev) => [...prev, optimisticMessage]);
+          setIsActionsOpen(false);
+          scrollToBottom('smooth');
+        } catch (error) {
+          console.error('❌ [红包群] 发送失败:', error);
+          alert('发送失败，请查看控制台');
+        }
+      } else {
+        // ========== 官方群逻辑（保持不变）==========
+        console.log('🎁 [官方群] 开始发送红包...');
+
+        const isRandom = type === 'LUCKY';
+        const totalShares = BigInt(count || 1);
+        const expiryDuration = BigInt(24 * 60 * 60);
+
+        let amount: bigint;
+        let shareAmounts: bigint[] = [];
+
+        if (isRandom) {
+          // 拼手气红包：输入的是【总金额】
+          amount = parseUnits(inputAmount, decimals);
+
+          // 前端生成随机份额
+          let remainingAmount = amount;
+          let remainingCount = Number(totalShares);
+
+          for (let i = 0; i < Number(totalShares) - 1; i++) {
+            const min = BigInt(1);
+            const avg = remainingAmount / BigInt(remainingCount);
+            const max = avg * BigInt(2);
+
+            const random = BigInt(Math.floor(Math.random() * 100));
+            let share = (max * random) / BigInt(100);
+
+            if (share < min) share = min;
+
+            const minRemaining = BigInt(remainingCount - 1) * min;
+            if (remainingAmount - share < minRemaining) {
+              share = remainingAmount - minRemaining;
+            }
+
+            shareAmounts.push(share);
+            remainingAmount -= share;
+            remainingCount--;
+          }
+          shareAmounts.push(remainingAmount);
+        } else {
+          // 普通红包：输入的是【单价】
+          const perShare = parseUnits(inputAmount, decimals);
+          amount = perShare * totalShares;
+          shareAmounts = [];
+        }
+
+        console.log('💰 [官方群] 参数准备:', {
+          type,
+          inputAmount,
+          count,
+          isRandom,
+          decimals,
+          calculatedTotalAmountWei: amount.toString(),
+          totalShares: totalShares.toString(),
+          shareAmounts: shareAmounts.map((s) => s.toString())
+        });
+
+        try {
+          console.log('🚀 [官方群] 开始发送红包流程...');
+
+          // 检查余额
+          const hasBalance = await checkTokenBalance(
+            tokenAddress as Address,
+            currentAddress,
+            amount,
+            decimals,
+            publicClient
+          );
+          if (!hasBalance) return;
+
+          // Token 授权
+          await approveTokenIfNeeded(
+            tokenAddress as Address,
+            RED_PACKET_CONTRACT_ADDRESS,
+            amount,
+            currentAddress,
+            publicClient,
+            approve
+          );
+
+          console.log('2️⃣ [官方群] 调用群合约发送红包...');
+
+          // 调用群聊合约的 sendRedPacketMessage
+          const txHash = await writeContract({
+            address: groupAddress,
+            abi: communityABI.abi as Abi,
+            functionName: 'sendRedPacketMessage',
+            args: [
+              tokenAddress,
+              amount,
+              totalShares,
+              isRandom,
+              shareAmounts,
+              expiryDuration,
+              0,
+              memo || '恭喜发财，大吉大利'
+            ]
+          });
+
+          console.log('⏳ [官方群] 等待交易确认...', txHash);
+          const receipt = await publicClient?.waitForTransactionReceipt({
+            hash: txHash
+          });
+
+          // 从日志中解析 PacketId
+          const packetCreatedEvent = receipt?.logs
+            .map((log) => {
+              try {
+                return decodeEventLog({
+                  abi: RedPacketAbi,
+                  data: log.data,
+                  topics: log.topics
+                });
+              } catch {
+                return null;
+              }
+            })
+            .find((event) => event?.eventName === 'GroupPacketCreated');
+
+          const packetId = (packetCreatedEvent as any)?.args?.id;
+
+          if (!packetId) {
+            throw new Error('无法获取红包 ID');
+          }
+
+          console.log('✅ [官方群] 红包创建成功, ID:', packetId.toString());
+
+          // 构建乐观 UI 消息
+          const content = memo || '恭喜发财，大吉大利';
+          const optimisticMessage: Message = {
+            id: `temp-group-${Date.now()}`,
+            sender: 'user',
+            senderAddress: currentAddress,
+            content: JSON.stringify({
+              packetId: packetId.toString(),
+              message: content,
+              type: isRandom ? 'LUCKY' : 'NORMAL',
+              status: 'active',
+              amount: formatUnits(amount, decimals),
+              count: count
+            }),
+            timestamp: new Date(),
+            status: 'sent',
+            type: 'red-packet',
+            recipient: groupAddress,
+            isEncrypted: false,
+            originalContent: null,
+            isGroupMessage: true
+          };
+
+          setMessages((prev) => [...prev, optimisticMessage]);
+          setIsActionsOpen(false);
+          scrollToBottom('smooth');
+        } catch (error) {
+          console.error('❌ [官方群] 发送红包失败:', error);
+          alert('发送失败，请查看控制台');
+        }
       }
     },
     [
       groupAddress,
+      groupType,
       currentAddress,
       publicClient,
       approve,
@@ -426,50 +616,94 @@ export function useRedPacketActions({
   const handleClaimRedPacket = useCallback(
     async (packetId: string, onTxSent?: () => void) => {
       try {
-        const packet = (await publicClient?.readContract({
-          address: RED_PACKET_CONTRACT_ADDRESS,
-          abi: RedPacketAbi,
-          functionName: 'getPacket',
-          args: [BigInt(packetId)]
-        })) as any;
+        // 从 selectedRedPacket 中获取红包信息
+        let isRedPacketGroup = false;
+        let groupAddress: Address | undefined;
 
-        // 私聊红包权限检查：只有指定的接收者才能领取
-        if (packet.packetType === 0) {
-          const recipient = packet.personalRecipient?.toLowerCase();
-          const current = currentAddress?.toLowerCase();
-
-          if (recipient !== current) {
-            console.log('❌ 无权领取此红包:', {
-              recipient,
-              current,
-              isCreator: packet.creator?.toLowerCase() === current
-            });
-
-            // 如果是发送者点击，给出友好提示
-            if (packet.creator?.toLowerCase() === current) {
-              alert('这是你发送的红包，只有接收者可以领取哦~');
-            } else {
-              alert('这个红包不是发给你的');
-            }
-            throw new Error('无权领取此红包');
+        if (selectedRedPacket) {
+          try {
+            const content = JSON.parse(selectedRedPacket.content);
+            isRedPacketGroup = content.groupType === 'redpacket';
+            groupAddress = content.groupAddress as Address;
+          } catch (e) {
+            // 解析失败，默认为官方群红包
           }
         }
 
+        console.log('🎁 [领取红包] 开始领取', {
+          packetId,
+          isRedPacketGroup,
+          groupAddress,
+          contractAddress: isRedPacketGroup
+            ? groupAddress
+            : RED_PACKET_CONTRACT_ADDRESS
+        });
+
+        // 根据红包类型选择不同的合约和方法
         let txHash;
-        if (packet.packetType === 0) {
-          txHash = await claimPersonalPacket({
-            address: RED_PACKET_CONTRACT_ADDRESS,
-            abi: RedPacketAbi,
-            functionName: 'claimPersonalPacket',
+
+        if (isRedPacketGroup && groupAddress) {
+          // ========== 红包群红包领取 ==========
+          console.log('🎁 [红包群] 领取红包...');
+
+          const RedPacketGroupClaimABI = parseAbi([
+            'function claimPacket(uint256 packetId)'
+          ]);
+
+          txHash = await writeContract({
+            address: groupAddress,
+            abi: RedPacketGroupClaimABI,
+            functionName: 'claimPacket',
             args: [BigInt(packetId)]
           });
         } else {
-          txHash = await claimGroupPacket({
+          // ========== 官方群红包领取 ==========
+          console.log('🎁 [官方群] 领取红包...');
+
+          const packet = (await publicClient?.readContract({
             address: RED_PACKET_CONTRACT_ADDRESS,
             abi: RedPacketAbi,
-            functionName: 'claimGroupPacket',
+            functionName: 'getPacket',
             args: [BigInt(packetId)]
-          });
+          })) as any;
+
+          // 私聊红包权限检查：只有指定的接收者才能领取
+          if (packet.packetType === 0) {
+            const recipient = packet.personalRecipient?.toLowerCase();
+            const current = currentAddress?.toLowerCase();
+
+            if (recipient !== current) {
+              console.log('❌ 无权领取此红包:', {
+                recipient,
+                current,
+                isCreator: packet.creator?.toLowerCase() === current
+              });
+
+              // 如果是发送者点击，给出友好提示
+              if (packet.creator?.toLowerCase() === current) {
+                alert('这是你发送的红包，只有接收者可以领取哦~');
+              } else {
+                alert('这个红包不是发给你的');
+              }
+              throw new Error('无权领取此红包');
+            }
+          }
+
+          if (packet.packetType === 0) {
+            txHash = await claimPersonalPacket({
+              address: RED_PACKET_CONTRACT_ADDRESS,
+              abi: RedPacketAbi,
+              functionName: 'claimPersonalPacket',
+              args: [BigInt(packetId)]
+            });
+          } else {
+            txHash = await claimGroupPacket({
+              address: RED_PACKET_CONTRACT_ADDRESS,
+              abi: RedPacketAbi,
+              functionName: 'claimGroupPacket',
+              args: [BigInt(packetId)]
+            });
+          }
         }
 
         if (txHash) {
@@ -482,32 +716,32 @@ export function useRedPacketActions({
           });
           console.log('✅ 领取成功');
 
-          // 解析领取事件，获取领取金额
+          // 解析领取事件，获取领取金额（仅官方群红包）
           let claimedAmount = '0';
-          try {
-            const eventName =
-              packet.packetType === 0
-                ? 'PersonalPacketClaimed'
-                : 'GroupPacketClaimed';
-            const claimEvent = receipt?.logs
-              .map((log) => {
-                try {
-                  return decodeEventLog({
-                    abi: RedPacketAbi,
-                    data: log.data,
-                    topics: log.topics
-                  });
-                } catch {
-                  return null;
-                }
-              })
-              .find((event) => event?.eventName === eventName);
+          if (!isRedPacketGroup) {
+            try {
+              // 官方群红包才需要解析事件类型
+              const eventName = 'GroupPacketClaimed'; // 群红包默认事件
+              const claimEvent = receipt?.logs
+                .map((log) => {
+                  try {
+                    return decodeEventLog({
+                      abi: RedPacketAbi,
+                      data: log.data,
+                      topics: log.topics
+                    });
+                  } catch {
+                    return null;
+                  }
+                })
+                .find((event) => event?.eventName === eventName);
 
-            if (claimEvent) {
-              claimedAmount = (claimEvent as any).args.amount.toString();
+              if (claimEvent) {
+                claimedAmount = (claimEvent as any).args.amount.toString();
+              }
+            } catch (e) {
+              console.error('解析领取事件失败:', e);
             }
-          } catch (e) {
-            console.error('解析领取事件失败:', e);
           }
 
           // 注意：领取提示消息现在由事件监听统一处理（useRedPacketEvents）

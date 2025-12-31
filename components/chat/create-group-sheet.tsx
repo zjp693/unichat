@@ -1,7 +1,16 @@
 'use client';
 
 import * as React from 'react';
-import { Search, ChevronDown, Minus, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useDispatch } from 'react-redux';
+import {
+  Search,
+  ChevronDown,
+  Minus,
+  Plus,
+  Loader2,
+  CheckCircle
+} from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -12,6 +21,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { parseUnits, formatUnits } from 'viem';
+import { useAllowedTokens, TokenInfo } from '@/hooks/contract/useAllowedTokens';
+import {
+  useCreateGroup,
+  CreateGroupParams
+} from '@/hooks/contract/useCreateGroup';
+import { TokenLogo } from '@/components/contract/TokenLogo';
+import { useClickOutside } from '@/hooks/useClickOutside';
+import { TokenDropdown } from '@/components/contract/TokenDropdown';
+import { TransactionProgress } from '@/components/contract/TransactionProgress';
+import { setChatMeta } from '@/lib/chatMetaSlice';
 
 // 类型定义
 interface CreateGroupSheetProps {
@@ -32,26 +52,57 @@ export interface CreateGroupData {
   };
 }
 
-const MAX_RATIO = 100;
-
 export function CreateGroupSheet({
   isOpen,
   onClose,
   onCreateGroup
 }: CreateGroupSheetProps) {
+  const router = useRouter();
+  const dispatch = useDispatch();
+
+  // 获取已上币代币列表
+  const { tokens: allTokens, isLoading: isLoadingTokens } = useAllowedTokens();
+
+  // 创建群组 Hook
+  const {
+    createGroup,
+    status,
+    isLoading: isCreating,
+    reset
+  } = useCreateGroup();
+
+  // 防止重复跳转的标记
+  const hasNavigated = React.useRef(false);
+
   // 表单状态
   const [name, setName] = React.useState('');
   const [rules, setRules] = React.useState('');
   const [tokenAddress, setTokenAddress] = React.useState('');
   const [entryFee, setEntryFee] = React.useState('1.95');
 
-  // 比例状态
-  const [ownerRatio, setOwnerRatio] = React.useState(9);
-  const [inviterRatio, setInviterRatio] = React.useState(31);
-  const [memberRatio, setMemberRatio] = React.useState(60);
+  // 代币选择状态
+  const [selectedToken, setSelectedToken] = React.useState<TokenInfo | null>(
+    null
+  );
+  const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  // 地址输入状态
-  const [isAddressExpanded, setIsAddressExpanded] = React.useState(false);
+  // 比例状态（固定值，不可调整）
+  const [ownerRatio] = React.useState(9);
+  const [inviterRatio] = React.useState(31);
+  const [memberRatio] = React.useState(60);
+
+  // 点击外部关闭下拉框
+  useClickOutside(dropdownRef, () => {
+    setIsDropdownOpen(false);
+  });
+
+  // 当选中代币变化时，联动更新地址
+  React.useEffect(() => {
+    if (selectedToken) {
+      setTokenAddress(selectedToken.address);
+    }
+  }, [selectedToken]);
 
   // 重置表单逻辑
   React.useEffect(() => {
@@ -60,243 +111,292 @@ export function CreateGroupSheet({
       setRules('');
       setTokenAddress('');
       setEntryFee('1.95');
-      setOwnerRatio(9);
-      setInviterRatio(31);
-      setMemberRatio(60);
-    }
-  }, [isOpen]);
+      setSelectedToken(null);
+      setIsDropdownOpen(false);
 
-  // 衍生状态
-  const currentTotalRatio = ownerRatio + inviterRatio + memberRatio;
-  const isRatioValid = currentTotalRatio === MAX_RATIO;
+      // 重置创建状态
+      reset();
+
+      // 重置跳转标记
+      hasNavigated.current = false;
+    }
+  }, [isOpen, reset]);
+
+  // 监听创建成功并跳转
+  React.useEffect(() => {
+    if (status.state === 'success' && !hasNavigated.current && selectedToken) {
+      hasNavigated.current = true;
+
+      const timer = setTimeout(() => {
+        onClose();
+        // TypeScript 类型守卫：此时已确认 state === 'success'
+        if (status.state === 'success') {
+          // 存储群聊元信息到 Redux
+          dispatch(
+            setChatMeta({
+              chatId: status.groupAddress,
+              meta: {
+                type: 'group',
+                groupType: 'redpacket', // 新建的群都是红包群
+                name: name,
+                address: status.groupAddress,
+                level: 0, // 红包群没有等级
+                memberCount: 1, // 初始只有创建者
+                groupCondition: `入群费: ${entryFee}`,
+                avatar: '' // 红包群暂无头像
+              }
+            })
+          );
+
+          // 跳转到群聊页面
+          router.push(`/chat/${status.groupAddress}?type=group`);
+        }
+      }, 1500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [status, selectedToken, name, dispatch, onClose, router]);
+
+  // 表单验证
   const isFormValid =
     name.trim() !== '' &&
     rules.trim() !== '' &&
-    isRatioValid &&
-    tokenAddress.trim() !== '';
+    selectedToken !== null &&
+    parseFloat(entryFee) > 0;
 
-  const handleRatioChange = (
-    type: 'owner' | 'inviter' | 'member',
-    operation: 'increment' | 'decrement'
-  ) => {
-    const setterMap = {
-      owner: setOwnerRatio,
-      inviter: setInviterRatio,
-      member: setMemberRatio
-    };
-
-    const valueMap = {
-      owner: ownerRatio,
-      inviter: inviterRatio,
-      member: memberRatio
-    };
-
-    const currentValue = valueMap[type];
-    const newValue =
-      operation === 'increment' ? currentValue + 1 : currentValue - 1;
-
-    if (newValue >= 0 && newValue <= 100) {
-      setterMap[type](newValue);
-    }
+  // 处理选择代币
+  const handleSelectToken = (token: TokenInfo) => {
+    setSelectedToken(token);
+    setIsDropdownOpen(false);
   };
 
-  const handleCreate = () => {
-    if (onCreateGroup && isFormValid) {
-      onCreateGroup({
-        name,
-        rules,
-        tokenAddress,
-        entryFee,
-        ratios: {
-          owner: ownerRatio,
-          inviter: inviterRatio,
-          member: memberRatio
-        }
-      });
-      onClose();
-    }
-  };
+  // 处理创建群组
+  const handleCreate = async () => {
+    if (!isFormValid || !selectedToken) return;
 
-  const formatAddress = (addr: string) => {
-    if (!addr) return '';
-    if (addr.length < 20) return addr;
-    // 格式化为 0x912...6455... (近似截图样式)
-    return `${addr.slice(0, 6)}...${addr.slice(-8)}`;
+    try {
+      // 准备合约参数
+      const params: CreateGroupParams = {
+        groupToken: selectedToken.address,
+        entryFee: parseUnits(entryFee, selectedToken.decimals),
+        groupName: name,
+        groupRules: rules
+      };
+
+      // 调用合约创建群组
+      await createGroup(params);
+
+      // 可选：调用回调函数
+      if (onCreateGroup) {
+        onCreateGroup({
+          name,
+          rules,
+          tokenAddress: selectedToken.address,
+          entryFee,
+          ratios: {
+            owner: ownerRatio,
+            inviter: inviterRatio,
+            member: memberRatio
+          }
+        });
+      }
+    } catch (error) {
+      console.error('创建群组失败:', error);
+      // 错误已由 useCreateGroup 处理，这里只做日志
+    }
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent
-        side="bottom"
-        className="rounded-t-[20px] p-0 overflow-hidden h-[90vh] flex flex-col gap-0 border-t-0 bg-white"
-      >
-        {/* 顶部拖拽条 */}
-        <div className="flex justify-center pt-3 pb-2 bg-white sticky top-0 z-10">
-          <div className="w-10 h-1 bg-gray-200 rounded-full"></div>
-        </div>
+    <>
+      <Sheet open={isOpen} onOpenChange={onClose}>
+        <SheetContent
+          side="bottom"
+          className="rounded-t-[20px] p-0 overflow-hidden h-[90vh] flex flex-col gap-0 border-t-0 bg-white"
+        >
+          {/* 顶部拖拽条 */}
+          <div className="flex justify-center pt-3 pb-2 bg-white sticky top-0 z-10">
+            <div className="w-10 h-1 bg-gray-200 rounded-full"></div>
+          </div>
 
-        <SheetHeader className="px-5 pb-4 text-center bg-white border-b-0">
-          <SheetTitle className="text-lg font-bold">创建群聊</SheetTitle>
-        </SheetHeader>
+          <SheetHeader className="px-5 pb-4 text-center bg-white border-b-0">
+            <SheetTitle className="text-lg font-bold">创建群聊</SheetTitle>
+          </SheetHeader>
 
-        {/* 可滚动表单内容 */}
-        <div className="flex-1 overflow-y-auto px-5  scrollbar-hide">
-          <div className="space-y-6">
-            {/* 群组名称 */}
-            <div className="space-y-2">
-              <Label
-                htmlFor="group-name"
-                className="text-sm font-bold text-gray-900"
-              >
-                群名称
-              </Label>
-              <div className="bg-gray-50 rounded-xl px-4 py-3">
-                <Input
-                  id="group-name"
-                  placeholder="输入群名称"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="bg-transparent border-0 p-0 h-auto focus-visible:ring-0 placeholder:text-gray-400 text-base"
-                />
-              </div>
-            </div>
-
-            {/* 群组规则 */}
-            <div className="space-y-2">
-              <Label
-                htmlFor="group-rules"
-                className="text-sm font-bold text-gray-900"
-              >
-                群制度
-              </Label>
-              <textarea
-                id="group-rules"
-                placeholder="请输入进群需要遵守的规则"
-                value={rules}
-                onChange={(e) => setRules(e.target.value)}
-                className="w-full bg-gray-50 rounded-xl px-4 py-3 min-h-[100px] resize-none border-0 focus:outline-none placeholder:text-gray-400 text-base"
-              />
-            </div>
-
-            {/* 代币合约地址 */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label className="text-sm font-bold text-gray-900">
-                  群代币合约地址
-                </Label>
-                <div className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-0.5">
-                  {/* Placeholder Icon for ARB, using div circle for now */}
-                  <div className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-[10px] text-white">
-                    A
-                  </div>
-                  <span className="text-xs font-semibold text-gray-700">
-                    ARB
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 rounded-xl px-3 py-3 flex items-center gap-2 relative">
-                <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
-
-                <Input
-                  value={tokenAddress}
-                  onChange={(e) => setTokenAddress(e.target.value)}
-                  placeholder="输入合约地址"
-                  className="bg-transparent border-0 p-0 h-auto focus-visible:ring-0 text-sm w-full placeholder:text-gray-400"
-                />
-
-                <ChevronDown className="w-5 h-5 text-gray-400 cursor-pointer flex-shrink-0" />
-              </div>
-            </div>
-
-            {/* 分配比率 */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-end">
-                <Label className="text-sm font-bold text-gray-900">
-                  群聊建群分配比例
-                </Label>
-                <div
-                  className={cn(
-                    'text-sm font-medium',
-                    isRatioValid ? 'text-gray-900' : 'text-red-500'
-                  )}
+          {/* 可滚动表单内容 */}
+          <div className="flex-1 overflow-y-auto px-5  scrollbar-hide">
+            <div className="space-y-6">
+              {/* 群组名称 */}
+              <div className="space-y-2">
+                <Label
+                  htmlFor="group-name"
+                  className="text-sm font-bold text-gray-900"
                 >
-                  {currentTotalRatio}/{MAX_RATIO}
+                  群名称
+                </Label>
+                <div className="bg-gray-50 rounded-xl px-4 py-3">
+                  <Input
+                    id="group-name"
+                    placeholder="输入群名称"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="bg-transparent border-0 p-0 h-auto focus-visible:ring-0 placeholder:text-gray-400 text-base"
+                  />
                 </div>
               </div>
 
-              {/* 入群费用 */}
-              <div className="bg-gray-50 rounded-xl p-4 flex justify-between items-center">
-                <span className="text-gray-600 text-sm">进群费用</span>
-                <div className="flex items-center gap-2 bg-white py-1 pr-3">
-                  <Input
-                    value={entryFee}
-                    onChange={(e) => setEntryFee(e.target.value)}
-                    className="w-16 h-auto p-0 border-0 text-right focus-visible:ring-0 font-semibold bg-transparent"
-                    type="number"
-                  />
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-[8px] text-white">
-                      A
+              {/* 群组规则 */}
+              <div className="space-y-2">
+                <Label
+                  htmlFor="group-rules"
+                  className="text-sm font-bold text-gray-900"
+                >
+                  群制度
+                </Label>
+                <textarea
+                  id="group-rules"
+                  placeholder="请输入进群需要遵守的规则"
+                  value={rules}
+                  onChange={(e) => setRules(e.target.value)}
+                  className="w-full bg-gray-50 rounded-xl px-4 py-3 min-h-[100px] resize-none border-0 focus:outline-none placeholder:text-gray-400 text-base"
+                />
+              </div>
+
+              {/* 代币合约地址 */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-sm font-bold text-gray-900">
+                    群代币合约地址
+                  </Label>
+                  {/* 已选代币徽章 */}
+                  {selectedToken && (
+                    <div className="flex items-center gap-1 bg-gray-100 rounded-full px-2 py-0.5">
+                      <TokenLogo token={selectedToken} size={16} />
+                      <span className="text-xs font-semibold text-gray-700">
+                        {selectedToken.symbol}
+                      </span>
                     </div>
-                    <span className="text-xs font-medium text-gray-500">
-                      ARB
-                    </span>
+                  )}
+                </div>
+
+                {/* 下拉触发器 */}
+                <div
+                  ref={dropdownRef}
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="bg-gray-50 rounded-xl px-3 py-3 flex items-center gap-2 relative cursor-pointer hover:bg-gray-100 transition-colors"
+                >
+                  <Search className="w-5 h-5 text-gray-500 flex-shrink-0" />
+
+                  <div className="flex-1 text-sm">
+                    {selectedToken ? (
+                      <span className="text-gray-600 font-mono text-xs">
+                        {selectedToken.address}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">点击选择群代币</span>
+                    )}
+                  </div>
+
+                  <ChevronDown
+                    className={cn(
+                      'w-5 h-5 text-gray-400 transition-transform flex-shrink-0',
+                      isDropdownOpen && 'rotate-180'
+                    )}
+                  />
+
+                  {/* 代币下拉列表 */}
+                  {isDropdownOpen && (
+                    <TokenDropdown
+                      tokens={allTokens}
+                      selectedToken={selectedToken}
+                      isLoading={isLoadingTokens}
+                      onSelect={handleSelectToken}
+                      onClose={() => setIsDropdownOpen(false)}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* 分配比率 */}
+              <div className="space-y-4">
+                {/* 入群费用 */}
+                <div className="bg-gray-50 rounded-xl p-4 flex justify-between items-center">
+                  <span className="text-gray-600 text-sm">进群费用</span>
+                  <div className="flex items-center gap-2 bg-white py-1 pr-3">
+                    <Input
+                      value={entryFee}
+                      onChange={(e) => setEntryFee(e.target.value)}
+                      className="w-16 h-auto p-0 border-0 text-right focus-visible:ring-0 font-semibold bg-transparent"
+                      type="number"
+                    />
+                    <div className="flex items-center gap-1">
+                      {selectedToken ? (
+                        <>
+                          <TokenLogo token={selectedToken} size={16} />
+                          <span className="text-xs font-medium text-gray-500">
+                            {selectedToken.symbol}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">未选择</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* 比率列表 */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-4">
-                <RatioRow
-                  label="群主可获得收益"
-                  value={ownerRatio}
-                  onChange={(op) => handleRatioChange('owner', op)}
-                />
-                <RatioRow
-                  label="邀请人可获得收益"
-                  value={inviterRatio}
-                  onChange={(op) => handleRatioChange('inviter', op)}
-                />
-                <RatioRow
-                  label="群成员可获得收益"
-                  value={memberRatio}
-                  onChange={(op) => handleRatioChange('member', op)}
-                />
-              </div>
-
-              {!isRatioValid && (
-                <div className="text-red-500 text-xs text-center mt-1">
-                  分配比例总和必须为 {MAX_RATIO}%
+                {/* 比率列表 - 固定展示 */}
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">
+                    入群费分配规则（合约固定）
+                  </div>
+                  <InfoRow label="群主收益" value={`${ownerRatio}%`} />
+                  <InfoRow label="推荐人收益" value={`${inviterRatio}%`} />
+                  <InfoRow label="红包池" value={`${memberRatio}%`} />
                 </div>
-              )}
-            </div>
-
-            {/* 代币发行与模型 */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label className="text-sm font-bold text-gray-900">
-                  代币发行数量
-                </Label>
-                <span className="text-sm text-gray-500 font-medium">
-                  9,999,998,977.63 ARB
-                </span>
               </div>
-            </div>
 
-            <div className="pt-2 pb-2 border-t border-gray-200">
-              <Button
-                className="w-full h-12 bg-[#8B5CF6] text-white rounded-xl  text-base font-medium shadow-purple-200 shadow-lg active:scale-95 transition-all"
-                onClick={handleCreate}
-                disabled={!isFormValid}
-              >
-                创建群聊
-              </Button>
+              {/* 代币发行与模型 */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-sm font-bold text-gray-900">
+                    代币发行数量
+                  </Label>
+                  {selectedToken ? (
+                    <span className="text-sm text-gray-500 font-medium">
+                      {formatUnits(
+                        selectedToken.totalSupply,
+                        selectedToken.decimals
+                      )}{' '}
+                      {selectedToken.symbol}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">请先选择代币</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2 pb-2 border-t border-gray-200">
+                <Button
+                  className="w-full h-12 bg-[#8B5CF6] text-white rounded-xl  text-base font-medium shadow-purple-200 shadow-lg active:scale-95 transition-all"
+                  onClick={handleCreate}
+                  disabled={!isFormValid || isCreating}
+                >
+                  {isCreating ? '创建中...' : '创建群聊'}
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+        </SheetContent>
+      </Sheet>
+
+      {/* 交易进度展示 */}
+      <TransactionProgress
+        status={status}
+        onClose={() => {
+          reset();
+          onClose();
+        }}
+      />
+    </>
   );
 }
 
@@ -328,6 +428,16 @@ function RatioRow({
           <Plus className="w-3 h-3" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// 信息展示行组件（只读）
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-gray-600 text-sm">{label}</span>
+      <span className="text-gray-900 text-sm font-medium">{value}</span>
     </div>
   );
 }

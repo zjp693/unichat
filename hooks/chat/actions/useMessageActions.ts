@@ -322,9 +322,17 @@ export function useMessageActions({
         console.log('🔵 [消息操作] [群聊] 正在请求钱包签名 (支付 Gas)...');
         await sendGroupMessage(originalMessageText, 0);
         console.log('✅ [消息操作] [群聊] 交易已提交，等待上链确认...');
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ [消息操作] [群聊] 发送失败或用户取消:', error);
         updateMessageStatus(setMessages, optimisticMessage.id, 'failed');
+
+        // 显示友好的错误提示
+        const errorMessage = error?.message || '发送失败';
+        toast({
+          title: '发送失败',
+          description: errorMessage,
+          variant: 'destructive'
+        });
       }
     },
     [

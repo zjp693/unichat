@@ -33,6 +33,7 @@ interface ChatModalsProps {
   conversationId: string;
   memberCount: number;
   groupName?: string;
+  groupType?: 'community' | 'redpacket';
 }
 
 export const ChatModals: React.FC<ChatModalsProps> = ({
@@ -43,7 +44,8 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
   chatType,
   conversationId,
   memberCount,
-  groupName
+  groupName,
+  groupType = 'community'
 }) => {
   const dispatch = useDispatch();
 
@@ -101,6 +103,7 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
           chatType={chatType}
           memberCount={memberCount}
           groupName={groupName}
+          groupType={groupType}
           onClose={() => dispatch(setShowGroupInfoPanel(false))}
         />
       )}

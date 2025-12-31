@@ -24,13 +24,15 @@ interface SendRedPacketModalProps {
   onSend?: (config: RedPacketConfig) => Promise<void>;
   chatType: 'private' | 'group';
   memberCount?: number;
+  groupType?: 'community' | 'redpacket';
 }
 
 export function SendRedPacketModal({
   trigger,
   onSend,
   chatType,
-  memberCount
+  memberCount,
+  groupType = 'community'
 }: SendRedPacketModalProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isTypeSwitcherOpen, setIsTypeSwitcherOpen] = React.useState(false);
@@ -51,9 +53,18 @@ export function SendRedPacketModal({
     }
   }, [selectedToken, recommendedTokens, isLoadingTokens]);
 
-  // Default to NORMAL for private chats, LUCKY for group chats
+  // 红包类型默认值：
+  // - 私聊：只能普通红包
+  // - 红包群：只能普通红包
+  // - 官方群：默认拼手气红包
+  const getDefaultPacketType = (): RedPacketType => {
+    if (chatType === 'private') return 'NORMAL';
+    if (groupType === 'redpacket') return 'NORMAL';
+    return 'LUCKY';
+  };
+
   const [packetType, setPacketType] = React.useState<RedPacketType>(
-    chatType === 'private' ? 'NORMAL' : 'LUCKY'
+    getDefaultPacketType()
   );
   // Default count to '1' for private chats
   const [count, setCount] = React.useState<string>(
@@ -71,12 +82,12 @@ export function SendRedPacketModal({
   // Reset state when modal opens or chatType changes
   React.useEffect(() => {
     if (isOpen) {
-      setPacketType(chatType === 'private' ? 'NORMAL' : 'LUCKY');
+      setPacketType(getDefaultPacketType());
       setCount(chatType === 'private' ? '1' : '');
       setAmount('');
       setMessage('');
     }
-  }, [isOpen, chatType]);
+  }, [isOpen, chatType, groupType]);
 
   const totalAmount = React.useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
@@ -149,8 +160,8 @@ export function SendRedPacketModal({
 
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto px-4 pb-8 flex flex-col">
-          {/* Type Switcher Trigger - Only for Group Chat */}
-          {chatType === 'group' && (
+          {/* Type Switcher Trigger - Only for Official Group (community) */}
+          {chatType === 'group' && groupType === 'community' && (
             <div className="mb-4 mt-2">
               <button
                 className="flex items-center gap-1 text-[#d4b078] text-sm font-medium focus:outline-none"
@@ -162,7 +173,9 @@ export function SendRedPacketModal({
             </div>
           )}
 
-          {chatType === 'private' && <div className="mt-4"></div>}
+          {(chatType === 'private' || groupType === 'redpacket') && (
+            <div className="mt-4"></div>
+          )}
 
           {/* Form Group */}
           <div className="space-y-4">

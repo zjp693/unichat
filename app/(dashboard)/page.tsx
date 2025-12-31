@@ -12,10 +12,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useGetPeersOf } from '@/lib/DirectMessageAbi';
 import { useChatListSync } from '@/hooks/useChatListSync';
 import { useCommunitiesWithStatus } from '@/hooks/useCommunities';
+import { useRedPacketGroups } from '@/hooks/useRedPacketGroups';
 import { useProfileCheck } from '@/hooks/useProfileCheck';
 import { useSortedChats } from '@/hooks/useSortedChats';
 import { useBatchPeerProfiles } from '@/hooks/useBatchPeerProfiles';
-import { convertCommunityToChat } from '@/lib/chat/utils';
+import {
+  convertCommunityToChat,
+  convertRedPacketGroupToChat
+} from '@/lib/chat/utils';
 import { clearAllDrafts } from '@/lib/chatSlice';
 import type { ChatItem } from '@/lib/types/chat';
 
@@ -44,14 +48,21 @@ export default function ChatPage() {
     prevAddressRef.current = currentAddress;
   }, [currentAddress, dispatch]);
 
-  // 获取链上群聊数据
+  // 1. 获取链上群聊数据 (旧版社区)
   const {
     communities: chainCommunities,
     isLoading: isCommunitiesLoading,
     refetch: refetchCommunities
   } = useCommunitiesWithStatus(currentAddress);
 
-  // 获取当前用户的对端列表
+  // 2. 获取链上群聊数据 (新版红包群)
+  const {
+    groups: redPacketGroups,
+    isLoading: isRedPacketGroupsLoading,
+    refetch: refetchRedPacketGroups
+  } = useRedPacketGroups(currentAddress);
+
+  // 3. 获取当前用户的私聊对端列表
   const {
     data: peers,
     isLoading: isPeersLoading,
@@ -76,6 +87,12 @@ export default function ChatPage() {
     isConnected && !!currentAddress
   );
 
+  // 统一刷新所有群聊
+  const refetchAllGroups = async () => {
+    refetchCommunities();
+    refetchRedPacketGroups();
+  };
+
   // 将对端地址转换为 ChatItem
   const privateChats: ChatItem[] = useMemo(() => {
     if (!peers || !Array.isArray(peers)) return [];
@@ -92,10 +109,15 @@ export default function ChatPage() {
     }));
   }, [peers]);
 
-  // 将链上群聊转换为 ChatItem 格式
+  // 将链上群聊转换为 ChatItem 格式（只显示有资格或已加入的）
   const groupChats: ChatItem[] = useMemo(() => {
-    return chainCommunities.map(convertCommunityToChat);
-  }, [chainCommunities]);
+    const oldChats = chainCommunities.map(convertCommunityToChat);
+    const newChats = redPacketGroups.map(convertRedPacketGroupToChat);
+    // 合并两种群聊，并过滤掉无资格加入的
+    return [...oldChats, ...newChats].filter(
+      (chat) => chat.isJoined || chat.canJoin
+    );
+  }, [chainCommunities, redPacketGroups]);
 
   // 合并群聊和私聊列表（未排序）
   const allChatsRaw = useMemo(() => {
@@ -127,7 +149,9 @@ export default function ChatPage() {
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
           </div>
-        ) : isPeersLoading || isCommunitiesLoading ? (
+        ) : isPeersLoading ||
+          isCommunitiesLoading ||
+          isRedPacketGroupsLoading ? (
           <ChatListSkeleton count={5} />
         ) : allChats.length === 0 ? (
           <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -140,7 +164,7 @@ export default function ChatPage() {
                 key={chat.id}
                 chat={chat}
                 currentAddress={currentAddress}
-                onJoinSuccess={refetchCommunities}
+                onJoinSuccess={refetchAllGroups}
                 peerProfile={
                   chat.isGroup
                     ? undefined

@@ -80,7 +80,8 @@ function ChatContent() {
     memberCount,
     groupLevel,
     groupCondition,
-    invitedMembersMessage
+    invitedMembersMessage,
+    groupType
   } = useChatParams();
 
   // --- 基础钩子 ---
@@ -109,10 +110,206 @@ function ChatContent() {
 
   // --- 群成员数量（实时从链上获取）---
   const { memberCount: realTimeMemberCount, isLoading: isMemberCountLoading } =
-    useCommunityMembersCount(chatType === 'group' ? groupAddress : undefined);
+    useCommunityMembersCount(
+      chatType === 'group' ? groupAddress : undefined,
+      groupType
+    );
 
   // --- 群聊元信息（进入页面后从链上刷新）---
   useCommunityMeta(chatType === 'group' ? groupAddress : undefined);
+
+  // 🔍 调试：检查群类型和成员状态
+  useEffect(() => {
+    if (
+      chatType === 'group' &&
+      groupAddress &&
+      currentAddress &&
+      publicClient
+    ) {
+      console.log('🔍 [调试] 群聊信息:', {
+        groupAddress,
+        groupType,
+        currentAddress,
+        chatType
+      });
+
+      // 检查当前用户是否是群成员
+      const checkMembership = async () => {
+        try {
+          const result = await publicClient.readContract({
+            address: groupAddress as `0x${string}`,
+            abi: [
+              {
+                inputs: [
+                  { internalType: 'address', name: '', type: 'address' }
+                ],
+                name: 'getMember',
+                outputs: [
+                  { internalType: 'bool', name: 'exists', type: 'bool' },
+                  { internalType: 'uint64', name: 'joinAt', type: 'uint64' },
+                  { internalType: 'uint32', name: 'subgroupId', type: 'uint32' }
+                ],
+                stateMutability: 'view',
+                type: 'function'
+              }
+            ],
+            functionName: 'getMember',
+            args: [currentAddress]
+          });
+
+          const isMember = result[0];
+          console.log('🔍 [调试] 成员状态:', {
+            exists: isMember,
+            joinAt: result[1]?.toString(),
+            subgroupId: result[2]
+          });
+
+          if (!isMember) {
+            console.error('❌ [错误] 你还不是群成员！请先加入群组。');
+            return;
+          }
+
+          // 同时检查是否是群主
+          const mainOwner = await publicClient.readContract({
+            address: groupAddress as `0x${string}`,
+            abi: [
+              {
+                inputs: [],
+                name: 'mainOwner',
+                outputs: [
+                  { internalType: 'address', name: '', type: 'address' }
+                ],
+                stateMutability: 'view',
+                type: 'function'
+              }
+            ],
+            functionName: 'mainOwner'
+          });
+
+          console.log('🔍 [调试] 群主信息:', {
+            mainOwner,
+            isCurrentUserMainOwner:
+              mainOwner?.toString().toLowerCase() ===
+              currentAddress.toLowerCase()
+          });
+
+          // 检查消息限制配置
+          const limitType = await publicClient.readContract({
+            address: groupAddress as `0x${string}`,
+            abi: [
+              {
+                inputs: [],
+                name: 'mainMessageLimitType',
+                outputs: [{ internalType: 'uint8', name: '', type: 'uint8' }],
+                stateMutability: 'view',
+                type: 'function'
+              }
+            ],
+            functionName: 'mainMessageLimitType'
+          });
+
+          const limitCount = await publicClient.readContract({
+            address: groupAddress as `0x${string}`,
+            abi: [
+              {
+                inputs: [],
+                name: 'mainMessageLimitCount',
+                outputs: [{ internalType: 'uint32', name: '', type: 'uint32' }],
+                stateMutability: 'view',
+                type: 'function'
+              }
+            ],
+            functionName: 'mainMessageLimitCount'
+          });
+
+          console.log('🔍 [调试] 消息限制配置:', {
+            limitType: limitType, // 0=无限制, 1=每日, 2=每周
+            limitCount: limitCount
+          });
+
+          // 检查禁言状态
+          const muteUntil = await publicClient.readContract({
+            address: groupAddress as `0x${string}`,
+            abi: [
+              {
+                inputs: [
+                  { internalType: 'address', name: '', type: 'address' }
+                ],
+                name: 'globalMuteUntil',
+                outputs: [{ internalType: 'uint64', name: '', type: 'uint64' }],
+                stateMutability: 'view',
+                type: 'function'
+              }
+            ],
+            functionName: 'globalMuteUntil',
+            args: [currentAddress]
+          });
+
+          const now = Math.floor(Date.now() / 1000);
+          const isMuted = Number(muteUntil) > now;
+          console.log('🔍 [调试] 禁言状态:', {
+            muteUntil: muteUntil?.toString(),
+            currentTimestamp: now,
+            isMuted
+          });
+
+          if (isMuted) {
+            const muteEndTime = new Date(
+              Number(muteUntil) * 1000
+            ).toLocaleString();
+            console.error(`❌ [错误] 你已被禁言！禁言结束时间: ${muteEndTime}`);
+            return;
+          }
+
+          // 检查用户消息计数
+          const msgCount = await publicClient.readContract({
+            address: groupAddress as `0x${string}`,
+            abi: [
+              {
+                inputs: [
+                  { internalType: 'address', name: '', type: 'address' }
+                ],
+                name: 'mainMessageCounts',
+                outputs: [
+                  { internalType: 'uint32', name: 'count', type: 'uint32' },
+                  {
+                    internalType: 'uint64',
+                    name: 'periodStart',
+                    type: 'uint64'
+                  }
+                ],
+                stateMutability: 'view',
+                type: 'function'
+              }
+            ],
+            functionName: 'mainMessageCounts',
+            args: [currentAddress]
+          });
+
+          const currentCount = msgCount[0];
+          console.log('🔍 [调试] 用户消息计数:', {
+            count: currentCount,
+            periodStart: msgCount[1]?.toString(),
+            limitCount: limitCount
+          });
+
+          // 检查是否超过消息限制
+          if (limitType !== 0 && currentCount >= limitCount) {
+            console.error(
+              `❌ [错误] 已达到消息发送限制！当前: ${currentCount}/${limitCount}`
+            );
+            return;
+          }
+
+          console.log('✅ [成功] 所有检查通过，可以发送消息！');
+        } catch (error) {
+          console.error('🔍 [调试] 检查成员状态失败:', error);
+        }
+      };
+
+      checkMembership();
+    }
+  }, [chatType, groupAddress, currentAddress, publicClient, groupType]);
 
   // 使用实时成员数，如果加载中则使用 URL 参数的回退值
   const displayMemberCount =
@@ -151,12 +348,15 @@ function ChatContent() {
       keys,
       scrollAreaRef: scrollAreaRef as React.RefObject<HTMLDivElement>,
       invitedMembersMessage: invitedMembersMessage as string | undefined,
-      scrollToBottom
+      scrollToBottom,
+      groupType
     });
 
   // --- 消息发送 Hooks ---
-  const { sendMessage: sendGroupMessage } =
-    useSendCommunityMessage(groupAddress);
+  const { sendMessage: sendGroupMessage } = useSendCommunityMessage(
+    groupAddress,
+    groupType
+  );
 
   const { writeContractAsync } = useSendMessage();
 
@@ -174,7 +374,8 @@ function ChatContent() {
       selectedRedPacket,
       scrollToBottom,
       currentAddress: currentAddress as Address,
-      chatType
+      chatType,
+      groupType
     });
 
   // 红包事件监听（用于显示其他人的领取提示）
@@ -265,10 +466,13 @@ function ChatContent() {
             avatar:
               (chatType === 'private' ? peerAvatarUrl : groupAvatar) ||
               undefined,
-            level: groupLevel as any,
+            level: groupType === 'redpacket' ? 0 : (groupLevel as any),
             address: chatType === 'private' ? recipientAddress : groupAddress,
             memberCount: displayMemberCount,
-            groupCondition: groupCondition
+            groupCondition:
+              groupType === 'redpacket'
+                ? groupCondition || '免费入群'
+                : groupCondition
           }}
           onMenuClick={() => {
             if (chatType === 'group') dispatch(setShowGroupInfoPanel(true));
@@ -285,6 +489,7 @@ function ChatContent() {
               currentAddress={currentAddress}
               recipientAddress={recipientAddress}
               chatType={chatType}
+              groupType={groupType}
               handleOpenRedPacket={handleOpenRedPacket}
               handleViewRedPacketDetails={(packet) =>
                 setDetailsRedPacket(packet)
@@ -355,6 +560,7 @@ function ChatContent() {
             chatType={chatType}
             contentRef={actionsPanelContentRef}
             memberCount={displayMemberCount}
+            groupType={groupType}
           />
         </div>
       </div>
@@ -369,6 +575,7 @@ function ChatContent() {
         conversationId={conversationId as string}
         memberCount={displayMemberCount}
         groupName={groupName || undefined}
+        groupType={groupType}
       />
 
       <OpenRedPacketModalNew
@@ -485,6 +692,11 @@ function ChatContent() {
               claimedCount={claimedCount}
               totalAmount={config.amount || '0'}
               claimedAmount={claimedAmount}
+              groupType={config.groupType || groupType}
+              groupAddress={
+                config.groupAddress ||
+                (chatType === 'group' ? conversationId : undefined)
+              }
               claimedList={claimedList.map((item: any) => ({
                 name: item.name,
                 avatar: item.avatar,

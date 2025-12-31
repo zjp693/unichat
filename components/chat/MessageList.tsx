@@ -20,6 +20,7 @@ interface MessageListProps {
   currentAddress: Address | undefined;
   recipientAddress: Address;
   chatType: 'private' | 'group';
+  groupType?: 'community' | 'redpacket'; // 群类型（用于红包查询）
   handleOpenRedPacket: (packet: any) => void;
   handleViewRedPacketDetails: (packet: any) => void;
   handleRetryMessage: (msg: Message) => void;
@@ -290,6 +291,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   currentAddress,
   recipientAddress,
   chatType,
+  groupType,
   handleOpenRedPacket,
   handleViewRedPacketDetails,
   handleRetryMessage,
@@ -486,6 +488,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                             onViewDetails={() =>
                               handleViewRedPacketDetails(message)
                             }
+                            fallbackGroupType={groupType}
+                            fallbackGroupAddress={recipientAddress}
                           />
                         );
                       } catch (e) {

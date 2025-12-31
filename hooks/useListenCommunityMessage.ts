@@ -1,6 +1,6 @@
 import { useWatchContractEvent, usePublicClient } from 'wagmi';
 import communityABI from '@/contract/abi/community.json';
-import { Abi, Address, getAddress } from 'viem';
+import { Abi, Address, getAddress, parseAbiItem } from 'viem';
 import type { Message } from '@/lib/chat/types';
 import { decodeGroupRedPacketCid } from '@/lib/redpacket/encoding';
 
@@ -11,6 +11,11 @@ interface CommunityMessage {
   content: string;
   cid: string;
 }
+
+// RedPacketGroup 的 MainMessage 事件 ABI
+const MainMessageEventAbi = [
+  parseAbiItem('event MainMessage(address indexed from, string content)')
+];
 
 async function fetchMessage(
   publicClient: any,
@@ -39,29 +44,32 @@ export function useListenCommunityMessage(
   communityAddress: string,
   currentAddress: string | undefined,
   onMessage: (message: Message) => void,
-  enabled: boolean = true
+  enabled: boolean = true,
+  /** 群聊类型：官方群(community) 或 红包群(redpacket) */
+  groupType: 'community' | 'redpacket' = 'community'
 ) {
   const publicClient = usePublicClient();
 
+  const isCommunityGroup = groupType === 'community';
+  const isRedPacketGroup = groupType === 'redpacket';
+
+  // ============ 官方群事件监听 ============
   useWatchContractEvent({
     address: communityAddress ? getAddress(communityAddress) : undefined,
     abi: communityABI.abi as Abi,
     eventName: 'CommunityMessageBroadcasted',
-    enabled: enabled && !!communityAddress,
+    enabled: enabled && !!communityAddress && isCommunityGroup,
     onLogs: async (logs) => {
-      console.log('📨 [群聊监听] 收到事件日志:', logs.length);
+      console.log('📨 [官方群监听] 收到事件日志:', logs.length);
       for (const log of logs) {
-        console.log('📨 [群聊监听] 处理日志:', log);
         const { sender, seq, ts } = (log as any).args;
         const messageId = `${ts?.toString()}-${sender}-${seq?.toString()}`;
 
-        // Fetch full message details
         let content = '';
         let cid = '';
-        let kind = 0; // 默认明文
+        let kind = 0;
 
         if (publicClient && seq !== undefined) {
-          console.log('📨 [群聊监听] 正在获取消息详情, seq:', seq);
           const msg = await fetchMessage(
             publicClient,
             communityAddress,
@@ -70,14 +78,12 @@ export function useListenCommunityMessage(
           if (msg) {
             content = msg.content;
             cid = msg.cid;
-            kind = msg.kind; // 保存 kind 字段
-            console.log('📨 [群聊监听] 获取到详情:', { content, cid, kind });
+            kind = msg.kind;
           }
         }
 
         const isOwn = sender?.toLowerCase() === currentAddress?.toLowerCase();
 
-        // 解析红包
         const packetId = decodeGroupRedPacketCid(cid);
         let type = 'text';
         let finalContent = content;
@@ -101,12 +107,58 @@ export function useListenCommunityMessage(
           type: type as any,
           content: finalContent,
           recipient: communityAddress as Address,
-          isEncrypted: kind === 1, // kind: 0=明文, 1=密文
+          isEncrypted: kind === 1,
           originalContent: content,
           isGroupMessage: true,
           senderAddress: sender
         };
 
+        onMessage(newMessage);
+      }
+    }
+  });
+
+  // ============ 红包群事件监听 ============
+  useWatchContractEvent({
+    address: communityAddress ? getAddress(communityAddress) : undefined,
+    abi: MainMessageEventAbi,
+    eventName: 'MainMessage',
+    enabled: enabled && !!communityAddress && isRedPacketGroup,
+    onLogs: async (logs) => {
+      console.log('📨 [红包群监听] 收到 MainMessage 事件:', logs.length);
+      for (const log of logs) {
+        const { from, content } = (log as any).args;
+        const isOwn = from?.toLowerCase() === currentAddress?.toLowerCase();
+
+        // 获取区块时间
+        let timestamp = new Date();
+        if (log.blockNumber && publicClient) {
+          try {
+            const block = await publicClient.getBlock({
+              blockNumber: log.blockNumber
+            });
+            timestamp = new Date(Number(block.timestamp) * 1000);
+          } catch (e) {
+            console.warn('Failed to get block timestamp:', e);
+          }
+        }
+
+        const messageId = `${log.blockNumber}-${from}-${Date.now()}`;
+
+        const newMessage: Message = {
+          id: messageId,
+          sender: isOwn ? 'user' : 'other',
+          timestamp,
+          type: 'text',
+          content: content || '',
+          recipient: communityAddress as Address,
+          isEncrypted: false,
+          originalContent: content || '',
+          isGroupMessage: true,
+          senderAddress: from
+        };
+
+        console.log('📨 [红包群监听] 推送消息:', newMessage.id);
         onMessage(newMessage);
       }
     }

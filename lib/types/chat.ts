@@ -23,4 +23,6 @@ export interface ChatItem {
   canJoin?: boolean;
   isJoined?: boolean;
   proofData?: any;
+  /** 是否为新版红包群（自定义群） */
+  isRedPacketGroup?: boolean;
 }

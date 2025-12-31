@@ -32,6 +32,8 @@ interface UseMessageLoaderProps {
   scrollAreaRef: React.RefObject<HTMLDivElement>;
   invitedMembersMessage?: string;
   scrollToBottom: (behavior?: 'smooth' | 'auto') => void;
+  /** 群聊类型：官方群(community) 或 红包群(redpacket) */
+  groupType?: 'community' | 'redpacket';
 }
 
 export function useMessageLoader({
@@ -43,7 +45,8 @@ export function useMessageLoader({
   keys,
   scrollAreaRef,
   invitedMembersMessage,
-  scrollToBottom
+  scrollToBottom,
+  groupType = 'community'
 }: UseMessageLoaderProps) {
   const { isConnected } = useAccount();
 
@@ -99,7 +102,8 @@ export function useMessageLoader({
     groupAddress || '',
     currentAddress,
     chatType === 'group',
-    chatType === 'group' ? fetchParams : undefined
+    chatType === 'group' ? fetchParams : undefined,
+    groupType
   );
 
   const totalCount =
@@ -148,11 +152,23 @@ export function useMessageLoader({
 
   // 3️⃣ Process Messages
   useEffect(() => {
+    console.log('[消息处理] 开始', {
+      isConnected,
+      currentAddress,
+      conversationId,
+      chatType,
+      groupType,
+      isGroupLoading,
+      groupMessagesCount: groupMessages?.length,
+      fetchParams
+    });
+
     if (!isConnected || !currentAddress || !conversationId) return;
 
     const isDataLoading =
       chatType === 'private' ? isPrivateLoading : isGroupLoading;
     if (isDataLoading) {
+      console.log('[消息处理] 数据加载中，等待...');
       return;
     }
 
@@ -170,13 +186,27 @@ export function useMessageLoader({
         return;
       }
     } else {
-      if (groupMessages && (groupMessages as Message[]).length > 0)
+      // 群聊消息判断
+      if (groupMessages && (groupMessages as Message[]).length > 0) {
         hasData = true;
-      else if (invitedMembersMessage) hasData = true;
-      else if (
+      } else if (invitedMembersMessage) {
+        hasData = true;
+      } else if (groupType === 'redpacket') {
+        // 红包群消息通过 getLogs 异步获取，不依赖 fetchParams
+        // 只有当 isGroupLoading 为 false 且消息为空时才认为没有数据
+        if (
+          !isGroupLoading &&
+          (!groupMessages || (groupMessages as Message[]).length === 0)
+        ) {
+          setIsLoading(false);
+          setIsFetchingMore(false);
+          return;
+        }
+      } else if (
         fetchParams.count > 0 &&
         (!groupMessages || (groupMessages as Message[]).length === 0)
       ) {
+        // 官方群：依赖 fetchParams 分页
         setIsLoading(false);
         setIsFetchingMore(false);
         return;
@@ -496,7 +526,8 @@ export function useMessageLoader({
       });
       setTimeout(() => scrollToBottom('smooth'), 100);
     },
-    chatType === 'group'
+    chatType === 'group',
+    groupType
   );
 
   return {

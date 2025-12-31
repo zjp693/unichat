@@ -14,6 +14,7 @@ import { IPFSImg } from '@/components/ui/ipfs-img';
 import { useToast } from '@/hooks/use-toast';
 import { usePeerProfile } from '@/hooks/usePeerProfile';
 import { useJoinCommunity } from '@/hooks/useJoinCommunity';
+import { useJoinRedPacketGroup } from '@/hooks/useJoinRedPacketGroup';
 import { useChatTimestamp } from '@/hooks/useChatTimestamp';
 import { useCountReceivedTodayBetween } from '@/lib/DirectMessageAbi';
 import { setChatMeta } from '@/lib/chatMetaSlice';
@@ -36,7 +37,16 @@ export function ChatListItem({
   const router = useRouter();
   const dispatch = useDispatch();
   const { toast } = useToast();
-  const { joinCommunity, isJoining } = useJoinCommunity();
+
+  // 根据群组类型选择不同的加入 hook
+  const { joinCommunity, isJoining: isJoiningCommunity } = useJoinCommunity();
+  const { joinRedPacketGroup, isJoining: isJoiningRedPacket } =
+    useJoinRedPacketGroup();
+
+  // 统一的 isJoining 状态
+  const isJoining = chat.isRedPacketGroup
+    ? isJoiningRedPacket
+    : isJoiningCommunity;
 
   // 获取对方 Profile（仅私聊且没有传入 peerProfile 时才查询）
   const { profile: fallbackProfile, isLoading: isFallbackLoading } =
@@ -81,7 +91,8 @@ export function ChatListItem({
     chatId: chat.id,
     isGroup: !!chat.isGroup,
     currentAddress,
-    isJoined: chat.isJoined
+    isJoined: chat.isJoined,
+    groupType: chat.isRedPacketGroup ? 'redpacket' : 'community'
   });
 
   // 获取私聊的今日消息总数
@@ -124,6 +135,7 @@ export function ChatListItem({
         chatId: chat.id,
         meta: {
           type: 'group',
+          groupType: chat.isRedPacketGroup ? 'redpacket' : 'community',
           name: chat.name ?? '',
           address: chat.address ?? chat.id,
           level: chat.level ?? 1,
@@ -151,36 +163,66 @@ export function ChatListItem({
   const handleJoinClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (!chat.proofData) {
-      toast({
-        title: '无法加入',
-        description: '您没有加入此群聊的资格',
-        variant: 'destructive'
-      });
-      return;
-    }
+    // 红包群和社区群使用不同的加入逻辑
+    if (chat.isRedPacketGroup) {
+      // 红包群：使用 join(uint32, bytes32) 方法，不需要 proofData
+      console.log('🔵 [加入红包群] 开始加入红包群...', chat.id);
 
-    const result = await joinCommunity(chat.id, chat.proofData);
+      const result = await joinRedPacketGroup(chat.id);
 
-    if (result.success) {
-      toast({
-        title: '加入成功',
-        description: '正在进入群聊...',
-        variant: 'success'
-      });
+      if (result.success) {
+        toast({
+          title: '加入成功',
+          description: '正在进入群聊...',
+          variant: 'success'
+        });
 
-      if (onJoinSuccess) {
-        onJoinSuccess();
+        if (onJoinSuccess) {
+          onJoinSuccess();
+        }
+
+        setTimeout(() => navigateToGroupChat(), 500);
+      } else {
+        console.error('❌ [加入红包群] 加入失败:', result.error);
+        toast({
+          title: '加入失败',
+          description: result.error || '请重试',
+          variant: 'destructive'
+        });
+      }
+    } else {
+      // 社区群：使用 joinCommunity 方法，需要 proofData
+      if (!chat.proofData) {
+        toast({
+          title: '无法加入',
+          description: '您没有加入此群聊的资格',
+          variant: 'destructive'
+        });
+        return;
       }
 
-      setTimeout(() => navigateToGroupChat(), 500);
-    } else {
-      console.error('❌ [加入群聊] 加入失败:', result.error);
-      toast({
-        title: '加入失败',
-        description: result.error || '请重试',
-        variant: 'destructive'
-      });
+      const result = await joinCommunity(chat.id, chat.proofData);
+
+      if (result.success) {
+        toast({
+          title: '加入成功',
+          description: '正在进入群聊...',
+          variant: 'success'
+        });
+
+        if (onJoinSuccess) {
+          onJoinSuccess();
+        }
+
+        setTimeout(() => navigateToGroupChat(), 500);
+      } else {
+        console.error('❌ [加入群聊] 加入失败:', result.error);
+        toast({
+          title: '加入失败',
+          description: result.error || '请重试',
+          variant: 'destructive'
+        });
+      }
     }
   };
 
@@ -264,7 +306,7 @@ export function ChatListItem({
                 <h3 className="font-medium text-sm truncate">
                   {chat.isGroup ? (
                     <>
-                      {chat.name} Lv{chat.level}
+                      {chat.name} {!chat.isRedPacketGroup && `Lv${chat.level}`}
                     </>
                   ) : (
                     displayName
@@ -272,7 +314,7 @@ export function ChatListItem({
                 </h3>
               )}
               {/* 群聊认证标识 */}
-              {chat.isGroup && (
+              {chat.isGroup && !chat.isRedPacketGroup && (
                 <div className="bg-white border border-[#1769df] rounded-sm text-[10px] text-[#1769df] px-1 flex-shrink-0">
                   认证
                 </div>
@@ -288,12 +330,6 @@ export function ChatListItem({
                 >
                   {isJoining ? '加入中...' : '加入'}
                 </Button>
-              )}
-              {/* 调试信息 */}
-              {chat.isGroup && (
-                <span className="text-xs text-gray-400 ml-2">
-                  {chat.isJoined ? '(已加入)' : chat.canJoin ? '' : '(无资格)'}
-                </span>
               )}
             </div>
             <span className="text-xs text-gray-400 flex-shrink-0">

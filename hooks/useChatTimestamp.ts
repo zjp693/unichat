@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux';
 import { Address } from 'viem';
 import { usePeerLastMessage, formatMessageTime } from './usePeerLastMessage';
 import { useGroupLastMessage } from './useGroupLastMessage';
+import { useLastMainMessageAt } from './useLastMainMessageAt';
 import { updateTimestamp } from '@/lib/chatSlice';
 import { AppDispatch } from '@/lib/store';
 
@@ -12,6 +13,8 @@ interface UseChatTimestampParams {
   currentAddress?: Address;
   // 群聊：是否已加入（只有加入的群才获取时间戳）
   isJoined?: boolean;
+  // 群组类型：'community' | 'redpacket'
+  groupType?: 'community' | 'redpacket' | string;
 }
 
 /**
@@ -27,14 +30,16 @@ interface UseChatTimestampParams {
  *   chatId: chat.id,
  *   isGroup: chat.isGroup,
  *   currentAddress,
- *   isJoined: chat.isJoined
+ *   isJoined: chat.isJoined,
+ *   groupType: chat.groupType
  * });
  */
 export function useChatTimestamp({
   chatId,
   isGroup,
   currentAddress,
-  isJoined = true
+  isJoined = true,
+  groupType
 }: UseChatTimestampParams) {
   const dispatch = useDispatch<AppDispatch>();
 
@@ -45,13 +50,35 @@ export function useChatTimestamp({
       !isGroup ? (chatId as Address) : (undefined as any)
     );
 
-  // 群聊：获取最后消息时间戳（只有已加入的群才获取）
-  const { timestamp: groupTimestamp, isLoading: isGroupLoading } =
-    useGroupLastMessage(isGroup && isJoined ? (chatId as Address) : undefined);
+  // Community 群聊：获取最后消息时间戳
+  const isCommunity = isGroup && (!groupType || groupType === 'community');
+  const { timestamp: communityTimestamp, isLoading: isCommunityLoading } =
+    useGroupLastMessage(
+      isCommunity && isJoined ? (chatId as Address) : undefined
+    );
+
+  // RedPacket 群聊：获取用户最后消息时间戳
+  const isRedPacket = isGroup && groupType === 'redpacket';
+  const { timestamp: redPacketTimestamp, isLoading: isRedPacketLoading } =
+    useLastMainMessageAt(
+      isRedPacket && isJoined ? (chatId as Address) : undefined,
+      currentAddress
+    );
 
   // 选择正确的时间戳
-  const timestamp = isGroup ? groupTimestamp : privateTimestamp;
-  const isLoading = isGroup ? isGroupLoading : isPrivateLoading;
+  let timestamp: bigint | undefined;
+  let isLoading = false;
+
+  if (!isGroup) {
+    timestamp = privateTimestamp;
+    isLoading = isPrivateLoading;
+  } else if (isRedPacket) {
+    timestamp = redPacketTimestamp;
+    isLoading = isRedPacketLoading;
+  } else {
+    timestamp = communityTimestamp;
+    isLoading = isCommunityLoading;
+  }
 
   // 时间戳获取到后，自动上报到 Redux
   useEffect(() => {

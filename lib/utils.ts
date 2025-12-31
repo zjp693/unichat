@@ -87,6 +87,18 @@ export function isValidEthereumAddress(address: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
 
+/**
+ * 生成基于地址的颜色（用于头像等）
+ * @param address 地址
+ * @returns 十六进制颜色值
+ */
+export function getAddressColor(address: string): string {
+  if (!address || address.length < 8) return '#8B5CF6'; // 默认紫色
+  // 使用地址的前6位作为颜色
+  const hash = address.slice(2, 8);
+  return `#${hash}`;
+}
+
 // 定义 Address 类型，用于与 viem 交互
 export type Address = `0x${string}`;
 

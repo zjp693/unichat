@@ -1,8 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { MoreHorizontal } from 'lucide-react';
+import {
+  useChainId,
+  useChains,
+  useReadContract,
+  useWriteContract,
+  useAccount,
+  usePublicClient
+} from 'wagmi';
+import { parseAbi } from 'viem';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
@@ -10,6 +20,7 @@ import { useCommunityMembers } from '@/hooks/useCommunityMembers';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { IPFSImg } from '@/components/ui/ipfs-img';
 import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
+import { MessagePermissionChecker } from '@/components/chat/MessagePermissionChecker';
 import type { Address } from 'viem';
 
 // 定义布局常量，可以从公共文件导入或在此定义
@@ -54,6 +65,7 @@ interface GroupChatInfoPanelProps {
   chatType: 'group' | 'private';
   memberCount: number;
   groupName?: string;
+  groupType?: 'community' | 'redpacket';
   onClose: () => void;
 }
 
@@ -62,11 +74,513 @@ export default function GroupChatInfoPanel({
   chatType,
   memberCount,
   groupName: initialGroupName,
+  groupType = 'community',
   onClose
 }: GroupChatInfoPanelProps) {
+  // 获取当前链信息
+  const chainId = useChainId();
+  const chains = useChains();
+  const publicClient = usePublicClient();
+  const currentChain = chains.find((c) => c.id === chainId);
+  const chainName = currentChain?.name || 'Unknown';
+  const chainShortName = chainName.charAt(0).toUpperCase();
+
+  // 链图标映射（根据链 ID 或链名称）
+  const getChainIcon = (name: string, id: number): string => {
+    // 按链 ID 精确匹配
+    const iconByChainId: Record<number, string> = {
+      1: '/chain/Ethereum.png', // Ethereum Mainnet
+      10: '/chain/OP Mainnet.png', // Optimism
+      56: '/chain/BNB Chain.png', // BNB Smart Chain
+      137: '/chain/Polygon.png', // Polygon
+      204: '/chain/BNB Chain.png', // opBNB (BNB 系)
+      8453: '/chain/Base.png', // Base
+      42161: '/chain/Arbitrum.png', // Arbitrum One
+      43114: '/chain/Avalanche.png', // Avalanche
+      81457: '/chain/Blast.png' // Blast
+    };
+
+    if (iconByChainId[id]) {
+      return iconByChainId[id];
+    }
+
+    // 按名称模糊匹配
+    const nameLower = name.toLowerCase();
+    if (nameLower.includes('arbitrum')) return '/chain/Arbitrum.png';
+    if (nameLower.includes('optimism') || nameLower.includes('op'))
+      return '/chain/OP Mainnet.png';
+    if (nameLower.includes('polygon')) return '/chain/Polygon.png';
+    if (nameLower.includes('bnb') || nameLower.includes('bsc'))
+      return '/chain/BNB Chain.png';
+    if (nameLower.includes('base')) return '/chain/Base.png';
+    if (nameLower.includes('ethereum') || nameLower.includes('eth'))
+      return '/chain/Ethereum.png';
+
+    // 默认返回空，使用首字母
+    return '';
+  };
+
+  const chainIcon = getChainIcon(chainName, chainId);
+
+  // 红包群分配比例 ABI
+  const BpsABI = parseAbi([
+    'function BPS_OWNER() view returns (uint16)',
+    'function BPS_REF() view returns (uint16)',
+    'function BPS_POOL() view returns (uint16)'
+  ]);
+
+  // 获取分配比例（只在红包群时查询）
+  const isRedPacket = groupType === 'redpacket';
+
+  const { data: bpsOwner } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: BpsABI,
+    functionName: 'BPS_OWNER',
+    query: { enabled: isRedPacket }
+  });
+
+  const { data: bpsRef } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: BpsABI,
+    functionName: 'BPS_REF',
+    query: { enabled: isRedPacket }
+  });
+
+  const { data: bpsPool } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: BpsABI,
+    functionName: 'BPS_POOL',
+    query: { enabled: isRedPacket }
+  });
+
+  // 转换为百分比（bps / 100 = %）
+  const ownerPercent = bpsOwner ? Number(bpsOwner) / 100 : 9;
+  const refPercent = bpsRef ? Number(bpsRef) / 100 : 31;
+  const poolPercent = bpsPool ? Number(bpsPool) / 100 : 60;
+
+  // 群信息读取 ABI
+  const GroupInfoABI = parseAbi([
+    'function mainOwner() view returns (address)',
+    'function announcement() view returns (string)',
+    'function economicModel() view returns (string)',
+    'function groupRules() view returns (string)'
+  ]);
+
+  // 获取群主地址
+  const { data: mainOwnerAddress } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: GroupInfoABI,
+    functionName: 'mainOwner',
+    query: { enabled: isRedPacket }
+  });
+
+  // 获取群公告
+  const { data: contractAnnouncement } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: GroupInfoABI,
+    functionName: 'announcement',
+    query: { enabled: isRedPacket }
+  });
+
+  // 获取经济模型
+  const { data: contractEconomicModel } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: GroupInfoABI,
+    functionName: 'economicModel',
+    query: { enabled: isRedPacket }
+  });
+
+  // 获取群制度
+  const { data: contractGroupRules } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: GroupInfoABI,
+    functionName: 'groupRules',
+    query: { enabled: isRedPacket }
+  });
+
+  // 当前用户账户
+  const { address: currentUserAddress } = useAccount();
+
+  // 是否是群主
+  const isMainOwner =
+    currentUserAddress && mainOwnerAddress
+      ? currentUserAddress.toLowerCase() === mainOwnerAddress.toLowerCase()
+      : false;
+
+  // 检查是否是群成员
+  const MemberABI = parseAbi([
+    'function getMember(address) view returns (bool exists, uint64 joinAt, uint32 subgroupId)'
+  ]);
+
+  const { data: memberData, refetch: refetchMember } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: MemberABI,
+    functionName: 'getMember',
+    args: currentUserAddress ? [currentUserAddress] : undefined,
+    query: { enabled: isRedPacket && !!currentUserAddress }
+  });
+
+  // 解析成员状态
+  const isMember = memberData
+    ? (memberData as [boolean, bigint, number])[0]
+    : false;
+
+  // 加入群组状态
+  const [isJoining, setIsJoining] = useState(false);
+
+  // 加入群组 ABI
+  const JoinABI = parseAbi([
+    'function join(uint32, bytes32)',
+    'function approve(address, uint256) returns (bool)'
+  ]);
+
+  // 加入群组处理函数
+  const handleJoinGroup = async () => {
+    if (!currentUserAddress || !groupTokenAddress) {
+      toast({
+        title: '错误',
+        description: '请先连接钱包',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsJoining(true);
+    try {
+      console.log('🚪 [加入群组] 开始加入', {
+        groupAddress: conversationId,
+        tokenAddress: groupTokenAddress,
+        entryFee: entryFeeAmount?.toString(),
+        tokenSymbol: displayTokenSymbol
+      });
+
+      const ERC20ABI = parseAbi([
+        'function balanceOf(address) view returns (uint256)',
+        'function approve(address, uint256) returns (bool)'
+      ]);
+
+      // 1. 检查代币余额
+      if (entryFeeAmount && BigInt(entryFeeAmount as bigint) > BigInt(0)) {
+        const balance = (await publicClient?.readContract({
+          address: groupTokenAddress as `0x${string}`,
+          abi: ERC20ABI,
+          functionName: 'balanceOf',
+          args: [currentUserAddress]
+        })) as bigint;
+
+        console.log('💰 [加入群组] 代币余额:', {
+          balance: balance?.toString(),
+          required: entryFeeAmount.toString(),
+          sufficient: balance >= BigInt(entryFeeAmount as bigint)
+        });
+
+        if (!balance || balance < BigInt(entryFeeAmount as bigint)) {
+          toast({
+            title: '余额不足',
+            description: `需要 ${displayEntryFee} ${displayTokenSymbol}`,
+            variant: 'destructive'
+          });
+          return;
+        }
+
+        // 2. 授权进群费用（使用无限授权，避免精度问题）
+        toast({ title: '授权中...', description: '请在钱包中确认授权' });
+
+        const approveTx = await writeContractAsync({
+          address: groupTokenAddress as `0x${string}`,
+          abi: ERC20ABI,
+          functionName: 'approve',
+          args: [
+            conversationId as `0x${string}`,
+            BigInt(
+              '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+            )
+          ] // maxUint256
+        });
+
+        console.log('✅ [加入群组] 授权成功:', approveTx);
+      }
+
+      // 3. 加入群组
+      toast({ title: '加入中...', description: '请在钱包中确认交易' });
+
+      const joinTx = await writeContractAsync({
+        address: conversationId as `0x${string}`,
+        abi: JoinABI,
+        functionName: 'join',
+        args: [
+          0,
+          '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`
+        ]
+      });
+
+      console.log('✅ [加入群组] 加入成功:', joinTx);
+
+      toast({ title: '加入成功', description: '你已成功加入群组' });
+
+      // 刷新成员状态
+      refetchMember();
+    } catch (error: any) {
+      console.error('❌ [加入群组] 失败:', error);
+
+      const errorMessage = error?.message || error?.toString() || '';
+      const errorLower = errorMessage.toLowerCase();
+
+      if (
+        errorLower.includes('user rejected') ||
+        errorLower.includes('user denied')
+      ) {
+        console.log('👤 用户取消了交易');
+      } else {
+        toast({
+          title: '加入失败',
+          description: errorMessage.slice(0, 100) || '请稍后重试',
+          variant: 'destructive'
+        });
+      }
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  // toast
+  const { toast } = useToast();
+
+  // 本地编辑状态
+  const [editGroupName, setEditGroupName] = useState('');
+  const [editAnnouncement, setEditAnnouncement] = useState('');
+  const [editEconomicModel, setEditEconomicModel] = useState('');
+  const [editGroupRules, setEditGroupRules] = useState('');
+  const [editEntryFee, setEditEntryFee] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // 初始化本地状态（从链上数据）
+  useEffect(() => {
+    if (contractAnnouncement !== undefined) {
+      setEditAnnouncement((contractAnnouncement as string) || '');
+    }
+  }, [contractAnnouncement]);
+
+  useEffect(() => {
+    if (contractEconomicModel !== undefined) {
+      setEditEconomicModel((contractEconomicModel as string) || '');
+    }
+  }, [contractEconomicModel]);
+
+  useEffect(() => {
+    if (contractGroupRules !== undefined) {
+      setEditGroupRules((contractGroupRules as string) || '');
+    }
+  }, [contractGroupRules]);
+
+  // 初始化群名称（从 props）
+  useEffect(() => {
+    if (initialGroupName) {
+      setEditGroupName(initialGroupName);
+    }
+  }, [initialGroupName]);
+
+  // 写合约
+  const { writeContractAsync } = useWriteContract();
+
+  // 保存修改 ABI
+  const SetterABI = parseAbi([
+    'function setGroupName(string newGroupName)',
+    'function setAnnouncement(string newAnnouncement)',
+    'function setEconomicModel(string newEconomicModel)',
+    'function setGroupRules(string newGroupRules)',
+    'function setEntryFeeAmount(uint256 newFee)'
+  ]);
+
+  // 保存处理函数
+  const handleSave = async () => {
+    if (!isMainOwner) {
+      toast({
+        title: '无权限',
+        description: '只有群主才能修改群信息',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const promises: Promise<any>[] = [];
+
+      // 检查群名称是否有变化
+      if (editGroupName && editGroupName !== initialGroupName) {
+        promises.push(
+          writeContractAsync({
+            address: conversationId as `0x${string}`,
+            abi: SetterABI,
+            functionName: 'setGroupName',
+            args: [editGroupName]
+          })
+        );
+      }
+
+      // 检查群公告是否有变化
+      if (editAnnouncement !== (contractAnnouncement || '')) {
+        promises.push(
+          writeContractAsync({
+            address: conversationId as `0x${string}`,
+            abi: SetterABI,
+            functionName: 'setAnnouncement',
+            args: [editAnnouncement]
+          })
+        );
+      }
+
+      // 检查经济模型是否有变化
+      if (editEconomicModel !== (contractEconomicModel || '')) {
+        promises.push(
+          writeContractAsync({
+            address: conversationId as `0x${string}`,
+            abi: SetterABI,
+            functionName: 'setEconomicModel',
+            args: [editEconomicModel]
+          })
+        );
+      }
+
+      // 检查群制度是否有变化
+      if (editGroupRules !== (contractGroupRules || '')) {
+        promises.push(
+          writeContractAsync({
+            address: conversationId as `0x${string}`,
+            abi: SetterABI,
+            functionName: 'setGroupRules',
+            args: [editGroupRules]
+          })
+        );
+      }
+
+      // 检查进群费用是否有变化
+      if (editEntryFee && tokenDecimals) {
+        const newFeeWei = BigInt(
+          Math.floor(Number(editEntryFee) * Math.pow(10, Number(tokenDecimals)))
+        );
+        if (newFeeWei !== entryFeeAmount) {
+          promises.push(
+            writeContractAsync({
+              address: conversationId as `0x${string}`,
+              abi: SetterABI,
+              functionName: 'setEntryFeeAmount',
+              args: [newFeeWei]
+            })
+          );
+        }
+      }
+
+      if (promises.length === 0) {
+        toast({ title: '无修改', description: '没有需要保存的内容' });
+        setIsSaving(false);
+        return;
+      }
+
+      await Promise.all(promises);
+      toast({
+        title: '保存成功',
+        description: `已更新 ${promises.length} 项群信息`
+      });
+    } catch (error: any) {
+      console.error('保存失败:', error);
+      toast({
+        title: '保存失败',
+        description: error?.message || '请稍后重试',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 群代币和进群费 ABI
+  const GroupTokenABI = parseAbi([
+    'function groupToken() view returns (address)',
+    'function entryFeeAmount() view returns (uint256)'
+  ]);
+
+  // ERC20 代币 ABI
+  const ERC20ABI = parseAbi([
+    'function symbol() view returns (string)',
+    'function decimals() view returns (uint8)'
+  ]);
+
+  // 获取群代币地址
+  const { data: groupTokenAddress } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: GroupTokenABI,
+    functionName: 'groupToken',
+    query: { enabled: isRedPacket }
+  });
+
+  // 获取进群费用
+  const { data: entryFeeAmount } = useReadContract({
+    address: conversationId as `0x${string}`,
+    abi: GroupTokenABI,
+    functionName: 'entryFeeAmount',
+    query: { enabled: isRedPacket }
+  });
+
+  // 获取代币符号
+  const { data: tokenSymbol } = useReadContract({
+    address: groupTokenAddress as `0x${string}`,
+    abi: ERC20ABI,
+    functionName: 'symbol',
+    query: { enabled: isRedPacket && !!groupTokenAddress }
+  });
+
+  // 获取代币小数位
+  const { data: tokenDecimals } = useReadContract({
+    address: groupTokenAddress as `0x${string}`,
+    abi: ERC20ABI,
+    functionName: 'decimals',
+    query: { enabled: isRedPacket && !!groupTokenAddress }
+  });
+
+  // 格式化进群费用
+  const formatEntryFee = () => {
+    if (!entryFeeAmount || !tokenDecimals) return '0';
+    const decimals = Number(tokenDecimals);
+    const fee = Number(entryFeeAmount) / Math.pow(10, decimals);
+    // 如果是整数就不显示小数
+    return fee % 1 === 0 ? fee.toString() : fee.toFixed(2);
+  };
+
+  const displayTokenSymbol = tokenSymbol || 'TOKEN';
+  const displayEntryFee = formatEntryFee();
+
+  // Trust Wallet 代币图标 URL
+  const getTokenLogoUrl = (cId: number, address: string | undefined) => {
+    if (!address) return null;
+
+    const chainMap: Record<number, string> = {
+      1: 'ethereum',
+      56: 'smartchain',
+      137: 'polygon',
+      42161: 'arbitrum',
+      10: 'optimism',
+      8453: 'base',
+      204: 'opbnb',
+      43114: 'avalanche'
+    };
+
+    const chain = chainMap[cId];
+    if (!chain) return null;
+
+    // Trust Wallet 资产库 URL
+    return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chain}/assets/${address}/logo.png`;
+  };
+
+  const tokenLogoUrl = getTokenLogoUrl(chainId, groupTokenAddress as string);
+
+  // 图标加载失败状态
+  const [tokenLogoError, setTokenLogoError] = useState(false);
+
   // 获取群成员地址列表（最多获取100个）
   const { members: memberAddresses, isLoading: isMembersLoading } =
-    useCommunityMembers(conversationId, 0, 100);
+    useCommunityMembers(conversationId, 0, 100, groupType);
 
   // 控制成员列表展开/收起状态
   const [showAllMembers, setShowAllMembers] = useState(false);
@@ -231,11 +745,29 @@ export default function GroupChatInfoPanel({
             )}
           </div>
 
+          {/* 发送权限检查 */}
+          {isRedPacket && (
+            <MessagePermissionChecker
+              groupAddress={conversationId}
+              className="bg-white p-4"
+            />
+          )}
+
           {/* 群信息 */}
           <div className="bg-white px-4 space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
               <span className="text-gray-700">群名称</span>
-              <span className="text-gray-500">{groupName}</span>
+              {isMainOwner ? (
+                <input
+                  type="text"
+                  value={editGroupName}
+                  onChange={(e) => setEditGroupName(e.target.value)}
+                  className="text-right text-gray-500 bg-transparent border-0 p-0 text-sm focus:outline-none focus:ring-0 max-w-[180px]"
+                  placeholder="请输入群名称"
+                />
+              ) : (
+                <span className="text-gray-500">{groupName}</span>
+              )}
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
               <span className="text-gray-700">群二维码</span>
@@ -300,49 +832,19 @@ export default function GroupChatInfoPanel({
             </div> */}
           </div>
 
-          {/* 代币发行信息 */}
-          <div className="bg-white p-4 space-y-3">
-            <div className="flex justify-between items-center py-2 border-b border-gray-200">
-              <span className="text-gray-700">代币发行名称</span>
-              <div className="flex items-center gap-1 text-gray-500">
-                <span>选择币种</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M9 6L15 12L9 18"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center py-2 border-b border-gray-200">
-              <span className="text-gray-700">代币发行数量</span>
-              <input
-                type="text"
-                placeholder="请填写数量"
-                className="text-right bg-transparent border-0 p-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 w-32"
-              />
-            </div>
-
-            <div className="py-2">
-              <div className="text-gray-700 mb-2">代币发行合约地址</div>
-              <input
-                type="text"
-                placeholder="请输入..."
-                className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0"
-              />
-            </div>
-          </div>
-
           {/* 经济模型 */}
           <div className="bg-white p-4">
             <div className="text-gray-700 mb-2">经济模型</div>
             <textarea
               placeholder="请输入..."
               rows={3}
-              className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none"
+              value={editEconomicModel}
+              onChange={(e) => setEditEconomicModel(e.target.value)}
+              readOnly={!isMainOwner}
+              className={cn(
+                'w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none',
+                !isMainOwner && 'text-gray-500 cursor-default'
+              )}
             />
           </div>
 
@@ -352,7 +854,13 @@ export default function GroupChatInfoPanel({
             <textarea
               placeholder="请输入..."
               rows={3}
-              className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none"
+              value={editGroupRules}
+              onChange={(e) => setEditGroupRules(e.target.value)}
+              readOnly={!isMainOwner}
+              className={cn(
+                'w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none',
+                !isMainOwner && 'text-gray-500 cursor-default'
+              )}
             />
           </div>
 
@@ -362,7 +870,13 @@ export default function GroupChatInfoPanel({
             <textarea
               placeholder="请输入..."
               rows={3}
-              className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none"
+              value={editAnnouncement}
+              onChange={(e) => setEditAnnouncement(e.target.value)}
+              readOnly={!isMainOwner}
+              className={cn(
+                'w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0 resize-none',
+                !isMainOwner && 'text-gray-500 cursor-default'
+              )}
             />
           </div>
 
@@ -425,16 +939,25 @@ export default function GroupChatInfoPanel({
               <div className="flex justify-between items-center mb-3">
                 <span className="text-gray-700">群代币合约地址</span>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
-                    A
-                  </div>
-                  <span className="text-sm text-gray-700">Arbitum</span>
+                  {chainIcon ? (
+                    <img
+                      src={chainIcon}
+                      alt={chainName}
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
+                      {chainShortName}
+                    </div>
+                  )}
+                  <span className="text-sm text-gray-700">{chainName}</span>
                 </div>
               </div>
               <input
                 type="text"
-                placeholder="请输入..."
-                className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-0"
+                value={groupTokenAddress || ''}
+                readOnly
+                className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm text-gray-500 focus:outline-none focus:ring-0 cursor-default"
               />
             </div>
 
@@ -442,12 +965,21 @@ export default function GroupChatInfoPanel({
             <div className="flex justify-between items-center py-2 border-b border-gray-200">
               <span className="text-gray-700">代币名称</span>
               <div className="flex items-center gap-1.5">
-                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
-                    <circle cx="12" cy="12" r="10" fill="currentColor" />
-                  </svg>
-                </div>
-                <span className="text-sm text-gray-700">USDT0</span>
+                {tokenLogoUrl && !tokenLogoError ? (
+                  <img
+                    src={tokenLogoUrl}
+                    alt={displayTokenSymbol}
+                    className="w-5 h-5 rounded-full object-cover"
+                    onError={() => setTokenLogoError(true)}
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-[10px] font-bold">
+                    {displayTokenSymbol.charAt(0)}
+                  </div>
+                )}
+                <span className="text-sm text-gray-700">
+                  {displayTokenSymbol}
+                </span>
               </div>
             </div>
 
@@ -455,50 +987,105 @@ export default function GroupChatInfoPanel({
             <div className="flex justify-between items-center py-2 border-b border-gray-200">
               <span className="text-gray-700">进群费用</span>
               <div className="flex items-center gap-1.5">
-                <span className="text-sm text-gray-700">100</span>
-                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
-                    <circle cx="12" cy="12" r="10" fill="currentColor" />
-                  </svg>
-                </div>
-                <span className="text-sm text-gray-700">USDT0</span>
+                {isMainOwner ? (
+                  <input
+                    type="number"
+                    value={editEntryFee || displayEntryFee}
+                    onChange={(e) => setEditEntryFee(e.target.value)}
+                    className="w-20 text-right text-sm text-gray-700 bg-transparent border-0 p-0 focus:outline-none focus:ring-0"
+                    placeholder="0"
+                  />
+                ) : (
+                  <span className="text-sm text-gray-700">
+                    {displayEntryFee}
+                  </span>
+                )}
+                {tokenLogoUrl && !tokenLogoError ? (
+                  <img
+                    src={tokenLogoUrl}
+                    alt={displayTokenSymbol}
+                    className="w-5 h-5 rounded-full object-cover"
+                    onError={() => setTokenLogoError(true)}
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-[10px] font-bold">
+                    {displayTokenSymbol.charAt(0)}
+                  </div>
+                )}
+                <span className="text-sm text-gray-700">
+                  {displayTokenSymbol}
+                </span>
               </div>
             </div>
 
-            {/* 群聊建群分配比例 */}
-            <div className="pt-2">
-              <div className="flex justify-between items-center py-2 mb-4">
-                <span className="text-gray-700">群聊建群分配比例</span>
-                <span className="text-sm text-gray-700">100%/100%</span>
-              </div>
+            {/* 群聊建群分配比例 - 只有群主可见 */}
+            {isMainOwner && (
+              <div className="pt-2">
+                <div className="flex justify-between items-center py-2 mb-4">
+                  <span className="text-gray-700">群聊建群分配比例</span>
+                  <span className="text-sm text-gray-700">
+                    {ownerPercent + refPercent + poolPercent}%/100%
+                  </span>
+                </div>
 
-              <div className="space-y-3 pl-4 bg-[#fbfbfb] py-3 px-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    群主可获得群收益
-                  </span>
-                  <span className="text-sm text-gray-700">9%</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    邀请人可获得群收益
-                  </span>
-                  <span className="text-sm text-gray-700">31%</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    群成员可获得群收益
-                  </span>
-                  <span className="text-sm text-gray-700">60%</span>
+                <div className="space-y-3 pl-4 bg-[#fbfbfb] py-3 px-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">
+                      群主可获得群收益
+                    </span>
+                    <span className="text-sm text-gray-700">
+                      {ownerPercent}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">
+                      邀请人可获得群收益
+                    </span>
+                    <span className="text-sm text-gray-700">{refPercent}%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">
+                      群成员可获得群收益
+                    </span>
+                    <span className="text-sm text-gray-700">
+                      {poolPercent}%
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-            {/* 修改并保存按钮 */}
-            <div className="px-4 pb-8 pt-4">
-              <button className="w-full h-12 bg-green-500 text-white rounded-full text-base font-medium shadow-lg">
-                修改并保存
-              </button>
-            </div>
+            )}
+            {/* 修改并保存按钮 - 只有群主可见 */}
+            {isMainOwner && (
+              <div className="px-4 pb-4 pt-4">
+                <button
+                  className={cn(
+                    'w-full h-12 bg-green-500 text-white rounded-full text-base font-medium shadow-lg',
+                    isSaving && 'opacity-50 cursor-not-allowed'
+                  )}
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? '保存中...' : '修改并保存'}
+                </button>
+              </div>
+            )}
+            {/* 加入群聊按钮 - 非成员可见 */}
+            {!isMember && !isMainOwner && (
+              <div className="px-4 pb-8 pt-4">
+                <button
+                  className={cn(
+                    'w-full h-12 bg-primary text-white rounded-full text-base font-medium shadow-lg hover:bg-primary/90',
+                    isJoining && 'opacity-50 cursor-not-allowed'
+                  )}
+                  onClick={handleJoinGroup}
+                  disabled={isJoining}
+                >
+                  {isJoining
+                    ? '加入中...'
+                    : `加入群聊${entryFeeAmount && BigInt(entryFeeAmount as bigint) > BigInt(0) ? ` (${displayEntryFee} ${displayTokenSymbol})` : ''}`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -42,6 +42,8 @@ interface RedPacketDetailsModalProps {
   packetId?: string;
   type?: 'LUCKY' | 'NORMAL';
   tokenSymbol?: string;
+  groupType?: 'community' | 'redpacket'; // 群类型
+  groupAddress?: string; // 群合约地址（红包群需要）
   // Make other props optional as they will be fetched
   myAmount?: string;
   totalCount?: number;
@@ -60,10 +62,27 @@ export function RedPacketDetailsModal({
   packetId,
   type = 'LUCKY',
   myAmount: initialMyAmount,
-  tokenSymbol: initialTokenSymbol
+  tokenSymbol: initialTokenSymbol,
+  groupType = 'community',
+  groupAddress
 }: RedPacketDetailsModalProps) {
   const { toast } = useToast();
   const { address: currentAddress } = useAccount();
+
+  // 判断是否是红包群
+  const isRedPacketGroup = groupType === 'redpacket';
+  const queryAddress =
+    isRedPacketGroup && groupAddress
+      ? (groupAddress as `0x${string}`)
+      : RED_PACKET_CONTRACT_ADDRESS;
+
+  console.log('🎁 [RedPacketDetailsModal] 红包详情配置:', {
+    packetId,
+    groupType,
+    groupAddress,
+    isRedPacketGroup,
+    queryAddress
+  });
 
   // 退款相关
   const { writeContractAsync: refundPacket } = useRefundExpiredPacket();
@@ -76,8 +95,39 @@ export function RedPacketDetailsModal({
 
   // 1. 获取红包基本信息
   const { data: packet, refetch: refetchPacket } = useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
-    abi: RedPacketAbi,
+    address: queryAddress,
+    abi: isRedPacketGroup
+      ? [
+          {
+            inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+            name: 'getPacket',
+            outputs: [
+              { internalType: 'uint8', name: 'kind', type: 'uint8' },
+              { internalType: 'address', name: 'token', type: 'address' },
+              { internalType: 'uint64', name: 'createdAt', type: 'uint64' },
+              {
+                internalType: 'uint32',
+                name: 'targetSubgroupId',
+                type: 'uint32'
+              },
+              { internalType: 'uint32', name: 'sharesTotal', type: 'uint32' },
+              { internalType: 'uint256', name: 'totalAmount', type: 'uint256' },
+              {
+                internalType: 'uint256',
+                name: 'remainingAmount',
+                type: 'uint256'
+              },
+              {
+                internalType: 'uint32',
+                name: 'remainingShares',
+                type: 'uint32'
+              }
+            ],
+            stateMutability: 'view',
+            type: 'function'
+          }
+        ]
+      : RedPacketAbi,
     functionName: 'getPacket',
     args: packetId ? [BigInt(packetId)] : undefined,
     query: {
@@ -85,7 +135,37 @@ export function RedPacketDetailsModal({
     }
   });
 
-  const packetData = packet as any;
+  // 适配不同的数据结构
+  const packetData = React.useMemo(() => {
+    if (!packet) return null;
+
+    if (isRedPacketGroup) {
+      // 红包群返回数组：[kind, token, createdAt, targetSubgroupId, sharesTotal, totalAmount, remainingAmount, remainingShares]
+      const [
+        kind,
+        token,
+        createdAt,
+        targetSubgroupId,
+        sharesTotal,
+        totalAmount,
+        remainingAmount,
+        remainingShares
+      ] = packet as any;
+      return {
+        token,
+        totalShares: sharesTotal,
+        claimedShares: Number(sharesTotal) - Number(remainingShares),
+        totalAmount,
+        claimedAmount: BigInt(totalAmount) - BigInt(remainingAmount),
+        remainingAmount,
+        remainingShares
+      };
+    } else {
+      // 官方群返回对象
+      return packet as any;
+    }
+  }, [packet, isRedPacketGroup]);
+
   const tokenAddress = packetData?.token;
 
   // 2. 获取代币信息
@@ -103,14 +183,14 @@ export function RedPacketDetailsModal({
     query: { enabled: !!tokenAddress && isOpen }
   });
 
-  // 3. 获取领取记录
+  // 3. 获取领取记录（仅官方群支持）
   const { data: recordsData, refetch: refetchRecords } = useReadContract({
     address: RED_PACKET_CONTRACT_ADDRESS,
     abi: RedPacketAbi,
     functionName: 'getClaimRecordsPaged',
     args: packetId ? [BigInt(packetId), BigInt(0), BigInt(100)] : undefined, // 获取前100条
     query: {
-      enabled: !!packetId && isOpen
+      enabled: !!packetId && isOpen && !isRedPacketGroup // 红包群不支持领取记录查询
     }
   });
 

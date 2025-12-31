@@ -2,6 +2,8 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 export interface ChatMeta {
   type: 'private' | 'group';
+  // 新增：群组子类型，用于区分老群(community)和新红包群(redpacket)
+  groupType?: 'community' | 'redpacket';
   // 群聊字段
   name?: string;
   avatar?: string;

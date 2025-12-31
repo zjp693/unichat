@@ -2,6 +2,8 @@ import { Address } from '@/lib/utils';
 import type { Message } from './types';
 import type { ChatItem } from '@/lib/types/chat';
 import type { CommunityWithStatus } from '@/lib/types/community';
+import { RedPacketGroupMetadata } from '@/lib/redpacket-groups/getRedPacketGroupList';
+import { formatUnits } from 'viem';
 import dayjs from 'dayjs';
 
 /**
@@ -25,6 +27,44 @@ export function convertCommunityToChat(
     canJoin: community.canJoin,
     isJoined: community.isJoined,
     proofData: community.proofData
+  };
+}
+
+/**
+ * 将 RedPacketGroupMetadata 转换为 ChatItem 格式
+ */
+export function convertRedPacketGroupToChat(
+  group: RedPacketGroupMetadata
+): ChatItem {
+  return {
+    id: group.address,
+    name: group.name,
+    avatar: group.avatar,
+    lastMessage: group.address,
+    time: '-',
+    isGroup: true,
+    // @ts-ignore - Level type might be strict 1-6 but here we dynamic
+    level: group.level,
+    memberCount: group.memberCount,
+    groupCondition:
+      group.fee > 0
+        ? `入群费: ${parseFloat(formatUnits(group.fee, 18)).toFixed(2)}`
+        : '免费入群',
+    address: group.address,
+    canJoin: !group.isJoined,
+    isJoined: group.isJoined,
+    // 红包群使用 join() 方法，不需要 Merkle Proof
+    // 但为了兼容性，提供一个空的 proofData
+    proofData: {
+      proof: [],
+      maxTier: 0,
+      epoch: 0,
+      validUntil: 0,
+      nonce:
+        '0x0000000000000000000000000000000000000000000000000000000000000000'
+    },
+    // @ts-ignore - Adding extra prop for runtime checks if needed
+    isRedPacketGroup: true
   };
 }
 
