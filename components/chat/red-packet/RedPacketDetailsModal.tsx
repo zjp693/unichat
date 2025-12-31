@@ -549,10 +549,11 @@ export function RedPacketDetailsModal({
 
             // 检查红包是否已过期
             const now = Math.floor(Date.now() / 1000);
-            const creationTime =
-              packetData?.creationTime || packetData?.createdAt || 0;
-            const expiryDuration = packetData?.expiryDuration || 0;
-            const expiryTime = packetData?.expiryTime || 0;
+            const creationTime = Number(
+              packetData?.creationTime || packetData?.createdAt || 0
+            );
+            const expiryDuration = Number(packetData?.expiryDuration || 0);
+            const expiryTime = Number(packetData?.expiryTime || 0);
 
             const isExpired =
               (expiryTime > 0 && now > expiryTime) ||
