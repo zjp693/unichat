@@ -145,12 +145,39 @@ export function useListenCommunityMessage(
 
         const messageId = `${log.blockNumber}-${from}-${Date.now()}`;
 
+        // 🎁 检查是否是红包消息
+        let messageType: 'text' | 'red-packet' = 'text';
+        let messageContent = content || '';
+
+        try {
+          // 检查是否有 'index | json' 格式的前缀，如果有则提取真正的 JSON
+          let jsonContent = content || '{}';
+          const pipeMatch = jsonContent.match(/^\d+\s*\|\s*(.+)$/);
+          if (pipeMatch) {
+            jsonContent = pipeMatch[1];
+            messageContent = jsonContent; // 同时更新消息内容
+          }
+
+          const parsed = JSON.parse(jsonContent);
+          // 如果包含 packetId 字段，或者包含 groupType=redpacket 的红包消息特征，说明是红包消息
+          if (
+            parsed.packetId ||
+            (parsed.groupType === 'redpacket' &&
+              (parsed.amount || parsed.tokenAddress))
+          ) {
+            messageType = 'red-packet';
+            console.log('[红包群监听] 识别到红包消息:', parsed);
+          }
+        } catch (e) {
+          // 不是 JSON，保持为普通文本消息
+        }
+
         const newMessage: Message = {
           id: messageId,
           sender: isOwn ? 'user' : 'other',
           timestamp,
-          type: 'text',
-          content: content || '',
+          type: messageType,
+          content: messageContent,
           recipient: communityAddress as Address,
           isEncrypted: false,
           originalContent: content || '',
@@ -158,7 +185,12 @@ export function useListenCommunityMessage(
           senderAddress: from
         };
 
-        console.log('📨 [红包群监听] 推送消息:', newMessage.id);
+        console.log(
+          '📨 [红包群监听] 推送消息:',
+          newMessage.id,
+          '类型:',
+          messageType
+        );
         onMessage(newMessage);
       }
     }

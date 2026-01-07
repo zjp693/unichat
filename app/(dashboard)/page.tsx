@@ -20,7 +20,7 @@ import {
   convertCommunityToChat,
   convertRedPacketGroupToChat
 } from '@/lib/chat/utils';
-import { clearAllDrafts } from '@/lib/chatSlice';
+import { clearAllDrafts, batchUpdateTimestamps } from '@/lib/chatSlice';
 import type { ChatItem } from '@/lib/types/chat';
 
 export default function ChatPage() {
@@ -86,6 +86,21 @@ export default function ChatPage() {
     },
     isConnected && !!currentAddress
   );
+
+  // 同步红包群的时间戳到 Redux（用于排序）
+  useEffect(() => {
+    if (redPacketGroups.length > 0) {
+      const timestampUpdates: Record<string, number> = {};
+      redPacketGroups.forEach((group) => {
+        if (group.lastMessageTimestamp) {
+          timestampUpdates[group.address] = group.lastMessageTimestamp;
+        }
+      });
+      if (Object.keys(timestampUpdates).length > 0) {
+        dispatch(batchUpdateTimestamps(timestampUpdates));
+      }
+    }
+  }, [redPacketGroups, dispatch]);
 
   // 统一刷新所有群聊
   const refetchAllGroups = async () => {

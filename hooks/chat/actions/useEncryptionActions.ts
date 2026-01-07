@@ -2,9 +2,10 @@ import { useCallback } from 'react';
 import type { Message } from '@/lib/chat/types';
 import type { KeyPair } from '@/lib/keyManagement';
 import { chatEncryption } from '@/lib/keyManagement';
-import type { Address, Abi } from 'viem';
+import { type Address, type Abi } from 'viem';
 import type { ChatInputAreaRef } from '@/components/chat/ChatInputArea';
 import communityABI from '@/contract/abi/community.json';
+import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 
 interface UseEncryptionActionsProps {
   // State setters
@@ -23,6 +24,7 @@ interface UseEncryptionActionsProps {
   pendingGroupMessage: string;
   currentAddress: Address | undefined;
   groupAddress: string | null;
+  groupType?: 'community' | 'redpacket';
   publicClient: any;
 
   // Functions
@@ -53,6 +55,7 @@ export function useEncryptionActions({
   pendingGroupMessage,
   currentAddress,
   groupAddress,
+  groupType = 'community',
   sendGroupMessage,
   scrollToBottom,
   inputRef,
@@ -253,8 +256,14 @@ export function useEncryptionActions({
         );
 
         // 3. 手动拉取最新消息作为兜底 (防止事件监听失败)
+        // 注意：只对官方群执行，红包群使用不同的合约方法
         try {
-          if (!isEncrypted && publicClient && groupAddress) {
+          if (
+            !isEncrypted &&
+            publicClient &&
+            groupAddress &&
+            groupType === 'community'
+          ) {
             console.log('🔄 [兜底] 尝试手动拉取最新消息...');
             // 等待一小会儿让节点同步
             await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -304,6 +313,63 @@ export function useEncryptionActions({
               }
             }
           }
+
+          // 红包群兜底逻辑
+          if (
+            !isEncrypted &&
+            publicClient &&
+            groupAddress &&
+            groupType === 'redpacket'
+          ) {
+            console.log('🔄 [兜底-红包群] 尝试手动拉取最新消息...');
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            // 获取消息总数
+            const count = await publicClient.readContract({
+              address: groupAddress as Address,
+              abi: RedPacketGroupABI.abi as Abi,
+              functionName: 'mainMessageCount'
+            });
+
+            if (count && Number(count) > 0) {
+              const lastSeq = Number(count) - 1;
+              // 获取最后一条消息
+              const result = await publicClient.readContract({
+                address: groupAddress as Address,
+                abi: RedPacketGroupABI.abi as Abi,
+                functionName: 'mainMessages',
+                args: [BigInt(lastSeq)]
+              });
+
+              // result: [from, content, timestamp, subgroupId]
+              if (result && Array.isArray(result) && result.length >= 3) {
+                const [from, content, timestamp] = result;
+                // 检查内容是否匹配
+                if (content === contentToSend) {
+                  console.log('✅ [兜底-红包群] 手动拉取成功，更新消息状态');
+                  const realId = `${timestamp}-${from}-${lastSeq}`;
+
+                  setMessages((prev) => {
+                    const pendingIndex = prev.findIndex(
+                      (msg) => msg.id === tempId
+                    );
+                    if (pendingIndex !== -1) {
+                      const newPrev = [...prev];
+                      newPrev[pendingIndex] = {
+                        ...newPrev[pendingIndex],
+                        id: realId,
+                        status: undefined,
+                        timestamp: new Date(Number(timestamp) * 1000),
+                        senderAddress: from as Address
+                      };
+                      return newPrev;
+                    }
+                    return prev;
+                  });
+                }
+              }
+            }
+          }
         } catch (err) {
           console.warn('⚠️ [兜底] 手动拉取失败 (非致命):', err);
         }
@@ -324,6 +390,7 @@ export function useEncryptionActions({
       setShowGenerationModal,
       setPendingGroupMessage,
       groupAddress,
+      groupType,
       currentAddress,
       setMessages,
       scrollToBottom,

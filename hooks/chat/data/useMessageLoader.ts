@@ -152,16 +152,16 @@ export function useMessageLoader({
 
   // 3️⃣ Process Messages
   useEffect(() => {
-    console.log('[消息处理] 开始', {
-      isConnected,
-      currentAddress,
-      conversationId,
-      chatType,
-      groupType,
-      isGroupLoading,
-      groupMessagesCount: groupMessages?.length,
-      fetchParams
-    });
+    // console.log('[消息处理] 开始', {
+    //   isConnected,
+    //   currentAddress,
+    //   conversationId,
+    //   chatType,
+    //   groupType,
+    //   isGroupLoading,
+    //   groupMessagesCount: groupMessages?.length,
+    //   fetchParams
+    // });
 
     if (!isConnected || !currentAddress || !conversationId) return;
 

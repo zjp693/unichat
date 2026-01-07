@@ -10,7 +10,10 @@ const RedPacketGroupABI = parseAbi([
   'function memberCount() view returns (uint32)',
   'function getMember(address) view returns (bool exists, uint64 joinAt, uint32 subgroupId)',
   'function getMainRank() view returns (string)',
-  'function mainOwner() view returns (address)'
+  'function mainOwner() view returns (address)',
+  // 消息相关
+  'function mainMessageCount() view returns (uint256)',
+  'function mainMessages(uint256) view returns (address from, string content, uint64 timestamp, uint32 subgroupId)'
 ]);
 
 export interface RedPacketGroupMetadata {
@@ -21,6 +24,10 @@ export interface RedPacketGroupMetadata {
   memberCount: number;
   fee: bigint;
   isJoined: boolean;
+  /** 群消息总数 */
+  mainMessageCount: number;
+  /** 最后一条消息的时间戳 (秒) */
+  lastMessageTimestamp: number | null;
 }
 
 /**
@@ -89,7 +96,14 @@ export async function getRedPacketGroupList(
       functionName: 'mainOwner'
     });
 
-    // 3.5 检查是否已加入 (如果有 userAddress)
+    // 3.5 获取消息总数
+    metadataCalls.push({
+      address: addr,
+      abi: RedPacketGroupABI,
+      functionName: 'mainMessageCount'
+    });
+
+    // 3.6 检查是否已加入 (如果有 userAddress)
     if (userAddress) {
       metadataCalls.push({
         address: addr,
@@ -109,7 +123,9 @@ export async function getRedPacketGroupList(
 
   // 4. 组装数据
   const groups: RedPacketGroupMetadata[] = [];
-  const itemsPerGroup = userAddress ? 5 : 4; // Each group has 4 base calls + 1 conditional getMember call
+  // 每个群有: settings, fee, memberCount, mainOwner, mainMessageCount = 5 个基础调用
+  // + 1 个可选的 getMember 调用 (如果有 userAddress)
+  const itemsPerGroup = userAddress ? 6 : 5;
 
   for (let i = 0; i < groupAddresses.length; i++) {
     const baseIndex = i * itemsPerGroup;
@@ -146,6 +162,13 @@ export async function getRedPacketGroupList(
         ? (ownerRes.result as `0x${string}`)
         : undefined;
 
+    // 解析 mainMessageCount
+    const msgCountRes = results[baseIndex + 4];
+    const mainMessageCount =
+      msgCountRes.status === 'success'
+        ? Number(msgCountRes.result as bigint)
+        : 0;
+
     // 解析 getMember
     let isJoined = false;
 
@@ -157,7 +180,7 @@ export async function getRedPacketGroupList(
     ) {
       isJoined = true;
     } else if (userAddress) {
-      const memberRes = results[baseIndex + 4];
+      const memberRes = results[baseIndex + 5];
       if (memberRes.status === 'success') {
         const [exists] = memberRes.result as [boolean, bigint, number];
         isJoined = exists;
@@ -171,7 +194,35 @@ export async function getRedPacketGroupList(
       level: 1, // 默认给1，但在UI中会通过 flag 隐藏
       memberCount,
       fee,
-      isJoined
+      isJoined,
+      mainMessageCount,
+      lastMessageTimestamp: null // 先设为 null，后续批量获取
+    });
+  }
+
+  // 5. 批量获取有消息的群的最后一条消息时间戳
+  const groupsWithMessages = groups.filter((g) => g.mainMessageCount > 0);
+  if (groupsWithMessages.length > 0) {
+    const lastMsgCalls = groupsWithMessages.map((g) => ({
+      address: g.address,
+      abi: RedPacketGroupABI,
+      functionName: 'mainMessages' as const,
+      args: [BigInt(g.mainMessageCount - 1)] // 获取最后一条消息
+    }));
+
+    const lastMsgResults = await publicClient.multicall({
+      contracts: lastMsgCalls,
+      allowFailure: true
+    });
+
+    // 解析最后消息时间戳
+    lastMsgResults.forEach((res, idx) => {
+      if (res.status === 'success') {
+        // mainMessages 返回: [from, content, timestamp, subgroupId]
+        const data = res.result as [string, string, bigint, number];
+        const timestamp = Number(data[2]); // timestamp 是第3个元素
+        groupsWithMessages[idx].lastMessageTimestamp = timestamp;
+      }
     });
   }
 

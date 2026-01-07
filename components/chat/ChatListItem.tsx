@@ -3,10 +3,8 @@
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { useReadContract } from 'wagmi';
 import { useDispatch } from 'react-redux';
-import { Address, Abi } from 'viem';
-import communityABI from '@/contract/abi/community.json';
+import { Address } from 'viem';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -73,21 +71,8 @@ export function ChatListItem({
     return profile?.name || chat.name;
   }, [chat.isGroup, chat.name, profile]);
 
-  // 获取群聊消息总数（只有已加入的群聊才获取）
-  const { data: groupMessageCountData } = useReadContract({
-    address: chat.isGroup && chat.isJoined ? (chat.id as Address) : undefined,
-    abi: communityABI.abi as Abi,
-    functionName: 'communityMessageCount',
-    query: {
-      enabled: chat.isGroup && chat.isJoined && !!chat.id
-    }
-  });
-  const groupMessageCount = groupMessageCountData
-    ? Number(groupMessageCountData)
-    : 0;
-
-  // 使用统一的 useChatTimestamp 获取时间戳（自动上报到 Redux）
-  const { displayTime } = useChatTimestamp({
+  // 使用统一的 useChatTimestamp 获取时间戳和群消息总数（自动上报到 Redux）
+  const { displayTime, messageCount: groupMessageCount } = useChatTimestamp({
     chatId: chat.id,
     isGroup: !!chat.isGroup,
     currentAddress,

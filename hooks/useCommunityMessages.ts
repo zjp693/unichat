@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useReadContract, usePublicClient } from 'wagmi';
+import { useReadContract } from 'wagmi';
 import communityABI from '@/contract/abi/community.json';
-import { Abi, Address, parseAbiItem } from 'viem';
+import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import { Abi, Address } from 'viem';
 import type { Message } from '@/lib/chat/types';
 import { decodeGroupRedPacketCid } from '@/lib/redpacket/encoding';
 
@@ -13,10 +14,13 @@ interface CommunityMessage {
   cid: string;
 }
 
-// RedPacketGroup 的 MainMessage 事件 ABI
-const MainMessageEvent = parseAbiItem(
-  'event MainMessage(address indexed from, string content)'
-);
+// 红包群消息结构 (来自 getMainMessages)
+interface RedPacketGroupMessage {
+  from: Address;
+  content: string;
+  timestamp: bigint;
+  subgroupId: number;
+}
 
 export function useCommunityMessages(
   communityAddress: string,
@@ -27,18 +31,15 @@ export function useCommunityMessages(
   groupType: 'community' | 'redpacket' = 'community'
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isRedPacketLoading, setIsRedPacketLoading] = useState(false);
-  const [redPacketTotalCount, setRedPacketTotalCount] = useState(0);
 
-  const publicClient = usePublicClient();
   const isCommunityGroup = groupType === 'community';
   const isRedPacketGroup = groupType === 'redpacket';
 
-  // ============ 官方群逻辑 ============
+  // ============ 官方群消息总数 ============
   const {
-    data: totalCount,
-    refetch: refetchCount,
-    isLoading: isCountLoading
+    data: communityTotalCount,
+    refetch: refetchCommunityCount,
+    isLoading: isCommunityCountLoading
   } = useReadContract({
     address: communityAddress as `0x${string}`,
     abi: communityABI.abi as Abi,
@@ -51,23 +52,46 @@ export function useCommunityMessages(
     }
   });
 
+  // ============ 红包群消息总数 ============
+  const {
+    data: redPacketTotalCount,
+    refetch: refetchRedPacketCount,
+    isLoading: isRedPacketCountLoading
+  } = useReadContract({
+    address: communityAddress as `0x${string}`,
+    abi: RedPacketGroupABI.abi as Abi,
+    functionName: 'mainMessageCount',
+    query: {
+      enabled: enabled && !!communityAddress && isRedPacketGroup,
+      staleTime: 1000 * 30,
+      gcTime: 1000 * 60 * 5,
+      refetchOnWindowFocus: false
+    }
+  });
+
+  // 统一的消息总数
+  const totalCount = isCommunityGroup
+    ? Number(communityTotalCount || 0)
+    : Number(redPacketTotalCount || 0);
+
+  // ============ 分页参数计算 ============
   const { start, count } = useMemo(() => {
     if (pageParams) {
       return pageParams;
     }
-    const total = Number(totalCount || 0);
-    if (total === 0) {
+    if (totalCount === 0) {
       return { start: 0, count: 0 };
     }
-    const loadCount = Math.min(15, total);
-    const startIndex = Math.max(0, total - loadCount);
+    const loadCount = Math.min(15, totalCount);
+    const startIndex = Math.max(0, totalCount - loadCount);
     return { start: startIndex, count: loadCount };
   }, [totalCount, pageParams]);
 
+  // ============ 官方群消息获取 ============
   const {
-    data: rawMessages,
-    refetch: refetchMessages,
-    isLoading: isMessagesLoading
+    data: communityRawMessages,
+    refetch: refetchCommunityMessages,
+    isLoading: isCommunityMessagesLoading
   } = useReadContract({
     address: communityAddress as `0x${string}`,
     abi: communityABI.abi as Abi,
@@ -82,15 +106,34 @@ export function useCommunityMessages(
     }
   });
 
-  // 格式化官方群消息
+  // ============ 红包群消息获取 ============
+  const {
+    data: redPacketRawData,
+    refetch: refetchRedPacketMessages,
+    isLoading: isRedPacketMessagesLoading
+  } = useReadContract({
+    address: communityAddress as `0x${string}`,
+    abi: RedPacketGroupABI.abi as Abi,
+    functionName: 'getMainMessages',
+    args: [BigInt(start), BigInt(count)],
+    query: {
+      enabled: enabled && !!communityAddress && count > 0 && isRedPacketGroup,
+      staleTime: 1000 * 60 * 2,
+      gcTime: 1000 * 60 * 10,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
+    }
+  });
+
+  // ============ 格式化官方群消息 ============
   useEffect(() => {
     if (!isCommunityGroup) return;
-    if (!rawMessages || !Array.isArray(rawMessages)) {
+    if (!communityRawMessages || !Array.isArray(communityRawMessages)) {
       setMessages([]);
       return;
     }
 
-    const formattedMessages: Message[] = rawMessages.map(
+    const formattedMessages: Message[] = communityRawMessages.map(
       (msg: CommunityMessage, index: number) => {
         const isOwn =
           msg.sender.toLowerCase() === currentUserAddress?.toLowerCase();
@@ -128,136 +171,109 @@ export function useCommunityMessages(
 
     setMessages(formattedMessages);
   }, [
-    rawMessages,
+    communityRawMessages,
     currentUserAddress,
     communityAddress,
     start,
     isCommunityGroup
   ]);
 
-  // ============ 红包群逻辑 ============
+  // ============ 格式化红包群消息 ============
   useEffect(() => {
-    if (!isRedPacketGroup || !enabled || !communityAddress || !publicClient) {
+    if (!isRedPacketGroup) return;
+
+    // getMainMessages 返回 [messages[], count]
+    const rawData = redPacketRawData as
+      | [RedPacketGroupMessage[], bigint]
+      | undefined;
+    if (!rawData || !Array.isArray(rawData[0])) {
+      setMessages([]);
       return;
     }
 
-    const fetchRedPacketMessages = async () => {
-      setIsRedPacketLoading(true);
-      try {
-        // 获取 MainMessage 事件历史（最近 5000 个区块）
-        const currentBlock = await publicClient.getBlockNumber();
-        const fromBlock = currentBlock > 5000n ? currentBlock - 5000n : 0n;
+    const rawMessages = rawData[0];
+    console.log('[红包群消息] 获取到消息:', {
+      count: rawMessages.length,
+      start,
+      rawData
+    });
 
-        console.log('[红包群历史消息] 开始查询', {
-          communityAddress,
-          currentBlock: currentBlock.toString(),
-          fromBlock: fromBlock.toString()
-        });
+    const formattedMessages: Message[] = rawMessages.map(
+      (msg: RedPacketGroupMessage, index: number) => {
+        const isOwn =
+          msg.from?.toLowerCase() === currentUserAddress?.toLowerCase();
 
-        const logs = await publicClient.getLogs({
-          address: communityAddress as `0x${string}`,
-          event: MainMessageEvent,
-          fromBlock,
-          toBlock: 'latest'
-        });
+        // 🎁 检查是否是红包消息
+        let messageType: 'text' | 'red-packet' = 'text';
+        let messageContent = msg.content || '';
 
-        console.log('[红包群历史消息] 查询结果', {
-          logsCount: logs.length,
-          logs: logs.map((l) => ({
-            from: l.args?.from,
-            content: l.args?.content
-          }))
-        });
+        try {
+          // 检查是否有 'index | json' 格式的前缀，如果有则提取真正的 JSON
+          let jsonContent = msg.content || '{}';
+          const pipeMatch = jsonContent.match(/^\d+\s*\|\s*(.+)$/);
+          if (pipeMatch) {
+            jsonContent = pipeMatch[1];
+            messageContent = jsonContent; // 同时更新消息内容
+          }
 
-        setRedPacketTotalCount(logs.length);
+          const parsed = JSON.parse(jsonContent);
+          // 如果包含 packetId 字段，或者包含 groupType=redpacket 的红包消息特征，说明是红包消息
+          if (
+            parsed.packetId ||
+            (parsed.groupType === 'redpacket' &&
+              (parsed.amount || parsed.tokenAddress))
+          ) {
+            messageType = 'red-packet';
+            console.log('[红包群] 识别到红包消息:', parsed);
+          }
+        } catch (e) {
+          // 不是 JSON，保持为普通文本消息
+        }
 
-        // 转换为 Message 格式
-        const formattedMessages: Message[] = await Promise.all(
-          logs.map(async (log, index) => {
-            const { from, content } = log.args as {
-              from: Address;
-              content: string;
-            };
-            const isOwn =
-              from?.toLowerCase() === currentUserAddress?.toLowerCase();
-
-            // 获取区块时间
-            let timestamp = new Date();
-            if (log.blockNumber) {
-              try {
-                const block = await publicClient.getBlock({
-                  blockNumber: log.blockNumber
-                });
-                timestamp = new Date(Number(block.timestamp) * 1000);
-              } catch (e) {
-                console.warn('Failed to get block timestamp:', e);
-              }
-            }
-
-            // 🎁 检查是否是红包消息
-            let messageType: 'text' | 'red-packet' = 'text';
-            let messageContent = content || '';
-
-            try {
-              const parsed = JSON.parse(content || '{}');
-              // 如果包含 packetId 字段，说明是红包消息
-              if (parsed.packetId) {
-                messageType = 'red-packet';
-                console.log('[红包群] 识别到红包消息:', parsed);
-              }
-            } catch (e) {
-              // 不是 JSON，保持为普通文本消息
-            }
-
-            return {
-              id: `${log.blockNumber}-${from}-${index}`,
-              sender: isOwn ? 'user' : 'other',
-              timestamp,
-              type: messageType,
-              content: messageContent,
-              recipient: communityAddress as Address,
-              isEncrypted: false,
-              originalContent: content || '',
-              isGroupMessage: true,
-              senderAddress: from
-            };
-          })
-        );
-
-        setMessages(formattedMessages);
-      } catch (error) {
-        console.error('[红包群消息] 获取失败:', error);
-        setMessages([]);
-      } finally {
-        setIsRedPacketLoading(false);
+        return {
+          id: `${msg.timestamp.toString()}-${msg.from}-${start + index}`,
+          sender: isOwn ? 'user' : 'other',
+          timestamp: new Date(Number(msg.timestamp) * 1000),
+          type: messageType,
+          content: messageContent,
+          recipient: communityAddress as Address,
+          isEncrypted: false,
+          originalContent: msg.content,
+          isGroupMessage: true,
+          senderAddress: msg.from
+        };
       }
-    };
+    );
 
-    fetchRedPacketMessages();
+    setMessages(formattedMessages);
   }, [
-    isRedPacketGroup,
-    enabled,
-    communityAddress,
+    redPacketRawData,
     currentUserAddress,
-    publicClient
+    communityAddress,
+    start,
+    isRedPacketGroup
   ]);
 
   // ============ 返回值 ============
   const refetch = () => {
     if (isCommunityGroup) {
-      refetchCount();
-      refetchMessages();
+      refetchCommunityCount();
+      refetchCommunityMessages();
+    } else {
+      refetchRedPacketCount();
+      refetchRedPacketMessages();
     }
-    // 红包群暂时不支持手动刷新，因为 getLogs 是异步的
   };
 
   return {
     messages,
-    totalCount: isCommunityGroup
-      ? Number(totalCount || 0)
-      : redPacketTotalCount,
-    isLoading: isCommunityGroup ? isMessagesLoading : isRedPacketLoading,
-    isCountLoading: isCommunityGroup ? isCountLoading : false,
+    totalCount,
+    isLoading: isCommunityGroup
+      ? isCommunityMessagesLoading
+      : isRedPacketMessagesLoading,
+    isCountLoading: isCommunityGroup
+      ? isCommunityCountLoading
+      : isRedPacketCountLoading,
     refetch
   };
 }

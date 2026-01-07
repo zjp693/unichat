@@ -38,16 +38,16 @@ export function useCommunityMembersCount(
     }
   });
 
-  // 调试日志
-  console.log('[成员数量查询]', {
-    groupAddress,
-    groupType,
-    isRedPacket,
-    functionName: isRedPacket ? 'memberCount' : 'getActiveMembersCount',
-    rawMemberCount: memberCount,
-    parsedMemberCount: memberCount ? Number(memberCount) : 0,
-    error: error?.message
-  });
+  // // 调试日志
+  // console.log('[成员数量查询]', {
+  //   groupAddress,
+  //   groupType,
+  //   isRedPacket,
+  //   functionName: isRedPacket ? 'memberCount' : 'getActiveMembersCount',
+  //   rawMemberCount: memberCount,
+  //   parsedMemberCount: memberCount ? Number(memberCount) : 0,
+  //   error: error?.message
+  // });
 
   return {
     memberCount: memberCount ? Number(memberCount) : 0,

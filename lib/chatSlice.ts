@@ -18,6 +18,12 @@ interface ChatState {
   selectedMessageId: string | null;
   pendingGroupMessage: string;
 
+  // --- 分群 Tab 状态 (红包群专用) ---
+  // 当前选中的 Tab: 'main' = 总群, 'sub' = 分群
+  activeSubgroupTab: 'main' | 'sub';
+  // 当前用户所属的分群 ID (0 = 只在总群, >0 = 有分群)
+  userSubgroupId: number;
+
   // --- 聊天列表时间戳 ---
   // 存储每个聊天的最后消息时间戳 { [chatId]: timestamp }
   timestampMap: Record<string, number>;
@@ -42,6 +48,8 @@ const initialState: ChatState = {
   showSendModeModal: false,
   selectedMessageId: null,
   pendingGroupMessage: '',
+  activeSubgroupTab: 'main',
+  userSubgroupId: 0,
   timestampMap: {},
   selectedCelebrityByWallet: {},
   draftInputs: {}
@@ -81,12 +89,26 @@ const chatSlice = createSlice({
     setPendingGroupMessage(state, action: PayloadAction<string>) {
       state.pendingGroupMessage = action.payload;
     },
+    // --- 分群 Tab 状态管理 ---
+    setActiveSubgroupTab(state, action: PayloadAction<'main' | 'sub'>) {
+      state.activeSubgroupTab = action.payload;
+    },
+    setUserSubgroupId(state, action: PayloadAction<number>) {
+      state.userSubgroupId = action.payload;
+    },
     // 更新某个聊天的最后消息时间戳
     updateTimestamp(
       state,
       action: PayloadAction<{ chatId: string; timestamp: number }>
     ) {
       state.timestampMap[action.payload.chatId] = action.payload.timestamp;
+    },
+    // 批量更新时间戳（用于加载群列表时）
+    batchUpdateTimestamps(
+      state,
+      action: PayloadAction<Record<string, number>>
+    ) {
+      Object.assign(state.timestampMap, action.payload);
     },
     // 清空所有时间戳（切换账户时使用）
     clearTimestampMap(state) {
@@ -104,6 +126,8 @@ const chatSlice = createSlice({
       state.showSendModeModal = false;
       state.selectedMessageId = null;
       state.pendingGroupMessage = '';
+      state.activeSubgroupTab = 'main';
+      state.userSubgroupId = 0;
       // 保留 draftInputs, timestampMap, selectedCelebrityByWallet
     },
 
@@ -168,7 +192,10 @@ export const {
   setShowSendModeModal,
   setSelectedMessageId,
   setPendingGroupMessage,
+  setActiveSubgroupTab,
+  setUserSubgroupId,
   updateTimestamp,
+  batchUpdateTimestamps,
   clearTimestampMap,
   resetChatState,
   setSelectedCelebrity,

@@ -48,15 +48,15 @@ export function RedPacketMessageWrapper({
       ? (groupAddress as `0x${string}`)
       : RED_PACKET_CONTRACT_ADDRESS;
 
-  console.log('🎁 [RedPacketMessageWrapper] 红包配置:', {
-    packetId: config.packetId,
-    configGroupType: config.groupType,
-    fallbackGroupType,
-    finalGroupType: groupType,
-    groupAddress,
-    isRedPacketGroup,
-    queryAddress
-  });
+  // console.log('🎁 [RedPacketMessageWrapper] 红包配置:', {
+  //   packetId: config.packetId,
+  //   configGroupType: config.groupType,
+  //   fallbackGroupType,
+  //   finalGroupType: groupType,
+  //   groupAddress,
+  //   isRedPacketGroup,
+  //   queryAddress
+  // });
 
   // 官方群红包查询（使用原有的 hooks）
   const { data: officialPacket } = useGetPacket(

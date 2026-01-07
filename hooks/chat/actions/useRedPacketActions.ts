@@ -168,15 +168,27 @@ export function useRedPacketActions({
             tokenAddress,
             totalAmount: totalAmount.toString(),
             functionName: 'createNormalPacketAll',
-            args: [tokenAddress, totalAmount.toString()]
+            args: [tokenAddress, totalAmount.toString(), 'message']
           });
 
-          // 4. 创建红包
+          // 先构建消息内容（包含红包信息），用于 createNormalPacketAll 的 message 参数
+          const messageContent = JSON.stringify({
+            message: memo || '恭喜发财，大吉大利',
+            type: 'NORMAL',
+            status: 'active',
+            amount: formatUnits(totalAmount, decimals),
+            count: count,
+            tokenAddress: tokenAddress,
+            groupType: 'redpacket', // 标识这是红包群的红包
+            groupAddress: groupAddress // 保存群地址，用于查询
+          });
+
+          // 4. 创建红包（新合约：一步完成创建红包+发送消息）
           const createTxHash = await writeContract({
             address: groupAddress,
             abi: RedPacketGroupABI.abi as Abi,
             functionName: 'createNormalPacketAll',
-            args: [tokenAddress, totalAmount]
+            args: [tokenAddress, totalAmount, messageContent]
           });
 
           console.log('⏳ [红包群] 等待红包创建确认...', createTxHash);
@@ -225,12 +237,10 @@ export function useRedPacketActions({
             throw new Error('无法获取红包 ID');
           }
 
-          console.log('✅ [红包群] 红包创建成功, ID:', packetId.toString());
+          console.log('✅ [红包群] 红包发送完成, ID:', packetId.toString());
 
-          // 6. 发送消息
-          console.log('6️⃣ [红包群] 发送红包消息...');
-
-          const messageContent = JSON.stringify({
+          // 6. 构建乐观 UI 消息（添加 packetId 到消息内容）
+          const fullMessageContent = JSON.stringify({
             packetId: packetId.toString(),
             message: memo || '恭喜发财，大吉大利',
             type: 'NORMAL',
@@ -238,30 +248,15 @@ export function useRedPacketActions({
             amount: formatUnits(totalAmount, decimals),
             count: count,
             tokenAddress: tokenAddress,
-            groupType: 'redpacket', // 标识这是红包群的红包
-            groupAddress: groupAddress // 保存群地址，用于查询
+            groupType: 'redpacket',
+            groupAddress: groupAddress
           });
 
-          const sendTxHash = await writeContract({
-            address: groupAddress,
-            abi: RedPacketGroupABI.abi as Abi,
-            functionName: 'sendMainMessage',
-            args: [messageContent]
-          });
-
-          console.log('⏳ [红包群] 等待消息发送确认...', sendTxHash);
-          await publicClient?.waitForTransactionReceipt({
-            hash: sendTxHash
-          });
-
-          console.log('✅ [红包群] 红包发送完成！');
-
-          // 6. 构建乐观 UI 消息
           const optimisticMessage: Message = {
             id: `temp-group-${Date.now()}`,
             sender: 'user',
             senderAddress: currentAddress,
-            content: messageContent,
+            content: fullMessageContent,
             timestamp: new Date(),
             status: 'sent',
             type: 'red-packet',

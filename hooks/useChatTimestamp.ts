@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { Address } from 'viem';
 import { usePeerLastMessage, formatMessageTime } from './usePeerLastMessage';
 import { useGroupLastMessage } from './useGroupLastMessage';
-import { useLastMainMessageAt } from './useLastMainMessageAt';
+import { useRedPacketGroupLastMessage } from './useRedPacketGroupLastMessage';
 import { updateTimestamp } from '@/lib/chatSlice';
 import { AppDispatch } from '@/lib/store';
 
@@ -50,33 +50,43 @@ export function useChatTimestamp({
       !isGroup ? (chatId as Address) : (undefined as any)
     );
 
-  // Community 群聊：获取最后消息时间戳
+  // Community 群聊：获取最后消息时间戳 + 消息总数
   const isCommunity = isGroup && (!groupType || groupType === 'community');
-  const { timestamp: communityTimestamp, isLoading: isCommunityLoading } =
-    useGroupLastMessage(
-      isCommunity && isJoined ? (chatId as Address) : undefined
-    );
+  const {
+    timestamp: communityTimestamp,
+    messageCount: communityMessageCount,
+    isLoading: isCommunityLoading
+  } = useGroupLastMessage(
+    isCommunity && isJoined ? (chatId as Address) : undefined
+  );
 
-  // RedPacket 群聊：获取用户最后消息时间戳
+  // RedPacket 群聊：获取群里最后一条消息的时间戳 + 消息总数
+  // 使用 useRedPacketGroupLastMessage 获取群里任何人的最后消息时间
   const isRedPacket = isGroup && groupType === 'redpacket';
-  const { timestamp: redPacketTimestamp, isLoading: isRedPacketLoading } =
-    useLastMainMessageAt(
-      isRedPacket && isJoined ? (chatId as Address) : undefined,
-      currentAddress
-    );
+  const {
+    timestamp: redPacketTimestamp,
+    messageCount: redPacketMessageCount,
+    isLoading: isRedPacketLoading
+  } = useRedPacketGroupLastMessage(
+    isRedPacket && isJoined ? (chatId as Address) : undefined
+  );
 
-  // 选择正确的时间戳
+  // 选择正确的时间戳和消息数
   let timestamp: bigint | undefined;
+  let messageCount = 0;
   let isLoading = false;
 
   if (!isGroup) {
     timestamp = privateTimestamp;
     isLoading = isPrivateLoading;
+    messageCount = 0; // 私聊不返回消息总数（由其他 hook 处理）
   } else if (isRedPacket) {
     timestamp = redPacketTimestamp;
+    messageCount = redPacketMessageCount;
     isLoading = isRedPacketLoading;
   } else {
     timestamp = communityTimestamp;
+    messageCount = communityMessageCount;
     isLoading = isCommunityLoading;
   }
 
@@ -96,6 +106,7 @@ export function useChatTimestamp({
   return {
     timestamp: timestamp ? Number(timestamp) : undefined,
     displayTime,
+    messageCount,
     isLoading
   };
 }
