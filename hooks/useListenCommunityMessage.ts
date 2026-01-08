@@ -150,26 +150,42 @@ export function useListenCommunityMessage(
         let messageContent = content || '';
 
         try {
-          // 检查是否有 'index | json' 格式的前缀，如果有则提取真正的 JSON
-          let jsonContent = content || '{}';
-          const pipeMatch = jsonContent.match(/^\d+\s*\|\s*(.+)$/);
-          if (pipeMatch) {
-            jsonContent = pipeMatch[1];
-            messageContent = jsonContent; // 同时更新消息内容
-          }
+          // 只要是以 "数字 |" 开头就算红包 (允许后面为空或非规范 JSON)
+          const pipeMatch = messageContent.match(/^(\d+)\s*\|\s*([\s\S]*)$/);
 
-          const parsed = JSON.parse(jsonContent);
-          // 如果包含 packetId 字段，或者包含 groupType=redpacket 的红包消息特征，说明是红包消息
-          if (
-            parsed.packetId ||
-            (parsed.groupType === 'redpacket' &&
-              (parsed.amount || parsed.tokenAddress))
-          ) {
+          if (pipeMatch) {
+            const extractedId = pipeMatch[1];
+            const remainingPart = pipeMatch[2].trim();
+
             messageType = 'red-packet';
-            console.log('[红包群监听] 识别到红包消息:', parsed);
+
+            // 构造默认红包数据，如果后面有 JSON 则合并
+            let redPacketData: any = {
+              packetId: extractedId,
+              message: '恭喜发财，大吉大利',
+              status: 'active'
+            };
+
+            if (remainingPart.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(remainingPart);
+                redPacketData = { ...redPacketData, ...parsed };
+                // 确保 ID 以提取的为准
+                redPacketData.packetId = extractedId;
+              } catch (e) {
+                // JSON 解析失败，保持默认数据
+              }
+            }
+
+            messageContent = JSON.stringify(redPacketData);
+            console.log('[红包群监听] 识别到红包消息并注入 ID:', extractedId);
+          } else {
+            // 不符合 "ID |" 格式的消息，视为普通文本
+            messageType = 'text';
           }
         } catch (e) {
-          // 不是 JSON，保持为普通文本消息
+          console.error('[红包群监听] 判定红包出错:', e);
+          messageType = 'text';
         }
 
         const newMessage: Message = {

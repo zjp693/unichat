@@ -692,19 +692,46 @@ function ChatContent() {
           let packetId: string | undefined;
 
           try {
-            // 尝试解析 JSON (群红包 / Optimistic UI)
-            const json = JSON.parse(selectedRedPacket.content);
-            if (json.packetId) {
-              packetId = json.packetId;
+            console.log('📦 [红包解析] 原始内容:', selectedRedPacket.content);
+            console.log(
+              '📦 [红包解析] 原始完整内容:',
+              (selectedRedPacket as any).originalContent
+            );
+
+            // 1. 尝试解析 JSON (群红包 / Optimistic UI)
+            try {
+              const json = JSON.parse(selectedRedPacket.content);
+              if (json.packetId) {
+                packetId = json.packetId.toString();
+                console.log('✅ [红包解析] 从 JSON 中解析到 ID:', packetId);
+              }
+            } catch (e) {
+              // 忽略 JSON 解析错误，继续下一种格式
             }
-          } catch (e) {
-            // 不是 JSON，尝试解析 RP 格式 (私聊红包)
-            if (selectedRedPacket.content.startsWith('RP|')) {
+
+            // 2. 如果还没解析到，尝试处理 "ID | JSON" 格式 (群合约常见格式)
+            if (!packetId && selectedRedPacket.content.includes('|')) {
+              const parts = selectedRedPacket.content.split('|');
+              const firstPart = parts[0].trim();
+              if (firstPart && !isNaN(Number(firstPart))) {
+                packetId = firstPart;
+                console.log(
+                  '✅ [红包解析] 从 "ID | JSON" 格式中解析到 ID:',
+                  packetId
+                );
+              }
+            }
+
+            // 3. 尝试解析 RP 格式 (私聊红包)
+            if (!packetId && selectedRedPacket.content.startsWith('RP|')) {
               const parts = selectedRedPacket.content.split('|');
               if (parts.length >= 3) {
                 packetId = parts[2];
+                console.log('✅ [红包解析] 从 RP 格式中解析到 ID:', packetId);
               }
             }
+          } catch (err) {
+            console.error('❌ [红包解析] 解析过程出错:', err);
           }
 
           if (packetId) {

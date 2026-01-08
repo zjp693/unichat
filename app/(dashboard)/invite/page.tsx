@@ -1,36 +1,116 @@
 'use client';
 
-import React from 'react';
+/**
+ * 群邀请页面
+ *
+ * 显示群信息和邀请人信息，使用真实数据
+ */
+
+import React, { Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Copy, QrCode, User } from 'lucide-react';
+import { Copy, QrCode, User, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-// ============== Mock Data ==============
-const MOCK_DATA = {
-  groupName: 'UNICHAT社区群',
-  memberCount: 3445,
-  contractAddress: '0xea2a91d0acf842d15fc10e99f9e1fd6ab0a30c9a',
-  rules: {
-    economy: '文字文字文字文字文字文字',
-    system: '文字文字文字文字文字文字',
-    goal: '文字文字文字文字文字文字'
-  },
-  token: {
-    symbol: 'USDT0',
-    address: '0xea2a91d0acf842d15fc10e99f9e1fd6ab0a30c9a',
-    fee: 100
-  },
-  inviter: {
-    name: '昵称',
-    address: '0xea2a91d0acf842d15fc10e99f9e1fd6ab0a30c9a',
-    totalInvited: 3445
-  }
-};
+import { useGroupJoinInfo } from '@/hooks/useGroupJoinInfo';
 
 // ============== 主页面 ==============
-export default function InvitePage() {
+function InvitePageContent() {
   const { toast } = useToast();
+
+  // 使用真实数据
+  const {
+    referralCode,
+    groupAddress,
+    isValidCode,
+    isGroupError,
+    groupName,
+    memberCount,
+    economicModel,
+    groupRules,
+    announcement,
+    groupTokenAddress,
+    tokenSymbol,
+    formattedEntryFee,
+    referrerAddress,
+    referrerName,
+    referrerAvatar,
+    referrerInviteCount,
+    isLoading
+  } = useGroupJoinInfo();
+
+  // ❌ 缺少邀请码
+  if (!referralCode) {
+    return (
+      <div className="flex flex-col h-screen bg-white items-center justify-center px-6">
+        <div className="text-6xl mb-4">🔗</div>
+        <h2 className="text-lg font-medium text-gray-800 mb-2">缺少邀请码</h2>
+        <p className="text-sm text-gray-500 text-center">
+          邀请链接不完整，请确认链接包含邀请码参数
+        </p>
+        <div className="mt-4 text-xs text-gray-400 bg-gray-100 rounded px-3 py-2 font-mono">
+          ?code=0x...
+        </div>
+      </div>
+    );
+  }
+
+  // ❌ 缺少群地址
+  if (!groupAddress) {
+    return (
+      <div className="flex flex-col h-screen bg-white items-center justify-center px-6">
+        <div className="text-6xl mb-4">📍</div>
+        <h2 className="text-lg font-medium text-gray-800 mb-2">缺少群地址</h2>
+        <p className="text-sm text-gray-500 text-center">
+          邀请链接不完整，请确认链接包含群地址参数
+        </p>
+        <div className="mt-4 text-xs text-gray-400 bg-gray-100 rounded px-3 py-2 font-mono">
+          ?code=0x...&group=0x...
+        </div>
+      </div>
+    );
+  }
+
+  // ⏳ 加载中
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-screen bg-white items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+        <p className="text-sm text-gray-500 mt-2">加载中...</p>
+      </div>
+    );
+  }
+
+  // ❌ 邀请码无效
+  if (!isValidCode) {
+    return (
+      <div className="flex flex-col h-screen bg-white items-center justify-center px-6">
+        <div className="text-6xl mb-4">❌</div>
+        <h2 className="text-lg font-medium text-gray-800 mb-2">邀请码无效</h2>
+        <p className="text-sm text-gray-500 text-center">
+          该邀请码不存在或已失效，请联系邀请人获取新的邀请链接
+        </p>
+        <div className="mt-4 text-xs text-gray-400 bg-gray-100 rounded px-3 py-2 font-mono truncate max-w-xs">
+          {referralCode}
+        </div>
+      </div>
+    );
+  }
+
+  // ❌ 群不存在（查询出错或 groupName 为空）
+  if (isGroupError || !groupName) {
+    return (
+      <div className="flex flex-col h-screen bg-white items-center justify-center px-6">
+        <div className="text-6xl mb-4">🚫</div>
+        <h2 className="text-lg font-medium text-gray-800 mb-2">群不存在</h2>
+        <p className="text-sm text-gray-500 text-center">
+          该群地址无效或群已被删除
+        </p>
+        <div className="mt-4 text-xs text-gray-400 bg-gray-100 rounded px-3 py-2 font-mono truncate max-w-xs">
+          {groupAddress}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -39,7 +119,6 @@ export default function InvitePage() {
         <div className="flex flex-col items-center px-5 pt-6 pb-2">
           {/* ===== 1. 群头像 ===== */}
           <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-100 mb-4">
-            {/* 占位：实际这里放群头像图片 */}
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-green-100 to-blue-100">
               <User className="w-8 h-8 text-slate-400" />
             </div>
@@ -47,28 +126,31 @@ export default function InvitePage() {
 
           {/* ===== 2. 群名称 + 人数 ===== */}
           <h1 className="text-base text-[#333] mb-1">
-            {MOCK_DATA.groupName}（{MOCK_DATA.memberCount.toLocaleString()}）人
+            {groupName || '群名称'}（{memberCount.toLocaleString()}人）
           </h1>
 
           {/* ===== 3. 群地址（可复制） ===== */}
           <div className="flex items-center gap-1.5 mb-6">
             <span className="text-xs text-[#999]">
-              {MOCK_DATA.contractAddress}
+              {groupAddress || '0x...'}
             </span>
             <Copy
               className="w-3 h-3 text-[#999] cursor-pointer hover:text-[#666] transition-colors"
               onClick={() => {
-                navigator.clipboard.writeText(MOCK_DATA.contractAddress);
-                toast({ title: '已复制', description: '群地址已复制到剪贴板' });
+                if (groupAddress) {
+                  navigator.clipboard.writeText(groupAddress);
+                  toast({
+                    title: '已复制',
+                    description: '群地址已复制到剪贴板'
+                  });
+                }
               }}
             />
           </div>
 
           {/* ===== 4. 二维码 ===== */}
           <div className="relative w-44 h-44 mb-3">
-            {/* 占位：实际这里放真实二维码图片 */}
             <QrCode className="w-full h-full text-black" strokeWidth={1} />
-            {/* 中间的小Logo */}
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-8 h-8 bg-black rounded flex items-center justify-center">
                 <span className="text-white text-[7px] font-bold">CHAT</span>
@@ -84,13 +166,16 @@ export default function InvitePage() {
           {/* ===== 5. 信息段落：经济模型、群制度、群目标 ===== */}
           <div className="w-full">
             <div className="py-2 border-b border-[#eee]">
-              <InfoBlock title="经济模型" content={MOCK_DATA.rules.economy} />
+              <InfoBlock
+                title="经济模型"
+                content={economicModel || '暂无内容'}
+              />
             </div>
             <div className="py-2 border-b border-[#eee]">
-              <InfoBlock title="群制度" content={MOCK_DATA.rules.system} />
+              <InfoBlock title="群制度" content={groupRules || '暂无内容'} />
             </div>
             <div className="py-2 border-b border-[#eee]">
-              <InfoBlock title="群目标" content={MOCK_DATA.rules.goal} />
+              <InfoBlock title="群目标" content={announcement || '暂无内容'} />
             </div>
           </div>
 
@@ -99,7 +184,7 @@ export default function InvitePage() {
             {/* 群聊使用代币 */}
             <div className="py-2 border-b border-[#eee]">
               <ListRow label="群聊使用代币">
-                <TokenBadge symbol="USDT0" />
+                <TokenBadge symbol={tokenSymbol || 'TOKEN'} />
               </ListRow>
             </div>
 
@@ -109,16 +194,18 @@ export default function InvitePage() {
                 <span className="text-sm text-[#333] mb-1">合约地址</span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-[#999]">
-                    {MOCK_DATA.token.address}
+                    {groupTokenAddress || '0x...'}
                   </span>
                   <Copy
                     className="w-3.5 h-3.5 text-[#999] cursor-pointer hover:text-[#666] transition-colors"
                     onClick={() => {
-                      navigator.clipboard.writeText(MOCK_DATA.token.address);
-                      toast({
-                        title: '已复制',
-                        description: '合约地址已复制到剪贴板'
-                      });
+                      if (groupTokenAddress) {
+                        navigator.clipboard.writeText(groupTokenAddress);
+                        toast({
+                          title: '已复制',
+                          description: '合约地址已复制到剪贴板'
+                        });
+                      }
                     }}
                   />
                 </div>
@@ -128,7 +215,7 @@ export default function InvitePage() {
             {/* 代币名称 */}
             <div className="py-2 border-b border-[#eee]">
               <ListRow label="代币名称">
-                <TokenBadge symbol="USDT0" />
+                <TokenBadge symbol={tokenSymbol || 'TOKEN'} />
               </ListRow>
             </div>
 
@@ -137,9 +224,9 @@ export default function InvitePage() {
               <ListRow label="进群需缴纳">
                 <div className="flex items-center gap-1">
                   <span className="text-sm text-[#999]">
-                    {MOCK_DATA.token.fee}
+                    {formattedEntryFee}
                   </span>
-                  <TokenBadge symbol="USDT0" />
+                  <TokenBadge symbol={tokenSymbol || 'TOKEN'} />
                 </div>
               </ListRow>
             </div>
@@ -152,20 +239,28 @@ export default function InvitePage() {
               {/* 左侧：头像 + 信息 */}
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded bg-slate-200 overflow-hidden shrink-0">
-                  {/* 头像占位 */}
+                  {referrerAvatar ? (
+                    <img
+                      src={referrerAvatar}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-slate-400" />
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm text-[#333]">
-                    {MOCK_DATA.inviter.name}
-                  </span>
+                  <span className="text-sm text-[#333]">{referrerName}</span>
                   <span className="text-[10px] text-[#999]">
-                    {MOCK_DATA.inviter.address}
+                    {referrerAddress || '0x...'}
                   </span>
                 </div>
               </div>
               {/* 右侧：邀请人数 */}
               <span className="text-xs text-[#999]">
-                已邀请{MOCK_DATA.inviter.totalInvited.toLocaleString()}人
+                已邀请{referrerInviteCount.toLocaleString()}人
               </span>
             </div>
           </div>
@@ -179,6 +274,20 @@ export default function InvitePage() {
         </div>
       </ScrollArea>
     </div>
+  );
+}
+
+export default function InvitePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col h-screen bg-white items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+        </div>
+      }
+    >
+      <InvitePageContent />
+    </Suspense>
   );
 }
 

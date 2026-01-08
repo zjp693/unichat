@@ -21,9 +21,10 @@ import {
   RED_PACKET_CONTRACT_ADDRESS,
   useRefundExpiredPacket
 } from '@/lib/RedPacketAbi';
-import { formatUnits, erc20Abi, getAddress } from 'viem';
+import { formatUnits, erc20Abi, getAddress, Abi } from 'viem';
 import { FormattedAmount } from './utils';
 import { ClaimerAvatar, ClaimerName } from './ClaimerInfo';
+import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 
 interface Claimer {
   name: string;
@@ -96,39 +97,8 @@ export function RedPacketDetailsModal({
   // 1. 获取红包基本信息
   const { data: packet, refetch: refetchPacket } = useReadContract({
     address: queryAddress,
-    abi: isRedPacketGroup
-      ? [
-          {
-            inputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-            name: 'getPacket',
-            outputs: [
-              { internalType: 'uint8', name: 'kind', type: 'uint8' },
-              { internalType: 'address', name: 'token', type: 'address' },
-              { internalType: 'uint64', name: 'createdAt', type: 'uint64' },
-              {
-                internalType: 'uint32',
-                name: 'targetSubgroupId',
-                type: 'uint32'
-              },
-              { internalType: 'uint32', name: 'sharesTotal', type: 'uint32' },
-              { internalType: 'uint256', name: 'totalAmount', type: 'uint256' },
-              {
-                internalType: 'uint256',
-                name: 'remainingAmount',
-                type: 'uint256'
-              },
-              {
-                internalType: 'uint32',
-                name: 'remainingShares',
-                type: 'uint32'
-              }
-            ],
-            stateMutability: 'view',
-            type: 'function'
-          }
-        ]
-      : RedPacketAbi,
-    functionName: 'getPacket',
+    abi: (isRedPacketGroup ? RedPacketGroupABI.abi : RedPacketAbi) as Abi,
+    functionName: isRedPacketGroup ? 'packets' : 'getPacket',
     args: packetId ? [BigInt(packetId)] : undefined,
     query: {
       enabled: !!packetId && isOpen
@@ -183,24 +153,52 @@ export function RedPacketDetailsModal({
     query: { enabled: !!tokenAddress && isOpen }
   });
 
-  // 3. 获取领取记录（仅官方群支持）
-  const { data: recordsData, refetch: refetchRecords } = useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
-    abi: RedPacketAbi,
-    functionName: 'getClaimRecordsPaged',
-    args: packetId ? [BigInt(packetId), BigInt(0), BigInt(100)] : undefined, // 获取前100条
-    query: {
-      enabled: !!packetId && isOpen && !isRedPacketGroup // 红包群不支持领取记录查询
-    }
-  });
+  // 3. 获取领取记录（官方群）
+  const { data: officialRecordsData, refetch: refetchOfficialRecords } =
+    useReadContract({
+      address: RED_PACKET_CONTRACT_ADDRESS,
+      abi: RedPacketAbi,
+      functionName: 'getClaimRecordsPaged',
+      args: packetId ? [BigInt(packetId), BigInt(0), BigInt(100)] : undefined,
+      query: {
+        enabled: !!packetId && isOpen && !isRedPacketGroup
+      }
+    });
+
+  // 4. 获取领取记录（红包群）
+  const { data: redPacketRecordsData, refetch: refetchRedPacketRecords } =
+    useReadContract({
+      address: queryAddress,
+      abi: RedPacketGroupABI.abi as Abi,
+      functionName: 'getPacketClaimDetails',
+      args: packetId ? [BigInt(packetId), BigInt(0), BigInt(100)] : undefined,
+      query: {
+        enabled: !!packetId && isOpen && isRedPacketGroup
+      }
+    });
+
+  // 统一领取记录数据
+  const recordsData = isRedPacketGroup
+    ? redPacketRecordsData
+    : officialRecordsData;
 
   // 强制刷新数据
   React.useEffect(() => {
     if (isOpen) {
       refetchPacket();
-      refetchRecords();
+      if (isRedPacketGroup) {
+        refetchRedPacketRecords();
+      } else {
+        refetchOfficialRecords();
+      }
     }
-  }, [isOpen, refetchPacket, refetchRecords]);
+  }, [
+    isOpen,
+    refetchPacket,
+    refetchRedPacketRecords,
+    refetchOfficialRecords,
+    isRedPacketGroup
+  ]);
 
   // 处理数据
   const displaySymbol = symbol || initialTokenSymbol || '';
@@ -212,7 +210,7 @@ export function RedPacketDetailsModal({
     // 安全解析 recordsData
     let records: any[] = [];
     if (Array.isArray(recordsData)) {
-      // 如果返回值是 [records, total]
+      // 官方群和红包群都返回 [records, total] 格式
       if (Array.isArray(recordsData[0])) {
         records = recordsData[0];
       } else {
@@ -222,6 +220,12 @@ export function RedPacketDetailsModal({
     }
 
     if (!records || !Array.isArray(records)) return [];
+
+    console.log('📊 [领取记录] 解析数据:', {
+      isRedPacketGroup,
+      recordsCount: records.length,
+      sampleRecord: records[0]
+    });
 
     // 判断红包是否已全部领取完毕
     const isFullyClaimed = packetData
@@ -257,7 +261,13 @@ export function RedPacketDetailsModal({
         isCurrentUser
       };
     });
-  }, [recordsData, tokenDecimals, currentAddress, packetData]);
+  }, [
+    recordsData,
+    tokenDecimals,
+    currentAddress,
+    packetData,
+    isRedPacketGroup
+  ]);
 
   // 计算我的领取金额
   const myRecord = claimRecords.find(
@@ -363,11 +373,23 @@ export function RedPacketDetailsModal({
         variant: 'success'
       });
       refetchPacket();
-      refetchRecords();
+      if (isRedPacketGroup) {
+        refetchRedPacketRecords();
+      } else {
+        refetchOfficialRecords();
+      }
       setTxHash(undefined);
       setIsRefunding(false);
     }
-  }, [isConfirmed, txHash, refetchPacket, refetchRecords, toast]);
+  }, [
+    isConfirmed,
+    txHash,
+    refetchPacket,
+    refetchRedPacketRecords,
+    refetchOfficialRecords,
+    isRedPacketGroup,
+    toast
+  ]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>

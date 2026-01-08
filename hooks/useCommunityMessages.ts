@@ -207,27 +207,61 @@ export function useCommunityMessages(
         let messageType: 'text' | 'red-packet' = 'text';
         let messageContent = msg.content || '';
 
-        try {
-          // 检查是否有 'index | json' 格式的前缀，如果有则提取真正的 JSON
-          let jsonContent = msg.content || '{}';
-          const pipeMatch = jsonContent.match(/^\d+\s*\|\s*(.+)$/);
-          if (pipeMatch) {
-            jsonContent = pipeMatch[1];
-            messageContent = jsonContent; // 同时更新消息内容
-          }
+        console.log('📝 [消息解析] 原始消息:', {
+          index: start + index,
+          from: msg.from,
+          content: msg.content,
+          timestamp: msg.timestamp.toString()
+        });
 
-          const parsed = JSON.parse(jsonContent);
-          // 如果包含 packetId 字段，或者包含 groupType=redpacket 的红包消息特征，说明是红包消息
-          if (
-            parsed.packetId ||
-            (parsed.groupType === 'redpacket' &&
-              (parsed.amount || parsed.tokenAddress))
-          ) {
+        try {
+          // 只要是以 "数字 |" 开头就算红包 (允许后面为空或非规范 JSON)
+          const pipeMatch = messageContent.match(/^(\d+)\s*\|\s*([\s\S]*)$/);
+
+          if (pipeMatch) {
+            const extractedId = pipeMatch[1];
+            const remainingPart = pipeMatch[2].trim();
+
             messageType = 'red-packet';
-            console.log('[红包群] 识别到红包消息:', parsed);
+
+            // 构造默认红包数据，如果后面有 JSON 则合并
+            let redPacketData: any = {
+              packetId: extractedId,
+              message: '恭喜发财，大吉大利',
+              status: 'active'
+            };
+
+            if (remainingPart.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(remainingPart);
+                redPacketData = { ...redPacketData, ...parsed };
+                // 确保 ID 以提取的为准
+                redPacketData.packetId = extractedId;
+                console.log('✅ [JSON 解析] 成功合并:', parsed);
+              } catch (e) {
+                // JSON 解析失败，保持默认数据
+                console.warn(
+                  '⚠️ [JSON 解析] 失败，使用默认数据:',
+                  remainingPart
+                );
+              }
+            }
+
+            messageContent = JSON.stringify(redPacketData);
+            console.log('🎁 [红包群] 识别到红包消息:', {
+              packetId: extractedId,
+              原始内容: msg.content,
+              解析后JSON: redPacketData,
+              最终content: messageContent
+            });
+          } else {
+            // 不符合 "ID |" 格式的消息，视为普通文本
+            messageType = 'text';
+            console.log('💬 [普通消息] 文本内容:', msg.content);
           }
         } catch (e) {
-          // 不是 JSON，保持为普通文本消息
+          console.error('❌ [红包群] 消息类型判定过程出错:', e);
+          messageType = 'text';
         }
 
         return {

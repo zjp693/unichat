@@ -9,14 +9,14 @@
  * 3. 验证邀请码是否存在
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   useAccount,
   usePublicClient,
   useWriteContract,
   useWaitForTransactionReceipt
 } from 'wagmi';
-import { parseAbi, keccak256, toHex } from 'viem';
+import { parseAbi, keccak256, toHex, decodeEventLog } from 'viem';
 import UniChatRegistryArtifact from '@/contract/abi/UniChatRegistry.json';
 
 const REGISTRY_ABI = parseAbi([
@@ -24,6 +24,7 @@ const REGISTRY_ABI = parseAbi([
   'function referralExists(bytes32 code) external view returns (bool)',
   'function getReferrer(bytes32 code) external view returns (address)',
   'function getListingShareBps(bytes32 code) external view returns (uint16)',
+  'function getCodesByAddress(address addr) external view returns (bytes32[] memory codes)',
   'event ReferralCreated(bytes32 indexed code, address indexed referrer, uint16 listingShareBps)'
 ]);
 
@@ -52,20 +53,9 @@ export function useReferralCode() {
   const [error, setError] = useState<Error | null>(null);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
 
-  const fetchReferralCode = async () => {
+  const fetchReferralCode = useCallback(async () => {
     if (!publicClient || !userAddress || isFetching) {
       if (!publicClient || !userAddress) setIsLoading(false);
-      return;
-    }
-
-    // 1. 优先尝试从缓存获取
-    const cacheKey = `unichat_referral_${userAddress.toLowerCase()}`;
-    const cachedCode =
-      typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null;
-    if (cachedCode && !refetchTrigger) {
-      console.log('📦 [获取邀请码] 使用本地缓存:', cachedCode);
-      setReferralCode(cachedCode as `0x${string}`);
-      setIsLoading(false);
       return;
     }
 
@@ -81,38 +71,29 @@ export function useReferralCode() {
     setError(null);
 
     try {
-      // 2. 动态计算起始区块：获取最新高度，向前推 500 万个区块 (覆盖约 2-3 周，包含 2026 年 1 月 1 日)
-      // 优化：仅扫描 2026 年 1 月 7 日前后的事件 (约最近 10w 区块)
-      const currentBlock = await publicClient.getBlockNumber();
-      const fromBlock = currentBlock > 100000n ? currentBlock - 100000n : 0n;
+      console.log('🔍 [获取邀请码] 调用 getCodesByAddress...');
 
-      console.log('🔍 [获取邀请码] 扫描 2026-01-07 以来事件...', {
-        fromBlock: fromBlock.toString(),
-        currentBlock: currentBlock.toString(),
-        range: (currentBlock - fromBlock).toString()
-      });
-
-      const events = await publicClient.getContractEvents({
+      // ✅ 直接调用合约方法查询邀请码
+      const codes = (await publicClient.readContract({
         address: registryAddress,
         abi: REGISTRY_ABI,
-        eventName: 'ReferralCreated',
-        args: { referrer: userAddress },
-        fromBlock: fromBlock
+        functionName: 'getCodesByAddress',
+        args: [userAddress]
+      })) as `0x${string}`[];
+
+      console.log('📊 [获取邀请码] 查询结果:', {
+        address: userAddress,
+        codesCount: codes?.length || 0,
+        codes: codes
       });
 
-      if (events && events.length > 0) {
-        // 获取最新的邀请码
-        const latestEvent = events[events.length - 1] as any;
-        const code = latestEvent.args.code as `0x${string}`;
-        console.log('✅ [获取邀请码] 找到邀请码:', code);
-
-        // 存入缓存
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(cacheKey, code);
-        }
-        setReferralCode(code);
+      if (codes && codes.length > 0) {
+        // 获取最新的邀请码（数组最后一个）
+        const latestCode = codes[codes.length - 1];
+        console.log('✅ [获取邀请码] 找到邀请码:', latestCode);
+        setReferralCode(latestCode);
       } else {
-        console.log('ℹ️ [获取邀请码] 最近 10w 区块未找到邀请码');
+        console.log('ℹ️ [获取邀请码] 未找到邀请码');
         setReferralCode(null);
       }
     } catch (err) {
@@ -122,22 +103,14 @@ export function useReferralCode() {
       setIsLoading(false);
       setIsFetching(false);
     }
-  };
+  }, [publicClient, userAddress]); // ✅ 只依赖外部稳定的值
 
   useEffect(() => {
-    // 使用 timeout 简单防抖，防止组件短时间多次 mount/unmount 触发请求爆炸
-    const timer = setTimeout(() => {
-      fetchReferralCode();
-    }, 300); // 稍微加长抖动时间
-    return () => clearTimeout(timer);
-  }, [userAddress, refetchTrigger]); // 移除 publicClient 依赖，它太容易变了
+    fetchReferralCode();
+  }, [fetchReferralCode, refetchTrigger]);
 
-  // 手动重新获取（清除缓存后获取）
+  // 手动重新获取
   const refetch = () => {
-    if (userAddress) {
-      const cacheKey = `unichat_referral_${userAddress.toLowerCase()}`;
-      localStorage.removeItem(cacheKey);
-    }
     setRefetchTrigger((prev) => prev + 1);
   };
 
@@ -154,15 +127,57 @@ export function useReferralCode() {
  * 生成邀请码
  */
 export function useCreateReferralCode() {
+  const publicClient = usePublicClient();
   const {
     writeContract,
     data: hash,
     isPending,
     error: writeError
   } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+  const {
+    isLoading: isConfirming,
+    isSuccess,
+    data: receipt
+  } = useWaitForTransactionReceipt({
     hash
   });
+
+  const [createdCode, setCreatedCode] = useState<`0x${string}` | null>(null);
+
+  // ✅ 监听交易成功，从 receipt 中解析邀请码
+  useEffect(() => {
+    if (isSuccess && receipt) {
+      try {
+        // 从 logs 中查找 ReferralCreated 事件
+        const log = receipt.logs.find((log) => {
+          try {
+            const decoded = decodeEventLog({
+              abi: REGISTRY_ABI,
+              data: log.data,
+              topics: log.topics
+            });
+            return decoded.eventName === 'ReferralCreated';
+          } catch {
+            return false;
+          }
+        });
+
+        if (log) {
+          const decoded = decodeEventLog({
+            abi: REGISTRY_ABI,
+            data: log.data,
+            topics: log.topics
+          }) as any;
+
+          const code = decoded.args.code as `0x${string}`;
+          console.log('✅ [创建邀请码] 从事件中解析到邀请码:', code);
+          setCreatedCode(code);
+        }
+      } catch (err) {
+        console.error('❌ [创建邀请码] 解析事件失败:', err);
+      }
+    }
+  }, [isSuccess, receipt]);
 
   const createReferralCode = async (listingShareBps: number = 6500) => {
     const registryAddress = getRegistryAddress();
@@ -195,6 +210,7 @@ export function useCreateReferralCode() {
     isPending,
     isConfirming,
     isSuccess,
+    createdCode, // ✅ 新增：直接返回创建的邀请码
     error: writeError
   };
 }

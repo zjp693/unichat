@@ -44,6 +44,7 @@ export function InviteActionCard({ groupAddress }: InviteActionCardProps) {
     isPending: isCreating,
     isConfirming,
     isSuccess,
+    createdCode, // ✅ 从交易 receipt 中解析的邀请码
     error: createError
   } = useCreateReferralCode();
 
@@ -112,20 +113,19 @@ export function InviteActionCard({ groupAddress }: InviteActionCardProps) {
     }
   };
 
-  // 生成成功后静默更新数据
+  // ✅ 生成成功后，直接使用 createdCode
   React.useEffect(() => {
-    if (isSuccess) {
+    if (isSuccess && createdCode) {
       toast({
         title: '生成成功',
         description: '邀请码已创建',
         variant: 'success'
       });
-      // 延迟 1 秒后重新获取邀请码（等待链上数据确认）
-      setTimeout(() => {
-        refetch();
-      }, 1000);
+      console.log('✅ [邀请码] 创建成功:', createdCode);
+      // refetch 会自动查询到新邀请码
+      refetch();
     }
-  }, [isSuccess, toast, refetch]);
+  }, [isSuccess, createdCode, toast, refetch]);
 
   // 生成错误提示
   React.useEffect(() => {

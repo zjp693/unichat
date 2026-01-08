@@ -12,6 +12,7 @@ import { useSearchParams } from 'next/navigation';
 import { useAccount, usePublicClient, useReadContract } from 'wagmi';
 import { parseAbi, formatUnits } from 'viem';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
+import { useReferrerInviteCount } from '@/hooks/useReferrerInviteCount';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 
 // Registry ABI
@@ -70,7 +71,11 @@ export function useGroupJoinInfo() {
   });
 
   // 3️⃣ 获取群信息
-  const { data: groupName } = useReadContract({
+  const {
+    data: groupName,
+    isLoading: isLoadingGroupName,
+    isError: isGroupError
+  } = useReadContract({
     address: groupAddress || undefined,
     abi: RedPacketGroupABI.abi as any,
     functionName: 'groupName',
@@ -150,6 +155,12 @@ export function useGroupJoinInfo() {
     query: { enabled: !!groupAddress && !!currentUserAddress }
   });
 
+  // 7️⃣ 获取邀请人在该群的邀请人数
+  const { inviteCount: referrerInviteCount } = useReferrerInviteCount(
+    groupAddress || undefined,
+    referrerAddress as `0x${string}` | undefined
+  );
+
   // 判断是否已是成员（memberData 是数组：[exists, joinedAt, subgroupId]）
   const isMember = memberData ? (memberData as any)[0] === true : false;
 
@@ -159,8 +170,8 @@ export function useGroupJoinInfo() {
       ? formatUnits(entryFeeAmount as bigint, tokenDecimals as number)
       : '0';
 
-  // 加载状态
-  const isLoading = !groupAddress || !groupName;
+  // 加载状态：有群地址但正在查询群名称时
+  const isLoading = !!groupAddress && isLoadingGroupName;
 
   return {
     // URL 参数
@@ -188,10 +199,11 @@ export function useGroupJoinInfo() {
     // 推荐人信息
     referrerName: referrerName || referrerAddress?.slice(0, 6) || '未知',
     referrerAvatar: referrerAvatarUrl,
-    referrerInviteCount: 0, // TODO: 实现真实查询
+    referrerInviteCount,
 
     // 状态
     isLoading,
+    isGroupError,
     isMember,
     currentUserAddress
   };

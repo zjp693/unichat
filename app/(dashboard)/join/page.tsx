@@ -41,6 +41,7 @@ function JoinPageContent() {
     referrerAvatar,
     referrerInviteCount,
     isLoading,
+    isGroupError,
     isMember
   } = useGroupJoinInfo();
 
@@ -147,6 +148,28 @@ function JoinPageContent() {
           </div>
           <div className="text-xs text-gray-400 bg-gray-100 rounded px-3 py-2 inline-block font-mono break-all max-w-md">
             {referralCode}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 群不存在或查询出错
+  if (isGroupError || !groupName) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: '#fafafa' }}
+      >
+        <div className="text-center px-4">
+          <div className="text-lg font-medium text-gray-800 mb-2">
+            🚫 群不存在
+          </div>
+          <div className="text-sm text-gray-500 mb-3">
+            该群地址无效或已被解散
+          </div>
+          <div className="text-xs text-gray-400 bg-gray-100 rounded px-3 py-2 inline-block font-mono break-all max-w-md">
+            {groupAddress}
           </div>
         </div>
       </div>

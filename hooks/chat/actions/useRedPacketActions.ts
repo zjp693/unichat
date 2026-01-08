@@ -611,33 +611,39 @@ export function useRedPacketActions({
   const handleClaimRedPacket = useCallback(
     async (packetId: string, onTxSent?: () => void) => {
       try {
-        // 从 selectedRedPacket 中获取红包信息
-        let isRedPacketGroup = false;
-        let groupAddress: Address | undefined;
+        // 优先使用 Hook 的 Props 判断群类型，防止消息内容缺少 groupType 标识
+        let isRedPacketGroup = groupType === 'redpacket';
+        let targetGroupAddress: Address | undefined = groupAddress as Address;
 
         if (selectedRedPacket) {
           try {
             const content = JSON.parse(selectedRedPacket.content);
-            isRedPacketGroup = content.groupType === 'redpacket';
-            groupAddress = content.groupAddress as Address;
+            // 如果内容里有显式的群地址，优先使用
+            if (content.groupAddress) {
+              targetGroupAddress = content.groupAddress as Address;
+            }
+            // 如果内容里显式声明了类型，也作为补充参考
+            if (content.groupType === 'redpacket') {
+              isRedPacketGroup = true;
+            }
           } catch (e) {
-            // 解析失败，默认为官方群红包
+            // 解析失败，保持 Props 默认值
           }
         }
 
         console.log('🎁 [领取红包] 开始领取', {
           packetId,
           isRedPacketGroup,
-          groupAddress,
+          targetGroupAddress,
           contractAddress: isRedPacketGroup
-            ? groupAddress
+            ? targetGroupAddress
             : RED_PACKET_CONTRACT_ADDRESS
         });
 
         // 根据红包类型选择不同的合约和方法
         let txHash;
 
-        if (isRedPacketGroup && groupAddress) {
+        if (isRedPacketGroup && targetGroupAddress) {
           // ========== 红包群红包领取 ==========
           console.log('🎁 [红包群] 领取红包...');
 
@@ -646,7 +652,7 @@ export function useRedPacketActions({
           ]);
 
           txHash = await writeContract({
-            address: groupAddress,
+            address: targetGroupAddress,
             abi: RedPacketGroupClaimABI,
             functionName: 'claimPacket',
             args: [BigInt(packetId)]

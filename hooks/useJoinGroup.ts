@@ -16,7 +16,13 @@ import {
   useWaitForTransactionReceipt,
   useReadContract
 } from 'wagmi';
-import { parseAbi, erc20Abi } from 'viem';
+import {
+  parseAbi,
+  erc20Abi,
+  BaseError,
+  ContractFunctionRevertedError,
+  decodeErrorResult
+} from 'viem';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
@@ -154,24 +160,103 @@ export function useJoinGroup() {
     } catch (error: any) {
       console.error('加入群聊失败:', error);
 
+      // 检测用户取消交易
       const errorMessage = error?.message || error?.toString() || '';
       const errorLower = errorMessage.toLowerCase();
 
       if (
         errorLower.includes('user rejected') ||
-        errorLower.includes('user denied')
+        errorLower.includes('user denied') ||
+        errorLower.includes('user cancelled')
       ) {
         toast({
           title: '已取消',
           description: '您取消了交易'
         });
-      } else if (errorLower.includes('already member')) {
-        toast({
-          title: '已是成员',
-          description: '您已经是该群的成员',
-          variant: 'destructive'
-        });
+        setIsJoining(false);
+        setStep('idle');
+        return;
+      }
+
+      // 使用 viem 的方式解析合约错误
+      const baseError = error as BaseError;
+      console.log('🔍 baseError:', baseError);
+
+      const revertError = baseError.walk(
+        (err) => err instanceof ContractFunctionRevertedError
+      );
+      console.log('🔍 revertError:', revertError);
+
+      if (revertError instanceof ContractFunctionRevertedError) {
+        console.log('🔍 revertError.data:', revertError.data);
+
+        try {
+          const decodedError = decodeErrorResult({
+            abi: RedPacketGroupABI.abi as any,
+            data: (revertError.data || '0x') as `0x${string}`
+          });
+
+          console.log('✅ 解析的错误:', decodedError);
+          console.log('✅ 错误名称:', decodedError?.errorName);
+
+          // 根据错误名称显示对应的提示
+          switch (decodedError.errorName) {
+            case 'AlreadyMember':
+              toast({
+                title: '您已是群成员',
+                description: '无需重复加入，即将进入群聊...',
+                variant: 'default'
+              });
+              setTimeout(() => {
+                router.push(
+                  `/chat/${groupAddress}?type=group&groupType=redpacket`
+                );
+              }, 1500);
+              return;
+
+            case 'NeedGroupToken':
+              toast({
+                title: '需要持有群代币',
+                description: '您需要持有该群的代币才能加入',
+                variant: 'destructive'
+              });
+              break;
+
+            case 'InsufficientBalance':
+            case 'AmountZero':
+              toast({
+                title: '余额不足',
+                description: '钱包余额不足，无法支付入群费用',
+                variant: 'destructive'
+              });
+              break;
+
+            case 'NotMember':
+            case 'NotInSubgroup':
+              toast({
+                title: '权限不足',
+                description: '您不是该群成员',
+                variant: 'destructive'
+              });
+              break;
+
+            default:
+              toast({
+                title: '加入失败',
+                description: `操作失败: ${decodedError.errorName}`,
+                variant: 'destructive'
+              });
+          }
+        } catch (decodeError) {
+          console.error('解析错误失败:', decodeError);
+          toast({
+            title: '加入失败',
+            description: errorMessage.slice(0, 100) || '请稍后重试',
+            variant: 'destructive'
+          });
+        }
       } else {
+        // 不是合约 revert 错误，可能是网络问题等
         toast({
           title: '加入失败',
           description: errorMessage.slice(0, 100) || '请稍后重试',
