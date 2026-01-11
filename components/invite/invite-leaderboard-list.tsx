@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { LeaderboardUser } from './data';
+import { type LeaderboardUser } from '@/hooks/useReferralLeaderboard';
 import { InviteLeaderboardItem } from './invite-leaderboard-item';
 
 /**
@@ -24,7 +24,7 @@ export function InviteLeaderboardList({ users }: InviteLeaderboardListProps) {
       {/* 用户列表容器 */}
       <div className="flex flex-col">
         {users.map((user) => (
-          <InviteLeaderboardItem key={user.id} user={user} />
+          <InviteLeaderboardItem key={user.address} user={user} />
         ))}
       </div>
 

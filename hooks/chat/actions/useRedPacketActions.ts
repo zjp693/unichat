@@ -279,7 +279,7 @@ export function useRedPacketActions({
 
         const isRandom = type === 'LUCKY';
         const totalShares = BigInt(count || 1);
-        const expiryDuration = BigInt(24 * 60 * 60);
+        const expiryDuration = BigInt(5 * 24 * 60 * 60); // 5 天
 
         let amount: bigint;
         let shareAmounts: bigint[] = [];
@@ -460,7 +460,7 @@ export function useRedPacketActions({
       }
 
       const { tokenAddress, amount: totalAmount, message: memo } = config;
-      const expiryDuration = BigInt(24 * 60 * 60);
+      const expiryDuration = BigInt(5 * 24 * 60 * 60); // 5 天
 
       // 动态获取 Token 精度
       const decimals = await getTokenDecimals(

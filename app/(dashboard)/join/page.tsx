@@ -9,6 +9,7 @@
 
 import React, { Suspense } from 'react';
 import { useRouter } from 'next/navigation';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGroupJoinInfo } from '@/hooks/useGroupJoinInfo';
 import { useJoinGroup } from '@/hooks/useJoinGroup';
 import {
@@ -177,42 +178,43 @@ function JoinPageContent() {
   }
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="h-screen flex flex-col overflow-hidden"
       style={{ backgroundColor: '#fafafa' }}
     >
-      {/* 内容区域 */}
-      <div className="flex-1 pb-24">
-        {/* 群头部信息 */}
-        <JoinGroupHeader
-          groupName={groupName}
-          memberCount={memberCount}
-          groupAddress={groupAddress}
-        />
+      {/* 使用可滚动组件包裹除按钮外的内容 */}
+      <ScrollArea className="flex-1 w-full">
+        <div className="pb-32">
+          {' '}
+          {/* pb-32 为底部的固定按钮留出空间 */}
+          {/* 群头部信息 */}
+          <JoinGroupHeader
+            groupName={groupName}
+            memberCount={memberCount}
+            groupAddress={groupAddress}
+          />
+          {/* 群信息卡片 */}
+          <JoinGroupInfoCards
+            economicModel={economicModel}
+            groupRules={groupRules}
+            announcement={announcement}
+          />
+          {/* 代币信息 */}
+          <JoinGroupTokenInfo
+            tokenAddress={groupTokenAddress || ''}
+            tokenSymbol={tokenSymbol}
+            entryFee={formattedEntryFee}
+          />
+          {/* 邀请人信息 */}
+          <JoinGroupReferrer
+            avatar={referrerAvatar}
+            name={referrerName}
+            address={referrerAddress || ''}
+            inviteCount={referrerInviteCount}
+          />
+        </div>
+      </ScrollArea>
 
-        {/* 群信息卡片 */}
-        <JoinGroupInfoCards
-          economicModel={economicModel}
-          groupRules={groupRules}
-          announcement={announcement}
-        />
-
-        {/* 代币信息 */}
-        <JoinGroupTokenInfo
-          tokenAddress={groupTokenAddress || ''}
-          tokenSymbol={tokenSymbol}
-          entryFee={formattedEntryFee}
-        />
-
-        {/* 邀请人信息 */}
-        <JoinGroupReferrer
-          avatar={referrerAvatar}
-          name={referrerName}
-          address={referrerAddress || ''}
-          inviteCount={referrerInviteCount}
-        />
-      </div>
-
-      {/* 底部加入按钮 */}
+      {/* 底部加入按钮 - 保持固定 */}
       <JoinGroupButton
         isJoining={isJoining}
         step={step}

@@ -116,6 +116,11 @@ export function RedPacketMessageWrapper({
     if (packet) {
       if (isRedPacketGroup) {
         // 红包群的数据结构
+        // 安全检查：确保 packet 是数组才解构
+        if (!Array.isArray(packet)) {
+          return 'active'; // 数据加载中或出错，默认为 active
+        }
+
         const [
           kind,
           token,
@@ -125,17 +130,21 @@ export function RedPacketMessageWrapper({
           totalAmount,
           remainingAmount,
           remainingShares
-        ] = packet as any;
+        ] = packet;
 
         // 检查是否已领完
         if (Number(remainingShares) === 0) return 'empty';
 
-        // 检查是否过期（24小时）
+        // 检查是否过期
+        // TODO: 红包群的过期时间需要从合约常量获取，目前暂定 5 天
+        const REDPACKET_GROUP_EXPIRY_DURATION = 5 * 24 * 60 * 60; // 5 天（秒）
         const now = dayjs();
         const creationTime = Number(createdAt);
         if (
           creationTime > 0 &&
-          now.isAfter(dayjs.unix(creationTime + 24 * 60 * 60))
+          now.isAfter(
+            dayjs.unix(creationTime + REDPACKET_GROUP_EXPIRY_DURATION)
+          )
         ) {
           return 'expired';
         }

@@ -6,12 +6,21 @@
  * 用于展示排行榜前三名用户的领奖台区域。
  * 布局为：左侧第二名、中间第一名（突出显示）、右侧第三名。
  * 每个位置使用不同的主题颜色以区分名次。
+ *
+ * 支持只有1人、2人的情况：
+ * - 1人：只显示第1名（中间）
+ * - 2人：显示第1名（中间）和第2名（左侧）
+ * - 3人及以上：完整显示前三名
  */
 
 import React from 'react';
-import { LeaderboardUser, getLevelIcon } from './data';
+import {
+  type LeaderboardUser,
+  getLevelIcon
+} from '@/hooks/useReferralLeaderboard';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 /**
  * 排行榜领奖台组件属性
@@ -25,25 +34,31 @@ export function InviteLeaderboardPodium({
   topUsers
 }: InviteLeaderboardPodiumProps) {
   // 从用户数据中提取前三名
-  const [first, second, third] = [
-    topUsers.find((u) => u.rank === 1),
-    topUsers.find((u) => u.rank === 2),
-    topUsers.find((u) => u.rank === 3)
-  ];
+  const first = topUsers.find((u) => u.rank === 1);
+  const second = topUsers.find((u) => u.rank === 2);
+  const third = topUsers.find((u) => u.rank === 3);
 
-  // 如果前三名数据不完整，不渲染组件
-  if (!first || !second || !third) return null;
+  // 如果连第一名都没有，不渲染组件
+  if (!first) return null;
 
   return (
     <div className="flex items-end justify-between gap-2 px-3 pt-10 pb-1">
-      {/* 第二名（左侧） */}
-      <PodiumItem user={second} rank={2} />
+      {/* 第二名（左侧） - 如果没有则显示占位 */}
+      {second ? (
+        <PodiumItem user={second} rank={2} />
+      ) : (
+        <div className="w-[32%]" /> // 空占位，保持布局
+      )}
 
       {/* 第一名（中间 - 突出显示） */}
       <PodiumItem user={first} rank={1} />
 
-      {/* 第三名（右侧） */}
-      <PodiumItem user={third} rank={3} />
+      {/* 第三名（右侧） - 如果没有则显示占位 */}
+      {third ? (
+        <PodiumItem user={third} rank={3} />
+      ) : (
+        <div className="w-[32%]" /> // 空占位，保持布局
+      )}
     </div>
   );
 }
@@ -124,17 +139,19 @@ function PodiumItem({ user, rank }: { user: LeaderboardUser; rank: number }) {
         )}
       </div>
 
-      {/* 用户头像 - 方形圆角设计 */}
+      {/* 用户头像 - 方形圆角设计，使用 IPFSImg */}
       <div
         className={cn(
           'w-16 h-16 rounded-lg overflow-hidden mb-2',
           styles.avatarBorder
         )}
       >
-        <img
-          src={user.avatar}
-          alt={user.name}
+        <IPFSImg
+          src={user.avatarCid || ''}
+          fallbackSrc="/me/me2.png"
+          alt={user.name || '用户'}
           className="w-full h-full object-cover"
+          enableLogging={false}
         />
       </div>
 
@@ -148,31 +165,33 @@ function PodiumItem({ user, rank }: { user: LeaderboardUser; rank: number }) {
         {user.inviteCount}人
       </div>
 
-      {/* 等级徽章区域 */}
-      <div className="mt-auto flex items-center justify-center">
-        <div className="relative flex items-center">
-          {/* 等级图标 */}
-          <div className="relative z-10 shrink-0">
-            <Image
-              src={getLevelIcon(user.level)}
-              alt={user.level}
-              width={28}
-              height={28}
-              className="object-contain"
-            />
-          </div>
-          {/* 等级文字标签 */}
-          <div
-            className={cn(
-              'relative z-0 -ml-3 pl-4 pr-3 py-1 rounded-full text-xs font-bold shadow-sm',
-              styles.badgeBg,
-              styles.text
-            )}
-          >
-            {user.level}
+      {/* 等级徽章区域 - 只在有等级时显示 */}
+      {user.level && (
+        <div className="mt-auto flex items-center justify-center">
+          <div className="relative flex items-center">
+            {/* 等级图标 */}
+            <div className="relative z-10 shrink-0">
+              <Image
+                src={getLevelIcon(user.level)}
+                alt={user.level}
+                width={28}
+                height={28}
+                className="object-contain"
+              />
+            </div>
+            {/* 等级文字标签 */}
+            <div
+              className={cn(
+                'relative z-0 -ml-3 pl-4 pr-3 py-1 rounded-full text-xs font-bold shadow-sm',
+                styles.badgeBg,
+                styles.text
+              )}
+            >
+              {user.level}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
