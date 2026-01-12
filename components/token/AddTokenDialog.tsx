@@ -16,18 +16,23 @@ import { getAddress, isAddress, erc20Abi } from 'viem';
 import { Loader2, Plus } from 'lucide-react';
 import { useAllowedTokens } from '@/hooks/contract/useAllowedTokens';
 
-export function AddTokenDialog() {
-  const [isOpen, setIsOpen] = React.useState(false);
+import type { AddTokenDialogProps, Token } from './types';
+
+export function AddTokenDialog({
+  isOpen,
+  onClose,
+  onConfirm
+}: AddTokenDialogProps) {
   const [address, setAddress] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
   const [tokenInfo, setTokenInfo] = React.useState<{
+    name: string;
     symbol: string;
     decimals: number;
   } | null>(null);
 
   const { toast } = useToast();
   const publicClient = usePublicClient();
-  // const { addToken } = useAllowedTokens(); // 移除未使用的引用
 
   const handleCheckToken = async () => {
     if (!isAddress(address)) {
@@ -43,7 +48,12 @@ export function AddTokenDialog() {
     setTokenInfo(null);
 
     try {
-      const [symbol, decimals] = await Promise.all([
+      const [name, symbol, decimals] = await Promise.all([
+        publicClient?.readContract({
+          address: getAddress(address),
+          abi: erc20Abi,
+          functionName: 'name'
+        }),
         publicClient?.readContract({
           address: getAddress(address),
           abi: erc20Abi,
@@ -57,6 +67,7 @@ export function AddTokenDialog() {
       ]);
 
       setTokenInfo({
+        name: name as string,
         symbol: symbol as string,
         decimals: Number(decimals)
       });
@@ -77,18 +88,23 @@ export function AddTokenDialog() {
 
     try {
       setIsLoading(true);
-      // 调用 useAllowedTokens 中的 addToken 方法（假设它会处理本地存储更新）
-      // 注意：这里的 addToken 可能需要根据实际 hook 实现调整
-      // 临时实现：直接存入 localStorage 触发更新
 
+      const newToken: Token = {
+        address: address,
+        name: tokenInfo.name,
+        symbol: tokenInfo.symbol,
+        decimals: tokenInfo.decimals,
+        iconCid: undefined,
+        iconUrl: null
+      };
+
+      // 这里保留 localStorage 的逻辑，如果需要的话
       const customTokens = JSON.parse(
         localStorage.getItem('custom_tokens') || '[]'
       );
       if (!customTokens.includes(address)) {
         customTokens.push(address);
         localStorage.setItem('custom_tokens', JSON.stringify(customTokens));
-
-        // 触发 storage 事件以便其他组件更新
         window.dispatchEvent(new Event('storage'));
       }
 
@@ -98,10 +114,15 @@ export function AddTokenDialog() {
         variant: 'success'
       });
 
-      setIsOpen(false);
+      onConfirm(newToken);
+      // onClose is responsible for closing the dialog
+      onClose();
+
+      // Reset state
       setAddress('');
       setTokenInfo(null);
     } catch (error) {
+      console.error('添加失败', error);
       toast({
         title: '添加失败',
         variant: 'destructive'
@@ -112,17 +133,7 @@ export function AddTokenDialog() {
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full flex items-center justify-center gap-2 border-dashed"
-        >
-          <Plus className="h-4 w-4" />
-          添加自定义代币
-        </Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>添加自定义代币</DialogTitle>
@@ -141,6 +152,10 @@ export function AddTokenDialog() {
 
           {tokenInfo && (
             <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-500">名称:</span>
+                <span className="font-medium">{tokenInfo.name}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">代币符号:</span>
                 <span className="font-medium">{tokenInfo.symbol}</span>

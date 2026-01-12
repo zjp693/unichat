@@ -17,13 +17,13 @@ import { useChatTimestamp } from '@/hooks/useChatTimestamp';
 import { useCountReceivedTodayBetween } from '@/lib/DirectMessageAbi';
 import { setChatMeta } from '@/lib/chatMetaSlice';
 import type { ChatItem } from '@/lib/types/chat';
-import type { ProfileView } from '@/lib/UniChatProfileAbi';
+import type { PeerProfile } from '@/hooks/usePeerProfile';
 
 interface ChatListItemProps {
   chat: ChatItem;
   currentAddress?: Address;
   onJoinSuccess?: () => void;
-  peerProfile?: ProfileView; // 批量预获取的 Profile（可选）
+  peerProfile?: PeerProfile; // 批量预获取的 Profile（可选）
 }
 
 export function ChatListItem({

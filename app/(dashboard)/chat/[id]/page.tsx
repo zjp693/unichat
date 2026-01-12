@@ -102,7 +102,18 @@ function ChatContent() {
 
   // --- 基础钩子 ---
   const router = useRouter();
-  const { keys } = useKeyManagement();
+  const {
+    keys,
+    generateNewKeyPair,
+    loading: isGeneratingKey
+  } = useKeyManagement();
+
+  // 处理密钥生成
+  const handleGenerateKey = async () => {
+    const defaultName = `Key-${new Date().toISOString().slice(0, 10)}`;
+    await generateNewKeyPair(defaultName);
+    dispatch(setShowGenerationModal(false));
+  };
 
   // --- 实时从合约读取群名（针对红包群） ---
   const isRedPacket = groupType === 'redpacket';
@@ -677,7 +688,8 @@ function ChatContent() {
 
       {/* 弹窗组件 */}
       <ChatModals
-        handleKeyGenerated={handleKeyGenerated}
+        onGenerateKey={handleGenerateKey}
+        isGeneratingKey={isGeneratingKey}
         handleKeySelect={handleKeySelect}
         handleBatchDecrypt={handleBatchDecrypt}
         handleSendModeSelect={handleSendModeSelect}

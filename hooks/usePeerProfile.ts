@@ -73,7 +73,8 @@ export function usePeerProfile(address: Address | undefined) {
 
   return {
     profile,
-    isLoading: isLoadingIds || (!!tokenId && isLoadingProfile)
+    isLoading: isLoadingIds || (!!tokenId && isLoadingProfile),
+    hasProfile: profile?.hasProfile ?? false
   };
 }
 

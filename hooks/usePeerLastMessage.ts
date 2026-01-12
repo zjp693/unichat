@@ -69,8 +69,17 @@ export function usePeerLastMessage(
     return null;
   }, [messages]);
 
+  const timestamp = useMemo(() => {
+    if (lastMessage) {
+      // 兼容直接属性访问和数组索引访问（以防 ABI 差异）
+      return (lastMessage as any).timestamp || (lastMessage as any)[2] || 0n;
+    }
+    return undefined;
+  }, [lastMessage]);
+
   return {
     lastMessage,
+    timestamp,
     count,
     isLoading: isCountLoading || isMessageLoading,
     refetch: () => {

@@ -19,7 +19,8 @@ import { store } from '@/lib/store';
 
 interface ChatModalsProps {
   // Key Generation
-  handleKeyGenerated: (key: KeyPair) => void;
+  onGenerateKey: () => Promise<void>;
+  isGeneratingKey: boolean;
 
   // Decryption
   handleKeySelect: (key: KeyPair) => void;
@@ -37,7 +38,8 @@ interface ChatModalsProps {
 }
 
 export const ChatModals: React.FC<ChatModalsProps> = ({
-  handleKeyGenerated,
+  onGenerateKey,
+  isGeneratingKey,
   handleKeySelect,
   handleBatchDecrypt,
   handleSendModeSelect,
@@ -77,7 +79,8 @@ export const ChatModals: React.FC<ChatModalsProps> = ({
       <KeyGenerationModal
         isOpen={showGenerationModal}
         onClose={() => dispatch(setShowGenerationModal(false))}
-        onKeyGenerated={handleKeyGenerated}
+        onGenerate={onGenerateKey}
+        isGenerating={isGeneratingKey}
       />
 
       <DecryptionModal
