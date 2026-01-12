@@ -21,7 +21,6 @@ import { useCommunityMembers } from '@/hooks/useCommunityMembers';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { IPFSImg } from '@/components/ui/ipfs-img';
 import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
-import { MessagePermissionChecker } from '@/components/chat/MessagePermissionChecker';
 import { useUpdateGroupSettings } from '@/hooks/useUpdateGroupSettings';
 import type { Address } from 'viem';
 
@@ -745,14 +744,6 @@ export default function GroupChatInfoPanel({
               </div>
             )}
           </div>
-
-          {/* 发送权限检查 */}
-          {isRedPacket && (
-            <MessagePermissionChecker
-              groupAddress={conversationId}
-              className="bg-white p-4"
-            />
-          )}
 
           {/* 群信息 */}
           <div className="bg-white px-4 space-y-3">

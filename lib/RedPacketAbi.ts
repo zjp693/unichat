@@ -1,26 +1,32 @@
-import { useReadContract, useWriteContract } from 'wagmi';
+import { useReadContract, useWriteContract, useChainId } from 'wagmi';
 import { Address, Abi, getAddress } from 'viem';
 import RedPacketAbiJson from '@/contract/abi/RedPacket.json';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 // JSON 文件结构: { "abi": [...] }
 export const RedPacketAbi = (RedPacketAbiJson as { abi: Abi }).abi;
 
-// RedPacket 合约地址 (从环境变量读取)
-const contractAddressFromEnv = process.env.NEXT_PUBLIC_RED_PACKET_ADDRESS;
-
-if (
-  !contractAddressFromEnv ||
-  contractAddressFromEnv === 'NEXT_PUBLIC_RED_PACKET_ADDRESS'
-) {
-  console.error('❌ 错误: NEXT_PUBLIC_RED_PACKET_ADDRESS 环境变量未正确设置！');
-  console.error(
-    '请在 .env.local 文件中添加: NEXT_PUBLIC_RED_PACKET_ADDRESS=0x你的合约地址'
-  );
+/**
+ * Hook: 获取当前链的 RedPacket 合约地址
+ */
+export function useRedPacketAddress(): Address | null {
+  const chainId = useChainId();
+  return getContractAddress(chainId, 'redPacket');
 }
 
-export const RED_PACKET_CONTRACT_ADDRESS: Address = contractAddressFromEnv
-  ? getAddress(contractAddressFromEnv)
-  : (contractAddressFromEnv as Address);
+/**
+ * 获取指定链的 RedPacket 合约地址
+ * @param chainId 链 ID
+ */
+export function getRedPacketAddress(chainId: number): Address | null {
+  return getContractAddress(chainId, 'redPacket');
+}
+
+// ⚠️ 向后兼容：保留旧的全局常量（默认读取 Arbitrum 地址）
+// 尚未迁移的文件仍依赖此常量
+export const RED_PACKET_CONTRACT_ADDRESS: Address =
+  (process.env.NEXT_PUBLIC_RED_PACKET_ADDRESS_ARB as Address) ||
+  ('0x0000000000000000000000000000000000000000' as Address);
 
 // 枚举类型
 export enum PacketType {
@@ -105,36 +111,41 @@ export function useClaimGroupPacket() {
  * 缓存策略：1分钟内不重新请求，缓存保留10分钟
  */
 export function useGetPacket(packetId: bigint | undefined) {
+  const chainId = useChainId();
+  const address = getContractAddress(chainId, 'redPacket');
+
   return useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: address || undefined,
     abi: RedPacketAbi,
     functionName: 'getPacket',
     args: packetId !== undefined ? [packetId] : undefined,
     query: {
-      enabled: packetId !== undefined,
-      staleTime: 1 * 60 * 1000, // 1分钟内认为数据是新鲜的
-      gcTime: 10 * 60 * 1000 // 缓存保留10分钟
+      enabled: packetId !== undefined && !!address,
+      staleTime: 1 * 60 * 1000,
+      gcTime: 10 * 60 * 1000
     }
   });
 }
 
 /**
  * 钩子: 检查用户是否已领取红包
- * 缓存策略：1分钟内不重新请求，缓存保留10分钟
  */
 export function useHasClaimed(
   packetId: bigint | undefined,
   user: Address | undefined
 ) {
+  const chainId = useChainId();
+  const address = getContractAddress(chainId, 'redPacket');
+
   return useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: address || undefined,
     abi: RedPacketAbi,
     functionName: 'hasClaimed',
     args: packetId !== undefined && user ? [packetId, user] : undefined,
     query: {
-      enabled: packetId !== undefined && !!user,
-      staleTime: 1 * 60 * 1000, // 2分钟内认为数据是新鲜的
-      gcTime: 10 * 60 * 1000 // 缓存保留10分钟
+      enabled: packetId !== undefined && !!user && !!address,
+      staleTime: 1 * 60 * 1000,
+      gcTime: 10 * 60 * 1000
     }
   });
 }
@@ -147,46 +158,55 @@ export function useGetClaimRecordsPaged(
   offset: bigint,
   limit: bigint
 ) {
+  const chainId = useChainId();
+  const address = getContractAddress(chainId, 'redPacket');
+
   return useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: address || undefined,
     abi: RedPacketAbi,
     functionName: 'getClaimRecordsPaged',
     args: packetId !== undefined ? [packetId, offset, limit] : undefined,
     query: {
-      enabled: packetId !== undefined
+      enabled: packetId !== undefined && !!address
     }
   });
 }
 
 /**
  * 钩子: 获取推荐代币地址列表（分页）
- * @param offset 起始位置
- * @param limit 获取数量
  */
 export function useGetRecommendedTokensPaged(
   offset: bigint = BigInt(0),
-  limit: bigint = BigInt(20) // 默认获取 20 个，应该足够了
+  limit: bigint = BigInt(20)
 ) {
+  const chainId = useChainId();
+  const address = getContractAddress(chainId, 'redPacket');
+
   return useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: address || undefined,
     abi: RedPacketAbi,
     functionName: 'getRecommendedTokensPaged',
-    args: [offset, limit]
+    args: [offset, limit],
+    query: {
+      enabled: !!address
+    }
   });
 }
 
 /**
  * 钩子: 获取单个代币的推荐信息
- * @param tokenAddress 代币地址
  */
 export function useGetRecommendedTokenInfo(tokenAddress: Address | undefined) {
+  const chainId = useChainId();
+  const address = getContractAddress(chainId, 'redPacket');
+
   return useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: address || undefined,
     abi: RedPacketAbi,
     functionName: 'recommendedTokens',
     args: tokenAddress ? [tokenAddress] : undefined,
     query: {
-      enabled: !!tokenAddress
+      enabled: !!tokenAddress && !!address
     }
   });
 }
@@ -195,16 +215,21 @@ export function useGetRecommendedTokenInfo(tokenAddress: Address | undefined) {
  * 钩子: 获取默认过期时长
  */
 export function useGetDefaultExpiryDuration() {
+  const chainId = useChainId();
+  const address = getContractAddress(chainId, 'redPacket');
+
   return useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: address || undefined,
     abi: RedPacketAbi,
-    functionName: 'defaultExpiryDuration'
+    functionName: 'defaultExpiryDuration',
+    query: {
+      enabled: !!address
+    }
   });
 }
 
 /**
  * 钩子: 退款过期红包
- * 任何人都可以调用，资金将退回给红包创建者
  */
 export function useRefundExpiredPacket() {
   return useWriteContract();

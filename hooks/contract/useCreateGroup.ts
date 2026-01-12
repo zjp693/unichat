@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import {
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useChainId
+} from 'wagmi';
 import { parseUnits, decodeEventLog } from 'viem';
 import GroupFactoryArtifact from '@/contract/abi/GroupFactory.json';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 /**
  * 创建群组参数
@@ -41,6 +46,7 @@ export type CreateGroupStatus =
  */
 export function useCreateGroup() {
   const [status, setStatus] = useState<CreateGroupStatus>({ state: 'idle' });
+  const chainId = useChainId();
 
   const {
     writeContract,
@@ -64,20 +70,17 @@ export function useCreateGroup() {
     try {
       setStatus({ state: 'preparing' });
 
-      // 从环境变量获取 GroupFactory 地址
-      const factoryAddress =
-        process.env.NEXT_PUBLIC_GROUP_FACTORY_CONTRACT_ADDRESS;
+      // 从多链配置获取 GroupFactory 地址
+      const factoryAddress = getContractAddress(chainId, 'groupFactory');
       if (!factoryAddress) {
-        throw new Error(
-          '缺少环境变量: NEXT_PUBLIC_GROUP_FACTORY_CONTRACT_ADDRESS'
-        );
+        throw new Error(`当前链 ${chainId} 不支持或缺少 GroupFactory 合约地址`);
       }
 
       setStatus({ state: 'waiting_signature' });
 
       // 调用合约
       writeContract({
-        address: factoryAddress as `0x${string}`,
+        address: factoryAddress,
         abi: GroupFactoryArtifact.abi,
         functionName: 'createGroup',
         args: [

@@ -7,7 +7,7 @@ import { useReadContract, useReadContracts, useAccount } from 'wagmi';
 import { erc20Abi, isAddress, formatUnits } from 'viem';
 import {
   useGetRecommendedTokensPaged,
-  RED_PACKET_CONTRACT_ADDRESS,
+  useRedPacketAddress,
   RedPacketAbi
 } from '@/lib/RedPacketAbi';
 import { buildIPFSUrl } from '@/lib/ipfs-gateways';
@@ -51,6 +51,7 @@ function getValidIconUrl(iconCid: string): string | null {
  */
 export function useRecommendedTokens(customAddresses: string[] = []) {
   const { address: userAddress } = useAccount();
+  const redPacketAddress = useRedPacketAddress();
 
   // 使用新的分页 API 获取推荐代币地址列表
   const { data: recommendedAddresses, isLoading: isLoadingAddresses } =
@@ -82,13 +83,14 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
 
   // 批量查询每个代币的 recommendedTokens 信息以获取 iconCid
   const tokenInfoContracts = useMemo(() => {
+    if (!redPacketAddress) return [];
     return allTokenAddresses.map((addr) => ({
-      address: RED_PACKET_CONTRACT_ADDRESS,
+      address: redPacketAddress,
       abi: RedPacketAbi,
       functionName: 'recommendedTokens',
       args: [addr as `0x${string}`]
     }));
-  }, [allTokenAddresses]);
+  }, [allTokenAddresses, redPacketAddress]);
 
   const { data: tokenInfosData, isLoading: isLoadingTokenInfos } =
     useReadContracts({

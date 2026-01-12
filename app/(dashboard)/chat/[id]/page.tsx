@@ -16,7 +16,7 @@ import { ChatNavigationBar } from '@/components/chat/chat-navigation-bar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKeyManagement } from '@/hooks/useKeyManagement';
 import { chatEncryption } from '@/lib/keyManagement';
-import { usePeerAvatar } from '@/hooks/usePeerProfile';
+import { usePeerAvatar, usePeerProfile } from '@/hooks/usePeerProfile';
 import { useSendMessage } from '@/lib/DirectMessageAbi';
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage';
 import { useChatParams } from '@/hooks/chat/data/useChatParams';
@@ -124,18 +124,20 @@ function ChatContent() {
   const publicClient = usePublicClient();
 
   // --- 头像获取 ---
-  const {
-    avatarCid: peerAvatarCid,
-    avatarUrl: peerAvatarUrl,
-    name: peerName,
-    isLoading: isPeerAvatarLoading
-  } = usePeerAvatar(chatType === 'private' ? recipientAddress : undefined);
+  // --- 头像获取 ---
+  const { profile: peerProfile, isLoading: isPeerAvatarLoading } =
+    usePeerProfile(chatType === 'private' ? recipientAddress : undefined);
 
-  const {
-    avatarCid: myAvatarCid,
-    avatarUrl: myAvatarUrl,
-    isLoading: isMyAvatarLoading
-  } = usePeerAvatar(currentAddress as Address | undefined);
+  const peerAvatarCid = peerProfile?.avatarCid;
+  const peerName = peerProfile?.name;
+  const peerAvatarUrl = peerProfile?.avatarCid; // Use CID as URL for now, components should handle it using IPFSImg or similar logic
+
+  const { profile: myProfile, isLoading: isMyAvatarLoading } = usePeerProfile(
+    currentAddress as Address | undefined
+  );
+
+  const myAvatarCid = myProfile?.avatarCid;
+  const myAvatarUrl = myProfile?.avatarCid;
 
   // --- 群成员数量（实时从链上获取）---
   const { memberCount: realTimeMemberCount, isLoading: isMemberCountLoading } =
@@ -513,13 +515,15 @@ function ChatContent() {
     currentAddress: currentAddress as Address,
     recipientAddress,
     groupAddress,
+    groupType,
     setMessages,
     scrollToBottom,
     publicClient,
     writeContract: writeContractAsync,
     sendGroupMessage,
     setPendingGroupMessage: (msg) => dispatch(setPendingGroupMessage(msg)),
-    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open))
+    setShowSendModeModal: (open) => dispatch(setShowSendModeModal(open)),
+    handleSendModeSelect // 直接传递，复用兜底逻辑
   });
 
   // --- Effects ---
@@ -606,9 +610,9 @@ function ChatContent() {
               loadMore={loadMore}
               hasMore={hasMore}
               isPeerAvatarLoading={isPeerAvatarLoading}
-              peerAvatarCid={peerAvatarCid}
+              peerAvatarCid={peerAvatarCid || null}
               isMyAvatarLoading={isMyAvatarLoading}
-              myAvatarCid={myAvatarCid}
+              myAvatarCid={myAvatarCid || null}
             />
           </ScrollArea>
         </div>
@@ -747,18 +751,24 @@ function ChatContent() {
             setDetailsRedPacket(packet);
           }
         }}
+        senderAddress={
+          selectedRedPacket?.sender === 'user'
+            ? currentAddress
+            : selectedRedPacket?.senderAddress || recipientAddress
+        }
         senderName={
           selectedRedPacket?.sender === 'user'
             ? '我'
-            : peerName ||
-              formatAddress(
-                selectedRedPacket?.senderAddress || selectedRedPacket?.sender
-              )
+            : chatType === 'private'
+              ? peerName || formatAddress(recipientAddress)
+              : formatAddress(selectedRedPacket?.senderAddress)
         }
         senderAvatar={
           selectedRedPacket?.sender === 'user'
             ? myAvatarUrl || undefined
-            : peerAvatarUrl || undefined
+            : chatType === 'private'
+              ? peerAvatarUrl || undefined
+              : undefined
         }
         status={
           selectedRedPacket?.content.includes('"claimed":true') ||
@@ -806,15 +816,24 @@ function ChatContent() {
             <RedPacketDetailsModal
               isOpen={!!detailsRedPacket}
               onClose={() => setDetailsRedPacket(null)}
+              senderAddress={
+                detailsRedPacket.sender === 'user'
+                  ? currentAddress
+                  : detailsRedPacket.senderAddress || recipientAddress
+              }
               senderName={
                 detailsRedPacket.sender === 'user'
                   ? '我'
-                  : peerName || formatAddress(detailsRedPacket.sender)
+                  : chatType === 'private'
+                    ? peerName || formatAddress(recipientAddress)
+                    : formatAddress(detailsRedPacket.senderAddress)
               }
               senderAvatar={
                 detailsRedPacket.sender === 'user'
                   ? myAvatarUrl || undefined
-                  : peerAvatarUrl || undefined
+                  : chatType === 'private'
+                    ? peerAvatarUrl || undefined
+                    : undefined
               }
               packetId={config.packetId}
               message={config.message || '恭喜发财'}

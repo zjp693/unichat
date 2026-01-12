@@ -8,7 +8,10 @@ import { X, Copy, Key, ChevronDown } from 'lucide-react';
 import { useKeyManagement } from '@/hooks/useKeyManagement';
 import { type KeyPair, chatEncryption } from '@/lib/keyManagement';
 import { cn } from '@/lib/utils';
-import { useRegisterPublicKey } from '@/lib/DirectMessageAbi';
+import {
+  useRegisterPublicKey,
+  useDirectMessageAddress
+} from '@/lib/DirectMessageAbi';
 import { useAccount } from 'wagmi';
 
 interface KeyManagementModalProps {
@@ -28,6 +31,7 @@ export const KeyManagementModal = ({
     useKeyManagement();
   const { address } = useAccount();
   const { writeContractAsync } = useRegisterPublicKey();
+  const directMessageAddress = useDirectMessageAddress();
 
   // 根据是否有密钥来决定初始步骤
   const initialStep = keys.length > 0 ? 'select' : 'generate';
@@ -140,8 +144,7 @@ export const KeyManagementModal = ({
 
       // 1. 先把公钥注册到链上
       const hash = await writeContractAsync({
-        address: process.env
-          .NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS as `0x${string}`,
+        address: directMessageAddress!, // Assuming user won't click register if address is not available (checking !address above, but checking directMessageAddress is better)
         abi: (await import('@/lib/DirectMessageAbi')).DirectMessageAbi,
         functionName: 'registerPublicKey',
         args: [generatedKey.publicKey]

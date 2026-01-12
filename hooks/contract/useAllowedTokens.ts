@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { readContract } from 'wagmi/actions';
 import { erc20Abi } from 'viem';
+import { useChainId } from 'wagmi';
 import UniChatRegistryArtifact from '@/contract/abi/UniChatRegistry.json';
 import { config } from 'config/appkit';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 /**
  * ERC20 代币完整信息（用于合约交互）
@@ -35,6 +37,7 @@ export function useAllowedTokens() {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const chainId = useChainId();
 
   useEffect(() => {
     let isMounted = true;
@@ -44,13 +47,10 @@ export function useAllowedTokens() {
         setIsLoading(true);
         setError(null);
 
-        // 从环境变量获取 Registry 合约地址
-        const registryAddress =
-          process.env.NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS;
+        // 从多链配置获取 Registry 合约地址
+        const registryAddress = getContractAddress(chainId, 'registry');
         if (!registryAddress) {
-          throw new Error(
-            '缺少环境变量: NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS'
-          );
+          throw new Error(`当前链 ${chainId} 不支持或缺少 Registry 合约地址`);
         }
 
         // 1. 获取已上币代币总数
@@ -161,7 +161,7 @@ export function useAllowedTokens() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [chainId]);
 
   return { tokens, isLoading, error };
 }

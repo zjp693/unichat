@@ -6,6 +6,7 @@ import { type Address, type Abi } from 'viem';
 import type { ChatInputAreaRef } from '@/components/chat/ChatInputArea';
 import communityABI from '@/contract/abi/community.json';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import { toast } from '@/hooks/use-toast';
 
 interface UseEncryptionActionsProps {
   // State setters
@@ -178,11 +179,73 @@ export function useEncryptionActions({
   );
 
   // 处理群聊发送模式选择
+  // messageOverride: 可选参数，直接传入消息内容（用于跳过弹框时直接调用）
   const handleSendModeSelect = useCallback(
-    async (mode: 'plaintext' | 'encrypted') => {
-      if (!pendingGroupMessage) return;
+    async (mode: 'plaintext' | 'encrypted', messageOverride?: string) => {
+      // 优先使用传入的消息内容，否则使用 Redux 中的 pendingGroupMessage
+      const messageContent = messageOverride || pendingGroupMessage;
+      if (!messageContent) return;
 
-      const messageContent = pendingGroupMessage;
+      // ========== 红包群：发送前检查消息限制 ==========
+      if (
+        groupType === 'redpacket' &&
+        publicClient &&
+        groupAddress &&
+        currentAddress
+      ) {
+        try {
+          console.log('🔍 [预检查] 检查消息发送权限...');
+
+          // 并行获取限制配置和当前计数
+          const [limitType, limitCount, msgCount] = await Promise.all([
+            publicClient.readContract({
+              address: groupAddress as Address,
+              abi: RedPacketGroupABI.abi as Abi,
+              functionName: 'mainMessageLimitType'
+            }),
+            publicClient.readContract({
+              address: groupAddress as Address,
+              abi: RedPacketGroupABI.abi as Abi,
+              functionName: 'mainMessageLimitCount'
+            }),
+            publicClient.readContract({
+              address: groupAddress as Address,
+              abi: RedPacketGroupABI.abi as Abi,
+              functionName: 'mainMessageCounts',
+              args: [currentAddress]
+            })
+          ]);
+
+          const currentCount = Number(msgCount[0]);
+          const maxCount = Number(limitCount);
+          const limitTypeNum = Number(limitType);
+
+          console.log('🔍 [预检查] 消息限制:', {
+            limitType: limitTypeNum,
+            limitCount: maxCount,
+            currentCount
+          });
+
+          // 检查是否超过限制 (limitType: 0=无限制, 1=每日, 2=每周)
+          if (limitTypeNum !== 0 && currentCount >= maxCount) {
+            const periodText = limitTypeNum === 1 ? '每日' : '每周';
+            toast({
+              title: '无法发送消息',
+              description: `已达到消息发送限制（${periodText} ${maxCount} 条）`,
+              variant: 'destructive'
+            });
+            console.log('❌ [预检查] 已达到消息发送限制');
+            setPendingGroupMessage('');
+            return;
+          }
+
+          console.log('✅ [预检查] 权限检查通过');
+        } catch (error) {
+          console.warn('⚠️ [预检查] 检查失败，继续尝试发送:', error);
+          // 检查失败不阻止发送，让合约来决定
+        }
+      }
+
       const tempId = `temp-${Date.now()}`;
       const isEncrypted = mode === 'encrypted';
 
@@ -373,8 +436,15 @@ export function useEncryptionActions({
         } catch (err) {
           console.warn('⚠️ [兜底] 手动拉取失败 (非致命):', err);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ [发送群聊消息] 失败:', error);
+
+        // 显示错误提示
+        toast({
+          title: '发送失败',
+          description: error?.message || '消息发送失败，请重试',
+          variant: 'destructive'
+        });
 
         // 4. 发送失败，标记为失败状态
         setMessages((prev) =>

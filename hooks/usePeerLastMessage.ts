@@ -1,95 +1,111 @@
-import { useEffect, useState } from 'react';
-import { useReadContract } from 'wagmi';
-import { Address } from 'viem';
-import {
-  DIRECT_MESSAGE_CONTRACT_ADDRESS,
-  DirectMessageAbi,
-  DMMessage
-} from '@/lib/DirectMessageAbi';
+import { Address, formatUnits } from 'viem';
+import { useGetMessageCount, useGetMessages } from '@/lib/DirectMessageAbi';
+import { useEffect, useMemo } from 'react';
+import { useBlockNumber } from 'wagmi';
 
-/**
- * 获取指定对端的最后一条消息（包含时间戳）
- */
 export function usePeerLastMessage(
-  currentUser: Address | undefined,
-  peerAddress: Address
+  currentAddress: Address | undefined,
+  peerAddress: Address,
+  shouldFetch: boolean = true
 ) {
-  // 先获取消息数量
-  const { data: messageCount } = useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
-    abi: DirectMessageAbi,
-    functionName: 'messageCount',
-    args: currentUser && peerAddress ? [currentUser, peerAddress] : undefined,
+  // 获取最新区块号用于触发因为 Wagmi 缓存可能导致的不更新
+  const { data: blockNumber } = useBlockNumber({ watch: true });
+
+  // 1. 获取消息总数
+  const {
+    data: countRaw,
+    refetch: refetchCount,
+    isLoading: isCountLoading
+  } = useGetMessageCount(currentAddress || '0x', peerAddress, {
     query: {
-      enabled: !!currentUser && !!peerAddress
+      enabled: !!currentAddress && !!peerAddress && shouldFetch
     }
   });
 
-  const count = messageCount as bigint | undefined;
+  const count = countRaw as bigint;
 
-  // 如果有消息，获取最后一条
-  const { data: messages } = useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
-    abi: DirectMessageAbi,
-    functionName: 'getMessages',
-    args:
-      currentUser && peerAddress && count && count > BigInt(0)
-        ? [currentUser, peerAddress, count - BigInt(1), BigInt(1)]
-        : undefined,
-    query: {
-      enabled: !!currentUser && !!peerAddress && !!count && count > BigInt(0)
+  // 2. 如果有消息，获取最后一条
+  const lastIndex = count ? count - 1n : 0n;
+  const shouldFetchMessage =
+    !!currentAddress &&
+    !!peerAddress &&
+    shouldFetch &&
+    count !== undefined &&
+    count > 0n;
+
+  const {
+    data: messagesRaw,
+    refetch: refetchMessages,
+    isLoading: isMessageLoading
+  } = useGetMessages(
+    currentAddress || '0x',
+    peerAddress,
+    lastIndex,
+    1n // 只要最后一条
+  );
+
+  const messages = messagesRaw as any[]; // 暂时用 any[] 规避复杂类型
+
+  // 监听区块变化刷新
+  useEffect(() => {
+    if (shouldFetch) {
+      refetchCount();
+      if (shouldFetchMessage) {
+        refetchMessages();
+      }
     }
-  });
+  }, [
+    blockNumber,
+    shouldFetch,
+    shouldFetchMessage,
+    refetchCount,
+    refetchMessages
+  ]);
 
-  // 提取最后一条消息
-  const lastMessage =
-    messages && Array.isArray(messages) && messages.length > 0
-      ? (messages[0] as unknown as DMMessage)
-      : null;
+  const lastMessage = useMemo(() => {
+    if (messages && messages.length > 0) {
+      return messages[0];
+    }
+    return null;
+  }, [messages]);
 
   return {
     lastMessage,
-    timestamp: lastMessage?.timestamp,
-    isLoading: messageCount === undefined
+    count,
+    isLoading: isCountLoading || isMessageLoading,
+    refetch: () => {
+      refetchCount();
+      refetchMessages();
+    }
   };
 }
 
-/**
- * 格式化时间戳为相对时间或具体时间
- */
-export function formatMessageTime(timestamp: bigint | undefined): string {
-  if (!timestamp) return '-';
+// 格式化时间的辅助函数
+export function formatMessageTime(
+  timestamp: bigint | number | undefined
+): string {
+  if (!timestamp) return '';
 
-  const messageTime = new Date(Number(timestamp) * 1000);
+  const date = new Date(Number(timestamp) * 1000); // 假设是秒
   const now = new Date();
-  const diffMs = now.getTime() - messageTime.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
 
-  // 今天的消息显示时分
-  if (diffDays === 0) {
-    return messageTime.toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+  // 今天的消息显示 HH:mm
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  // 昨天
-  if (diffDays === 1) {
+  // 昨天的消息显示 "昨天"
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
     return '昨天';
   }
 
-  // 一周内显示星期
-  if (diffDays < 7) {
-    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-    return weekdays[messageTime.getDay()];
+  // 今年的消息显示 MM-DD
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
   }
 
-  // 更早的显示日期
-  return messageTime.toLocaleDateString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit'
-  });
+  // 以前的消息显示 YYYY-MM-DD
+  return date.toISOString().split('T')[0];
 }

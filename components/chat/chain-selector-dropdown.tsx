@@ -1,38 +1,54 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { useAppKitNetwork } from '@reown/appkit/react';
+import { useChainId } from 'wagmi';
+import { networks } from '@/lib/web3/networks';
 
-// 链列表（使用各链专属图标）
-const chains = [
-  { id: 1, name: 'Ethereum', icon: '/chain/Ethereum.png' },
-  { id: 2, name: 'Unichain', icon: '/chain/Unichain.png' },
-  { id: 3, name: 'Polygon', icon: '/chain/Polygon.png' },
-  { id: 4, name: 'Arbitrum', icon: '/chain/Arbitrum.png' },
-  { id: 5, name: 'OP Mainnet', icon: '/chain/OP Mainnet.png' },
-  { id: 6, name: 'Base', icon: '/chain/Base.png' },
-  { id: 7, name: 'BNB Chain', icon: '/chain/BNB Chain.png' },
-  { id: 8, name: 'Blast', icon: '/chain/Blast.png' },
-  { id: 9, name: 'Avalanche', icon: '/chain/Avalanche.png' },
-  { id: 10, name: 'Celo', icon: '/chain/Celo.png' }
+// 支持的链列表（只有 Arbitrum 和 opBNB）
+const SUPPORTED_CHAINS = [
+  { id: 42161, name: 'Arbitrum', icon: '/chain/Arbitrum.png' },
+  { id: 204, name: 'opBNB', icon: '/chain/BNB Chain.png' }
 ];
 
 export function ChainSelectorDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedChain, setSelectedChain] = useState(chains[0]); // 默认选中 Ethereum
+  const { chainId: appKitChainId, switchNetwork } = useAppKitNetwork();
+  const wagmiChainId = useChainId();
 
-  const handleSelect = (chain: (typeof chains)[0]) => {
-    setSelectedChain(chain);
+  // 获取当前链 ID
+  const currentChainId =
+    wagmiChainId ||
+    (typeof appKitChainId === 'number' ? appKitChainId : undefined);
+
+  // 当前选中的链
+  const selectedChain = useMemo(() => {
+    return (
+      SUPPORTED_CHAINS.find((c) => c.id === currentChainId) ||
+      SUPPORTED_CHAINS[0]
+    );
+  }, [currentChainId]);
+
+  const handleSelect = (chain: (typeof SUPPORTED_CHAINS)[0]) => {
     setIsOpen(false);
-    // TODO: 后续实现真正的链切换逻辑
+
+    // 如果已经是当前链，不需要切换
+    if (chain.id === currentChainId) return;
+
+    // 找到对应的网络对象并切换
+    const network = networks.find((n) => n.id === chain.id);
+    if (network) {
+      switchNetwork(network);
+    }
   };
 
   return (
     <div className="relative">
       {/* Trigger Button - 只显示图标+箭头 */}
       <button
-        className="relative z-20 flex items-center gap-1.5 px-2 py-1.5 bg-white hover:bg-gray-50 rounded-lg border border-gray-200 transition-colors cursor-pointer"
+        className="relative z-20 flex items-center gap-1.5 px-2 py-1.5 bg-transparent border border-gray-200 rounded-lg cursor-pointer"
         onClick={() => setIsOpen(!isOpen)}
         type="button"
       >
@@ -58,8 +74,8 @@ export function ChainSelectorDropdown() {
 
           {/* Dropdown Content */}
           <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20 overflow-hidden">
-            <div className="py-1 max-h-[400px] overflow-y-auto">
-              {chains.map((chain) => (
+            <div className="py-1">
+              {SUPPORTED_CHAINS.map((chain) => (
                 <button
                   key={chain.id}
                   className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors"

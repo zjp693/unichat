@@ -15,20 +15,25 @@ import { RedPacketConfig } from './types';
 import { useReadContract, useAccount } from 'wagmi';
 import {
   RedPacketAbi,
-  RED_PACKET_CONTRACT_ADDRESS,
+  useRedPacketAddress, // 新增
   PacketStatus
 } from '@/lib/RedPacketAbi';
+import { usePeerProfile } from '@/hooks/usePeerProfile';
+import { IPFSImg } from '@/components/ui/ipfs-img';
+import type { Address } from 'viem';
 
 interface OpenRedPacketModalProps {
   isOpen: boolean;
+  // ... (其余 props 保持不变)
   onClose: () => void;
   onOpen: (startAnimation: () => void) => Promise<void>;
   onDetails?: () => void;
   senderName: string;
   senderAvatar?: string;
+  senderAddress?: string; // 新增
   message: string;
-  packetId?: string; // 新增 packetId
-  status?: 'active' | 'claimed' | 'expired' | 'empty'; // status 变为可选，内部计算优先
+  packetId?: string;
+  status?: 'active' | 'claimed' | 'expired' | 'empty';
 }
 
 export function OpenRedPacketModalNew({
@@ -36,35 +41,51 @@ export function OpenRedPacketModalNew({
   onClose,
   onOpen,
   onDetails,
-  senderName,
-  senderAvatar,
+  senderName: initialSenderName,
+  senderAvatar: initialSenderAvatar,
+  senderAddress,
   message,
   packetId,
   status: initialStatus = 'active'
 }: OpenRedPacketModalProps) {
   const [isOpening, setIsOpening] = React.useState(false);
-  const [isProcessing, setIsProcessing] = React.useState(false); // 防止重复点击
+  const [isProcessing, setIsProcessing] = React.useState(false);
   const { address } = useAccount();
+
+  // 获取发送者 Profile
+  const { profile } = usePeerProfile(senderAddress as Address);
+
+  // 计算最终显示的 Name
+  const isMe =
+    senderAddress &&
+    address &&
+    senderAddress.toLowerCase() === address.toLowerCase();
+  const displayName = isMe ? '我' : profile?.name || initialSenderName;
+  // 计算最终显示的 Avatar (优先用 CID，其次用传入的 URL)
+  const displayAvatarCid = profile?.avatarCid;
+
+  // 获取当前链的合约地址
+  const redPacketAddress = useRedPacketAddress();
 
   // 获取红包信息
   const { data: packet } = useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: redPacketAddress || undefined,
     abi: RedPacketAbi,
     functionName: 'getPacket',
     args: packetId ? [BigInt(packetId)] : undefined,
     query: {
-      enabled: !!packetId && isOpen
+      enabled: !!packetId && isOpen && !!redPacketAddress
     }
   });
 
   // 检查是否已领取
   const { data: hasClaimed } = useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: redPacketAddress || undefined,
     abi: RedPacketAbi,
     functionName: 'hasClaimed',
     args: packetId && address ? [BigInt(packetId), address] : undefined,
     query: {
-      enabled: !!packetId && !!address && isOpen
+      enabled: !!packetId && !!address && isOpen && !!redPacketAddress
     }
   });
 
@@ -113,7 +134,7 @@ export function OpenRedPacketModalNew({
     }
   };
 
-  const safeSenderAvatar = getSafeAvatarUrl(senderAvatar);
+  const safeFallbackAvatar = getSafeAvatarUrl(initialSenderAvatar);
 
   // 处理"开"按钮点击
   // 流程：点击按钮 → 弹出钱包支付 → 用户确认 → 交易发送成功 → 播放动画
@@ -201,22 +222,15 @@ export function OpenRedPacketModalNew({
               <div className="flex flex-col items-center gap-3">
                 <div className="flex items-center gap-2 text-[#fcedae]">
                   <div className="w-6 h-6 rounded-sm overflow-hidden relative">
-                    {safeSenderAvatar ? (
-                      <Image
-                        src={safeSenderAvatar}
-                        alt={senderName}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-300 flex items-center justify-center text-xs text-gray-500">
-                        {senderName?.[0]}
-                      </div>
-                    )}
+                    <IPFSImg
+                      src={displayAvatarCid}
+                      fallbackSrc={safeFallbackAvatar || undefined}
+                      alt={displayName}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <span className="text-[15px] font-medium text-[#fcedae]">
-                    {senderName}的红包
+                    {displayName}的红包
                   </span>
                 </div>
 

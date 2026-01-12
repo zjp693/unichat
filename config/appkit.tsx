@@ -1,12 +1,9 @@
 import { cookieStorage, createStorage } from 'wagmi';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import {
-  // mainnet,
-  arbitrum
-  // bsc
-} from '@reown/appkit/networks';
+import { arbitrum } from '@reown/appkit/networks';
 import type { Chain } from 'viem';
 import { http, fallback } from 'viem';
+import { opBNB, arbitrumRpcUrls, opBNBRpcUrls } from '@/lib/web3/networks';
 
 // 从环境变量读取项目 ID
 export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
@@ -22,33 +19,40 @@ if (!projectId) {
   );
 }
 
-// 定义支持的网络，显式类型化为非空的链数组
-export const networks: [Chain, ...Chain[]] = [
-  // mainnet,
-  arbitrum
-  // bsc
-];
+/**
+ * 支持的网络列表
+ * Arbitrum (42161) + opBNB (204)
+ */
+export const networks: [Chain, ...Chain[]] = [arbitrum, opBNB as Chain];
 
-// 🔧 配置多个RPC节点（已验证可用，中国大陆可访问）
-const arbitrumRpcUrls = [
-  'https://arbitrum-one.publicnode.com', // PublicNode（已验证可用）
-  'https://arb1.arbitrum.io/rpc' // Arbitrum官方RPC（已验证可用）
-];
-
-// 创建 Wagmi 适配器实例
+/**
+ * 创建 Wagmi 适配器实例
+ * 配置多链 RPC 和 fallback 策略
+ */
 export const wagmiAdapter = new WagmiAdapter({
   storage: createStorage({ storage: cookieStorage }), // 使用 cookieStorage 支持 SSR
   ssr: true, // 启用 SSR 支持
   projectId,
-  networks, // 传递显式类型化的网络数组
+  networks, // 传递多链网络数组
   // 🔧 配置自定义传输层（使用多个RPC节点，自动故障转移）
   transports: {
+    // Arbitrum RPC fallback
     [arbitrum.id]: fallback(
       arbitrumRpcUrls.map((url) =>
         http(url, {
           batch: true, // 启用批量请求
           retryCount: 3, // 失败重试3次
           timeout: 10_000 // 10秒超时
+        })
+      )
+    ),
+    // opBNB RPC fallback
+    [opBNB.id]: fallback(
+      opBNBRpcUrls.map((url) =>
+        http(url, {
+          batch: true,
+          retryCount: 3,
+          timeout: 10_000
         })
       )
     )

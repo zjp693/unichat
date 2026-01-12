@@ -35,12 +35,13 @@ export interface RedPacketGroupMetadata {
  * 包含：群名、费用、等级、人数、当前用户是否已加入
  */
 export async function getRedPacketGroupList(
+  publicClient: any,
+  registryAddress: `0x${string}`,
   userAddress?: `0x${string}`
 ): Promise<RedPacketGroupMetadata[]> {
   // 1. 获取群组总数
   const count = (await publicClient.readContract({
-    address: process.env
-      .NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS as `0x${string}`,
+    address: registryAddress,
     abi: UniChatRegistryArtifact.abi as any,
     functionName: 'groupsLength',
     args: []
@@ -52,8 +53,7 @@ export async function getRedPacketGroupList(
   const calls: any[] = [];
   for (let i = BigInt(0); i < count; i++) {
     calls.push({
-      address: process.env
-        .NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS as `0x${string}`,
+      address: registryAddress,
       abi: UniChatRegistryArtifact.abi as any,
       functionName: 'allGroups',
       args: [i]
@@ -216,7 +216,7 @@ export async function getRedPacketGroupList(
     });
 
     // 解析最后消息时间戳
-    lastMsgResults.forEach((res, idx) => {
+    lastMsgResults.forEach((res: any, idx: number) => {
       if (res.status === 'success') {
         // mainMessages 返回: [from, content, timestamp, subgroupId]
         const data = res.result as [string, string, bigint, number];

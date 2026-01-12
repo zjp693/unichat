@@ -2,7 +2,8 @@ import { useCallback } from 'react';
 import {
   useWaitForTransactionReceipt,
   usePublicClient,
-  useWriteContract
+  useWriteContract,
+  useChainId
 } from 'wagmi';
 import {
   parseUnits,
@@ -18,12 +19,12 @@ import { Address } from '@/lib/utils';
 import {
   useClaimPersonalPacket,
   useClaimGroupPacket,
-  RED_PACKET_CONTRACT_ADDRESS,
-  RedPacketAbi
+  RedPacketAbi,
+  getRedPacketAddress
 } from '@/lib/RedPacketAbi';
 import {
-  DIRECT_MESSAGE_CONTRACT_ADDRESS,
-  DirectMessageAbi
+  DirectMessageAbi,
+  getDirectMessageAddress
 } from '@/lib/DirectMessageAbi';
 import communityABI from '@/contract/abi/community.json';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
@@ -61,10 +62,15 @@ export function useRedPacketActions({
   groupType = 'community'
 }: UseRedPacketActionsProps) {
   const publicClient = usePublicClient();
+  const chainId = useChainId();
   const { writeContractAsync: approve } = useWriteContract();
   const { writeContractAsync: writeContract } = useWriteContract();
   const { writeContractAsync: claimPersonalPacket } = useClaimPersonalPacket();
   const { writeContractAsync: claimGroupPacket } = useClaimGroupPacket();
+
+  // 获取当前链的合约地址
+  const redPacketAddress = getRedPacketAddress(chainId);
+  const directMessageAddress = getDirectMessageAddress(chainId);
 
   /**
    * 发送群聊红包
@@ -346,7 +352,7 @@ export function useRedPacketActions({
           // Token 授权
           await approveTokenIfNeeded(
             tokenAddress as Address,
-            RED_PACKET_CONTRACT_ADDRESS,
+            redPacketAddress as Address,
             amount,
             currentAddress,
             publicClient,
@@ -493,7 +499,7 @@ export function useRedPacketActions({
         // Token 授权
         await approveTokenIfNeeded(
           tokenAddress as Address,
-          RED_PACKET_CONTRACT_ADDRESS,
+          redPacketAddress as Address,
           amount,
           currentAddress,
           publicClient,
@@ -505,7 +511,7 @@ export function useRedPacketActions({
         // 调用 DirectMessage 合约的 sendRedPacketMessage
         // 参数: token, totalAmount, recipient, expiryDuration, memo
         const txHash = await writeContract({
-          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+          address: directMessageAddress as `0x${string}`,
           abi: DirectMessageAbi,
           functionName: 'sendRedPacketMessage',
           args: [
@@ -637,7 +643,7 @@ export function useRedPacketActions({
           targetGroupAddress,
           contractAddress: isRedPacketGroup
             ? targetGroupAddress
-            : RED_PACKET_CONTRACT_ADDRESS
+            : redPacketAddress
         });
 
         // 根据红包类型选择不同的合约和方法
@@ -662,7 +668,7 @@ export function useRedPacketActions({
           console.log('🎁 [官方群] 领取红包...');
 
           const packet = (await publicClient?.readContract({
-            address: RED_PACKET_CONTRACT_ADDRESS,
+            address: redPacketAddress as `0x${string}`,
             abi: RedPacketAbi,
             functionName: 'getPacket',
             args: [BigInt(packetId)]
@@ -688,18 +694,16 @@ export function useRedPacketActions({
               }
               throw new Error('无权领取此红包');
             }
-          }
 
-          if (packet.packetType === 0) {
             txHash = await claimPersonalPacket({
-              address: RED_PACKET_CONTRACT_ADDRESS,
+              address: redPacketAddress as `0x${string}`,
               abi: RedPacketAbi,
               functionName: 'claimPersonalPacket',
               args: [BigInt(packetId)]
             });
           } else {
             txHash = await claimGroupPacket({
-              address: RED_PACKET_CONTRACT_ADDRESS,
+              address: redPacketAddress as `0x${string}`,
               abi: RedPacketAbi,
               functionName: 'claimGroupPacket',
               args: [BigInt(packetId)]
@@ -861,7 +865,7 @@ export function useRedPacketActions({
       try {
         // 先获取红包信息，判断是否是发送者
         const packet = (await publicClient.readContract({
-          address: RED_PACKET_CONTRACT_ADDRESS,
+          address: redPacketAddress as `0x${string}`,
           abi: RedPacketAbi,
           functionName: 'getPacket',
           args: [BigInt(packetId)]
@@ -879,7 +883,7 @@ export function useRedPacketActions({
 
         // 检查是否已领取
         const claimed = (await publicClient.readContract({
-          address: RED_PACKET_CONTRACT_ADDRESS,
+          address: redPacketAddress as `0x${string}`,
           abi: RedPacketAbi,
           functionName: 'hasClaimed',
           args: [BigInt(packetId), currentAddress]

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { useWatchContractEvent, usePublicClient } from 'wagmi';
-import { RED_PACKET_CONTRACT_ADDRESS, RedPacketAbi } from '@/lib/RedPacketAbi';
+import { useWatchContractEvent, usePublicClient, useChainId } from 'wagmi';
+import { RedPacketAbi, getRedPacketAddress } from '@/lib/RedPacketAbi';
 import type { Message } from '@/lib/chat/types';
 import type { Address } from 'viem';
 import { decodeEventLog, erc20Abi, formatUnits } from 'viem';
@@ -27,6 +27,7 @@ async function createClaimMessage(
   claimer: Address,
   isGroup: boolean,
   recipient: Address,
+  contractAddress: Address, // 新增：必须传入合约地址
   currentAddress?: Address,
   amount?: bigint
 ): Promise<Message> {
@@ -37,7 +38,7 @@ async function createClaimMessage(
 
   try {
     const packet = (await publicClient?.readContract({
-      address: RED_PACKET_CONTRACT_ADDRESS,
+      address: contractAddress, // 使用传入的动态地址
       abi: RedPacketAbi,
       functionName: 'getPacket',
       args: [packetId]
@@ -115,11 +116,12 @@ async function createClaimMessage(
 async function isGroupPacketRelevant(
   publicClient: any,
   packetId: bigint,
-  groupAddress: Address
+  groupAddress: Address,
+  contractAddress: Address // 新增参数
 ): Promise<boolean> {
   try {
     const packet = (await publicClient.readContract({
-      address: RED_PACKET_CONTRACT_ADDRESS,
+      address: contractAddress,
       abi: RedPacketAbi,
       functionName: 'getPacket',
       args: [packetId]
@@ -140,11 +142,12 @@ async function isPersonalPacketRelevant(
   publicClient: any,
   packetId: bigint,
   currentAddress: Address,
-  recipientAddress: Address
+  recipientAddress: Address,
+  contractAddress: Address // 新增参数
 ): Promise<boolean> {
   try {
     const packet = (await publicClient.readContract({
-      address: RED_PACKET_CONTRACT_ADDRESS,
+      address: contractAddress,
       abi: RedPacketAbi,
       functionName: 'getPacket',
       args: [packetId]
@@ -208,7 +211,8 @@ async function handleGroupClaimEvent(
   groupAddress: Address,
   currentAddress: Address,
   publicClient: any,
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
+  contractAddress: Address // 新增参数
 ): Promise<void> {
   try {
     const { id, claimer, amount } = log.args;
@@ -219,7 +223,8 @@ async function handleGroupClaimEvent(
     const isRelevant = await isGroupPacketRelevant(
       publicClient,
       id,
-      groupAddress
+      groupAddress,
+      contractAddress
     );
     if (!isRelevant) return;
 
@@ -230,6 +235,7 @@ async function handleGroupClaimEvent(
       claimer,
       true,
       groupAddress,
+      contractAddress, // 传入合约地址
       currentAddress,
       amount
     );
@@ -262,7 +268,8 @@ async function handlePersonalClaimEvent(
   recipientAddress: Address,
   currentAddress: Address,
   publicClient: any,
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
+  contractAddress: Address // 新增参数
 ): Promise<void> {
   try {
     const { id, claimer, amount } = log.args;
@@ -272,7 +279,8 @@ async function handlePersonalClaimEvent(
       publicClient,
       id,
       currentAddress,
-      recipientAddress
+      recipientAddress,
+      contractAddress
     );
     if (!isRelevant) return;
 
@@ -283,6 +291,7 @@ async function handlePersonalClaimEvent(
       claimer,
       false,
       recipientAddress,
+      contractAddress, // 传入合约地址
       currentAddress,
       amount
     );
@@ -317,7 +326,8 @@ async function processHistoricalEvents(
   recipientAddress: Address | undefined,
   currentAddress: Address,
   publicClient: any,
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
+  contractAddress: Address // 新增参数
 ): Promise<void> {
   const claimMessages = await Promise.all(
     logs.map(async (log) => {
@@ -337,7 +347,8 @@ async function processHistoricalEvents(
           const isRelevant = await isGroupPacketRelevant(
             publicClient,
             id,
-            groupAddress
+            groupAddress,
+            contractAddress
           );
 
           if (isRelevant) {
@@ -347,6 +358,7 @@ async function processHistoricalEvents(
               claimer,
               true,
               groupAddress,
+              contractAddress,
               currentAddress,
               amount
             );
@@ -363,7 +375,8 @@ async function processHistoricalEvents(
             publicClient,
             id,
             currentAddress,
-            recipientAddress
+            recipientAddress,
+            contractAddress
           );
 
           if (isRelevant) {
@@ -373,6 +386,7 @@ async function processHistoricalEvents(
               claimer,
               false,
               recipientAddress,
+              contractAddress,
               currentAddress,
               amount
             );
@@ -436,10 +450,12 @@ export function useRedPacketEvents({
   messages
 }: UseRedPacketEventsProps) {
   const publicClient = usePublicClient();
+  const chainId = useChainId();
+  const contractAddress = getRedPacketAddress(chainId);
 
   // ===== 加载历史领取事件 =====
   useEffect(() => {
-    if (!publicClient || !currentAddress) return;
+    if (!publicClient || !currentAddress || !contractAddress) return;
 
     const loadHistoricalEvents = async () => {
       try {
@@ -450,7 +466,7 @@ export function useRedPacketEvents({
         const fromBlock = currentBlock - BigInt(345600);
 
         const logs = await publicClient.getLogs({
-          address: RED_PACKET_CONTRACT_ADDRESS,
+          address: contractAddress as `0x${string}`,
           fromBlock,
           toBlock: currentBlock
         });
@@ -464,7 +480,8 @@ export function useRedPacketEvents({
           recipientAddress,
           currentAddress,
           publicClient,
-          setMessages
+          setMessages,
+          contractAddress // 传入合约地址
         );
       } catch (error) {
         console.error('加载历史红包领取事件失败:', error);
@@ -478,19 +495,21 @@ export function useRedPacketEvents({
     recipientAddress,
     currentAddress,
     publicClient,
-    setMessages
+    setMessages,
+    contractAddress // 新增依赖
   ]);
 
   // ===== 监听群红包领取事件（实时）=====
   useWatchContractEvent({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: RedPacketAbi,
     eventName: 'GroupPacketClaimed',
-    enabled: chatType === 'group' && !!groupAddress,
+    enabled: chatType === 'group' && !!groupAddress && !!contractAddress,
     onLogs(logs) {
       console.log('⚡ 收到群红包领取事件:', logs.length);
 
-      if (!publicClient || !currentAddress || !groupAddress) return;
+      if (!publicClient || !currentAddress || !groupAddress || !contractAddress)
+        return;
 
       logs.forEach((log) => {
         handleGroupClaimEvent(
@@ -498,7 +517,8 @@ export function useRedPacketEvents({
           groupAddress,
           currentAddress,
           publicClient,
-          setMessages
+          setMessages,
+          contractAddress
         );
       });
     }
@@ -506,12 +526,18 @@ export function useRedPacketEvents({
 
   // ===== 监听私聊红包领取事件（实时）=====
   useWatchContractEvent({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: RedPacketAbi,
     eventName: 'PersonalPacketClaimed',
-    enabled: chatType === 'private' && !!recipientAddress,
+    enabled: chatType === 'private' && !!recipientAddress && !!contractAddress,
     onLogs(logs) {
-      if (!publicClient || !currentAddress || !recipientAddress) return;
+      if (
+        !publicClient ||
+        !currentAddress ||
+        !recipientAddress ||
+        !contractAddress
+      )
+        return;
 
       logs.forEach((log) => {
         handlePersonalClaimEvent(
@@ -519,7 +545,8 @@ export function useRedPacketEvents({
           recipientAddress,
           currentAddress,
           publicClient,
-          setMessages
+          setMessages,
+          contractAddress
         );
       });
     }

@@ -67,6 +67,10 @@ export function useChatParams() {
     groupLevel,
     groupCondition,
     invitedMembersMessage,
-    groupType: chatMeta?.groupType || 'community'
+    // 群类型 - 优先从 URL 读取（邀请链接场景），其次从 Redux 读取
+    groupType:
+      (getParam('groupType') as 'community' | 'redpacket') ||
+      chatMeta?.groupType ||
+      'community'
   };
 }

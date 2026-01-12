@@ -9,7 +9,7 @@ import {
   useHasClaimed,
   useGetPacket,
   PacketStatus,
-  RED_PACKET_CONTRACT_ADDRESS
+  useRedPacketAddress
 } from '@/lib/RedPacketAbi';
 import type { RedPacketConfig } from './types';
 
@@ -27,7 +27,7 @@ interface RedPacketMessageWrapperProps {
  * 使用 getPacket 获取红包完整信息，判断是否已领取/已领完/已过期
  *
  * 支持两种红包类型：
- * 1. 官方群红包：查询 RED_PACKET_CONTRACT_ADDRESS
+ * 1. 官方群红包：查询 redPacketAddress
  * 2. 红包群红包：查询群合约地址
  */
 export function RedPacketMessageWrapper({
@@ -38,6 +38,7 @@ export function RedPacketMessageWrapper({
   fallbackGroupAddress
 }: RedPacketMessageWrapperProps) {
   const { address: currentAddress } = useAccount();
+  const redPacketAddress = useRedPacketAddress();
 
   // 判断是否是红包群的红包（优先使用 config 中的，否则使用兜底值）
   const groupType = config.groupType || fallbackGroupType || 'community';
@@ -46,7 +47,7 @@ export function RedPacketMessageWrapper({
   const queryAddress =
     isRedPacketGroup && groupAddress
       ? (groupAddress as `0x${string}`)
-      : RED_PACKET_CONTRACT_ADDRESS;
+      : redPacketAddress;
 
   // console.log('🎁 [RedPacketMessageWrapper] 红包配置:', {
   //   packetId: config.packetId,
@@ -75,7 +76,7 @@ export function RedPacketMessageWrapper({
   ]);
 
   const { data: redPacketGroupPacket } = useReadContract({
-    address: queryAddress,
+    address: queryAddress || undefined,
     abi: RedPacketGroupABI,
     functionName: 'getPacket',
     args:
@@ -86,7 +87,7 @@ export function RedPacketMessageWrapper({
   });
 
   const { data: redPacketGroupClaimed } = useReadContract({
-    address: queryAddress,
+    address: queryAddress || undefined,
     abi: RedPacketGroupABI,
     functionName: 'claimed',
     args:

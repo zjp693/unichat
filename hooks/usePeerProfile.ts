@@ -1,127 +1,89 @@
-/**
- * 获取对方用户的 Profile 信息（包含头像）
- * 使用 wagmi 的 useReadContract 自动缓存
- */
-
-import { Address, Abi } from 'viem';
-import { useMemo } from 'react';
-import { useReadContract } from 'wagmi';
+import { Address } from 'viem';
 import {
-  UNICHAT_PROFILE_ADDRESS,
-  type ProfileView,
+  useGetProfilesOf,
+  useGetProfile,
   useDefaultAvatarCid
 } from '@/lib/UniChatProfileAbi';
-import UniChatProfileABI from '@/contract/abi/UniChatProfile.json';
-import { buildIPFSUrl } from '@/lib/ipfs-gateways';
+import { useMemo } from 'react';
 
-/**
- * 获取单个对方的 Profile（两步查询）
- * @param peerAddress 对方地址
- * @returns Profile 信息（包含头像）
- */
-export function usePeerProfile(peerAddress?: Address) {
-  // 第一步：获取对方的 tokenId 数组
-  const {
-    data: tokenIds,
-    isLoading: isLoadingTokenIds,
-    error: tokenIdsError
-  } = useReadContract({
-    address: UNICHAT_PROFILE_ADDRESS,
-    abi: UniChatProfileABI.abi as Abi,
-    functionName: 'getProfilesOf',
-    args: peerAddress ? [peerAddress] : undefined,
-    query: {
-      enabled: !!peerAddress,
-      staleTime: 24 * 60 * 60 * 1000, // 24小时内数据新鲜
-      gcTime: 7 * 24 * 60 * 60 * 1000, // 缓存保留7天
-      refetchOnWindowFocus: false, // 禁用窗口聚焦刷新
-      refetchOnReconnect: false // 禁用重连刷新
-    }
-  });
+export interface PeerProfile {
+  name: string;
+  avatarCid: string;
+  bio: string;
+  tokenId: bigint | null;
+  hasProfile: boolean;
+}
 
-  // 提取第一个 tokenId
-  const firstTokenId = useMemo(() => {
-    if (!tokenIds || !Array.isArray(tokenIds) || tokenIds.length === 0) {
-      return undefined;
-    }
-    return tokenIds[0] as bigint;
-  }, [tokenIds]);
+export function usePeerProfile(address: Address | undefined) {
+  // 1. 获取用户的 Profile Token IDs
+  const { data: profileIdsRaw, isLoading: isLoadingIds } =
+    useGetProfilesOf(address);
+  const profileIds = profileIdsRaw as bigint[];
 
-  // 第二步：获取 Profile 详情
-  const {
-    data: profile,
-    isLoading: isLoadingProfile,
-    error: profileError
-  } = useReadContract({
-    address: UNICHAT_PROFILE_ADDRESS,
-    abi: UniChatProfileABI.abi as Abi,
-    functionName: 'getProfile',
-    args: firstTokenId !== undefined ? [firstTokenId] : undefined,
-    query: {
-      enabled: firstTokenId !== undefined,
-      staleTime: 24 * 60 * 60 * 1000, // 24小时内数据新鲜
-      gcTime: 7 * 24 * 60 * 60 * 1000, // 缓存保留7天
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false
+  // 假设用户可能拥有多个 Profile，我们取第一个
+  // TODO: 如果有主 Profile 逻辑，在这里添加
+  const tokenId =
+    profileIds && profileIds.length > 0 ? profileIds[0] : undefined;
+
+  // 2. 获取具体 Profile 数据
+  const { data: profileData, isLoading: isLoadingProfile } =
+    useGetProfile(tokenId);
+
+  // 3. 获取默认头像 CID (作为 fallback)
+  const { data: defaultAvatarCidRaw } = useDefaultAvatarCid();
+  const defaultAvatarCid = (defaultAvatarCidRaw as string) || '';
+
+  const profile: PeerProfile | undefined = useMemo(() => {
+    if (!address) return undefined;
+
+    if (!tokenId || !profileData) {
+      // 没有 Profile，返回默认状态
+      return {
+        name: `${address.slice(0, 6)}...${address.slice(-4)}`,
+        avatarCid: defaultAvatarCid || '',
+        bio: '',
+        tokenId: null,
+        hasProfile: false
+      };
     }
-  });
+
+    // 解析 Profile 数据 (struct 返回通常是数组或对象，视 wagmi 版本和 ABI 而定)
+    // 根据 lib/UniChatProfileAbi.ts 的类型:
+    // struct ProfileView { ... }
+    // wagmi readContract 返回的如果是 struct，通常是一个对象
+
+    // 注意：具体返回值结构取决于 ABI 生成的 TypeScript 类型，这里做安全访问
+    const name = (profileData as any).name || (profileData as any)[2] || '';
+    const description =
+      (profileData as any).description || (profileData as any)[3] || '';
+    const avatarCid =
+      (profileData as any).avatarCid ||
+      (profileData as any)[4] ||
+      defaultAvatarCid ||
+      '';
+
+    return {
+      name: name || `${address.slice(0, 6)}...${address.slice(-4)}`,
+      avatarCid: String(avatarCid), // 确保是 string
+      bio: description,
+      tokenId: tokenId,
+      hasProfile: true
+    };
+  }, [address, tokenId, profileData, defaultAvatarCid]);
 
   return {
-    profile: profile as ProfileView | undefined,
-    isLoading: isLoadingTokenIds || isLoadingProfile,
-    error: tokenIdsError || profileError,
-    hasProfile: !!profile
+    profile,
+    isLoading: isLoadingIds || (!!tokenId && isLoadingProfile)
   };
 }
 
-/**
- * 在组件中批量获取多个对方的 Profile
- * 注意：这个 hook 会为每个地址创建独立的查询
- * @param peerAddress 单个对方地址
- * @returns 包含头像 CID 和 URL 的简化信息
- */
-export function usePeerAvatar(peerAddress?: Address) {
-  const { profile, isLoading, error } = usePeerProfile(peerAddress);
-
-  // 获取合约的默认头像 CID
-  const { data: defaultAvatarCid } = useDefaultAvatarCid();
-
-  // 获取头像 CID
-  const avatarCid = useMemo(() => {
-    try {
-      // 如果有 Profile 且有头像，使用 Profile 头像
-      if (profile && profile.avatarCid && profile.avatarCid.trim()) {
-        return profile.avatarCid.trim();
-      }
-
-      // 如果没有 Profile 或没有头像，使用合约默认头像
-      if (
-        defaultAvatarCid &&
-        typeof defaultAvatarCid === 'string' &&
-        defaultAvatarCid.trim()
-      ) {
-        return defaultAvatarCid.trim();
-      }
-    } catch (err) {
-      console.error('❌ [usePeerAvatar] 获取头像 CID 失败:', err);
-    }
-
-    return '';
-  }, [profile, defaultAvatarCid]);
-
-  // 构建 IPFS 头像 URL（用于向后兼容）
-  const avatarUrl = useMemo(() => {
-    if (avatarCid) {
-      return buildIPFSUrl(avatarCid);
-    }
-    return '/me/me2.png';
-  }, [avatarCid]);
-
+export function usePeerAvatar(address: Address | undefined) {
+  const { profile, isLoading } = usePeerProfile(address);
   return {
-    avatarCid,
-    avatarUrl,
+    avatarCid: profile?.avatarCid,
+    avatarUrl: profile?.avatarCid, // Compatible with legacy code expecting avatarUrl
     name: profile?.name,
-    isLoading,
-    error
+    profile,
+    isLoading
   };
 }

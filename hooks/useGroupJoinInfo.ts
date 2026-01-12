@@ -7,12 +7,12 @@
  * 并获取相关的群信息、代币信息、邀请人信息
  */
 
-import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useAccount, usePublicClient, useReadContract } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
 import { parseAbi, formatUnits } from 'viem';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { useReferrerInviteCount } from '@/hooks/useReferrerInviteCount';
+import { useContractAddress } from '@/lib/web3/hooks/useActiveContracts';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 
 // Registry ABI
@@ -29,28 +29,16 @@ const ERC20_ABI = parseAbi([
   'function balanceOf(address account) external view returns (uint256)'
 ]);
 
-/**
- * 获取 Registry 合约地址
- */
-function getRegistryAddress(): `0x${string}` | null {
-  const address = process.env.NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS;
-  if (!address) {
-    console.warn('缺少环境变量: NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS');
-    return null;
-  }
-  return address as `0x${string}`;
-}
-
 export function useGroupJoinInfo() {
   const searchParams = useSearchParams();
   const { address: currentUserAddress } = useAccount();
-  const publicClient = usePublicClient();
 
   // 从 URL 解析参数
   const referralCode = searchParams.get('code') as `0x${string}` | null;
   const groupAddress = searchParams.get('group') as `0x${string}` | null;
 
-  const registryAddress = getRegistryAddress();
+  // 从多链配置获取 Registry 合约地址
+  const registryAddress = useContractAddress('registry');
 
   // 1️⃣ 验证邀请码
   const { data: codeExists } = useReadContract({

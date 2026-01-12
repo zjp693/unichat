@@ -14,10 +14,12 @@ import {
   useAccount,
   usePublicClient,
   useWriteContract,
-  useWaitForTransactionReceipt
+  useWaitForTransactionReceipt,
+  useChainId
 } from 'wagmi';
 import { parseAbi, keccak256, toHex, decodeEventLog } from 'viem';
 import UniChatRegistryArtifact from '@/contract/abi/UniChatRegistry.json';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 const REGISTRY_ABI = parseAbi([
   'function createReferral(uint16 listingShareBps, bytes32 salt) external returns (bytes32 code)',
@@ -29,27 +31,16 @@ const REGISTRY_ABI = parseAbi([
 ]);
 
 /**
- * 获取 Registry 合约地址
- */
-function getRegistryAddress(): `0x${string}` | null {
-  const address = process.env.NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS;
-  if (!address) {
-    console.warn('缺少环境变量: NEXT_PUBLIC_UNICHAT_REGISTRY_CONTRACT_ADDRESS');
-    return null;
-  }
-  return address as `0x${string}`;
-}
-
-/**
  * 查询用户的邀请码
  */
 export function useReferralCode() {
   const { address: userAddress } = useAccount();
   const publicClient = usePublicClient();
+  const chainId = useChainId();
 
   const [referralCode, setReferralCode] = useState<`0x${string}` | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false); // 增加抓取标志，防止并发
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
 
@@ -59,7 +50,7 @@ export function useReferralCode() {
       return;
     }
 
-    const registryAddress = getRegistryAddress();
+    const registryAddress = getContractAddress(chainId, 'registry');
     if (!registryAddress) {
       setIsLoading(false);
       return;
@@ -128,6 +119,7 @@ export function useReferralCode() {
  */
 export function useCreateReferralCode() {
   const publicClient = usePublicClient();
+  const chainId = useChainId();
   const {
     writeContract,
     data: hash,
@@ -180,7 +172,7 @@ export function useCreateReferralCode() {
   }, [isSuccess, receipt]);
 
   const createReferralCode = async (listingShareBps: number = 6500) => {
-    const registryAddress = getRegistryAddress();
+    const registryAddress = getContractAddress(chainId, 'registry');
     if (!registryAddress) {
       throw new Error('Registry 合约地址未配置');
     }
@@ -220,6 +212,7 @@ export function useCreateReferralCode() {
  */
 export function useCheckReferralCode(code: `0x${string}` | null) {
   const publicClient = usePublicClient();
+  const chainId = useChainId();
   const [exists, setExists] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
 
@@ -229,7 +222,7 @@ export function useCheckReferralCode(code: `0x${string}` | null) {
       return;
     }
 
-    const registryAddress = getRegistryAddress();
+    const registryAddress = getContractAddress(chainId, 'registry');
     if (!registryAddress) return;
 
     const checkCode = async () => {
@@ -251,7 +244,7 @@ export function useCheckReferralCode(code: `0x${string}` | null) {
     };
 
     checkCode();
-  }, [publicClient, code]);
+  }, [publicClient, code, chainId]);
 
   return { exists, isChecking };
 }

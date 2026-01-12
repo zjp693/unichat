@@ -31,6 +31,10 @@ export function NewUserSetupModal({
   const { writeContractAsync } = useUniChatProfileWrite();
   const { data: defaultAvatarCid } = useDefaultAvatarCid();
 
+  useEffect(() => {
+    console.log('👀 [Debug] Contract Default Avatar CID:', defaultAvatarCid);
+  }, [defaultAvatarCid]);
+
   const [step, setStep] = useState<'input' | 'uploading' | 'minting'>('input');
   const [name, setName] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);

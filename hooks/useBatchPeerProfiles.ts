@@ -1,160 +1,128 @@
-/**
- * 批量获取多个用户的 Profile
- * 使用 wagmi 的 useReadContracts 批量读取，显著减少 RPC 调用
- */
-
-import { useMemo } from 'react';
-import { useReadContracts } from 'wagmi';
 import { Address, Abi } from 'viem';
-import {
-  UNICHAT_PROFILE_ADDRESS,
-  type ProfileView
-} from '@/lib/UniChatProfileAbi';
+import { useReadContracts, useChainId } from 'wagmi';
 import UniChatProfileABI from '@/contract/abi/UniChatProfile.json';
+import { getContractAddress } from '@/lib/web3/contracts';
+import { PeerProfile } from './usePeerProfile';
 
-// ============================================================
-// 辅助函数
-// ============================================================
+export function useBatchPeerProfiles(addresses: Address[]) {
+  const chainId = useChainId();
+  const profileAddress = getContractAddress(chainId, 'profile');
 
-/**
- * 过滤有效地址并去重
- */
-function dedupeAddresses(addresses: Address[]): Address[] {
-  const seen = new Set<string>();
-  return addresses.filter((addr) => {
-    if (!addr || seen.has(addr.toLowerCase())) return false;
-    seen.add(addr.toLowerCase());
-    return true;
-  });
-}
-
-// ============================================================
-// 子 Hooks
-// ============================================================
-
-/**
- * 批量获取用户的 tokenId
- */
-function useBatchTokenIds(addresses: Address[]) {
-  const contracts = useMemo(
-    () =>
-      addresses.map((addr) => ({
-        address: UNICHAT_PROFILE_ADDRESS,
-        abi: UniChatProfileABI.abi as Abi,
-        functionName: 'getProfilesOf' as const,
-        args: [addr]
-      })),
-    [addresses]
-  );
-
-  const { data: results, isLoading } = useReadContracts({
-    contracts,
+  // 1. 第一步：批量获取每个地址的 Profile IDs
+  const { data: profilesIdsList, isLoading: isLoadingIds } = useReadContracts({
+    contracts: addresses.map((addr) => ({
+      address: profileAddress || undefined,
+      abi: UniChatProfileABI.abi as Abi,
+      functionName: 'getProfilesOf',
+      args: [addr]
+    })),
     query: {
-      enabled: addresses.length > 0,
-      staleTime: 24 * 60 * 60 * 1000,
-      gcTime: 7 * 24 * 60 * 60 * 1000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false
+      enabled: addresses.length > 0 && !!profileAddress
     }
   });
 
-  // 构建 address -> tokenId 映射
-  const tokenIdMap = useMemo(() => {
-    const map = new Map<string, bigint>();
-    if (!results) return map;
+  // 提取每个用户的主 Token ID (取第一个)
+  const tokenIds = profilesIdsList?.map((result) => {
+    if (
+      result.status === 'success' &&
+      Array.isArray(result.result) &&
+      result.result.length > 0
+    ) {
+      return result.result[0] as bigint;
+    }
+    return null;
+  });
+
+  // 2. 第二步：批量获取 Profile 详情
+  // 过滤出有效的 tokenId 进行查询，为了保持索引对应，我们查询所有（null 的跳过或 dummy）
+  const { data: profilesDataList, isLoading: isLoadingProfiles } =
+    useReadContracts({
+      contracts: tokenIds
+        ?.map((tokenId) => {
+          if (tokenId === null) return null;
+          return {
+            address: profileAddress || undefined,
+            abi: UniChatProfileABI.abi as Abi,
+            functionName: 'getProfile',
+            args: [tokenId]
+          };
+        })
+        .filter(Boolean) as any[], // 过滤掉 null contract 配置，wagmi 会处理
+      query: {
+        enabled:
+          !!tokenIds && tokenIds.some((id) => id !== null) && !!profileAddress
+      }
+    });
+
+  // 3. 第三步：获取默认头像
+  // 这里简化，不调合约了， hardcode 或者从单个 hook 拿。
+  // 为了严谨，还是调一次
+  const { data: defaultAvatarData } = useReadContracts({
+    contracts: [
+      {
+        address: profileAddress || undefined,
+        abi: UniChatProfileABI.abi as Abi,
+        functionName: 'defaultAvatarCid'
+      }
+    ],
+    query: { enabled: !!profileAddress }
+  });
+  const defaultAvatarCid = (defaultAvatarData?.[0]?.result as string) || '';
+
+  // 组装结果
+  const profileMap = new Map<string, PeerProfile>();
+
+  if (addresses && tokenIds) {
+    let profileDataIndex = 0;
 
     addresses.forEach((addr, index) => {
-      const result = results[index];
-      if (result?.status === 'success' && Array.isArray(result.result)) {
-        const tokenIds = result.result as bigint[];
-        if (tokenIds.length > 0) {
-          map.set(addr.toLowerCase(), tokenIds[0]);
+      const tokenId = tokenIds[index];
+      // 标准化 key 为小写，方便查找
+      const key = addr.toLowerCase();
+
+      if (tokenId === null) {
+        // 没有 Profile
+        profileMap.set(key, {
+          name: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+          avatarCid: defaultAvatarCid,
+          bio: '',
+          tokenId: null,
+          hasProfile: false
+        });
+      } else {
+        // 有 Profile
+        const result = profilesDataList?.[profileDataIndex];
+        profileDataIndex++;
+
+        if (result && result.status === 'success') {
+          const data = result.result as any;
+          const name = data.name || data[2] || '';
+          const description = data.description || data[3] || '';
+          const avatarCid = data.avatarCid || data[4] || defaultAvatarCid;
+
+          profileMap.set(key, {
+            name: name || `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+            avatarCid: String(avatarCid),
+            bio: description,
+            tokenId: tokenId,
+            hasProfile: true
+          });
+        } else {
+          // Fallback
+          profileMap.set(key, {
+            name: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+            avatarCid: defaultAvatarCid,
+            bio: '',
+            tokenId: tokenId,
+            hasProfile: true
+          });
         }
       }
     });
-    return map;
-  }, [addresses, results]);
-
-  return { tokenIdMap, isLoading };
-}
-
-/**
- * 批量获取 Profile 详情
- */
-function useBatchProfiles(
-  addresses: Address[],
-  tokenIdMap: Map<string, bigint>
-) {
-  // 只查询有 tokenId 的地址
-  const addressesWithTokenId = useMemo(
-    () => addresses.filter((addr) => tokenIdMap.has(addr.toLowerCase())),
-    [addresses, tokenIdMap]
-  );
-
-  const contracts = useMemo(
-    () =>
-      addressesWithTokenId.map((addr) => ({
-        address: UNICHAT_PROFILE_ADDRESS,
-        abi: UniChatProfileABI.abi as Abi,
-        functionName: 'getProfile' as const,
-        args: [tokenIdMap.get(addr.toLowerCase())!]
-      })),
-    [addressesWithTokenId, tokenIdMap]
-  );
-
-  const { data: results, isLoading } = useReadContracts({
-    contracts,
-    query: {
-      enabled: contracts.length > 0,
-      staleTime: 24 * 60 * 60 * 1000,
-      gcTime: 7 * 24 * 60 * 60 * 1000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false
-    }
-  });
-
-  // 构建 address -> Profile 映射
-  const profileMap = useMemo(() => {
-    const map = new Map<string, ProfileView>();
-    if (!results) return map;
-
-    addressesWithTokenId.forEach((addr, index) => {
-      const result = results[index];
-      if (result?.status === 'success' && result.result) {
-        map.set(addr.toLowerCase(), result.result as ProfileView);
-      }
-    });
-    return map;
-  }, [addressesWithTokenId, results]);
-
-  return { profileMap, isLoading };
-}
-
-// ============================================================
-// 主 Hook
-// ============================================================
-
-/**
- * 批量获取多个用户的 Profile
- * @param addresses 用户地址数组
- * @returns profileMap: 地址 -> Profile 的映射
- */
-export function useBatchPeerProfiles(addresses: Address[]) {
-  // 1. 预处理：过滤并去重
-  const validAddresses = useMemo(() => dedupeAddresses(addresses), [addresses]);
-
-  // 2. 第一步：批量获取 tokenId
-  const { tokenIdMap, isLoading: isLoadingTokenIds } =
-    useBatchTokenIds(validAddresses);
-
-  // 3. 第二步：批量获取 Profile
-  const { profileMap, isLoading: isLoadingProfiles } = useBatchProfiles(
-    validAddresses,
-    tokenIdMap
-  );
+  }
 
   return {
-    profileMap,
-    isLoading: isLoadingTokenIds || isLoadingProfiles
+    profileMap, // 返回 Map
+    isLoading: isLoadingIds || isLoadingProfiles
   };
 }

@@ -1,34 +1,38 @@
 import {
   useReadContract,
   useWriteContract,
-  useWatchContractEvent
+  useWatchContractEvent,
+  useChainId
 } from 'wagmi';
 import { Address, Abi, getAddress } from 'viem';
 import DirectMessageAbiJson from '../contract/abi/DirectMessageAbi.json';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 // JSON 文件结构: { "abi": [...] }
 // 强制类型断言以处理 TypeScript 导入
 export const DirectMessageAbi = (DirectMessageAbiJson as { abi: Abi }).abi;
 
-// DirectMessage 合约地址 (从环境变量读取)
-const contractAddressFromEnv =
-  process.env.NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS;
-
-if (
-  !contractAddressFromEnv ||
-  contractAddressFromEnv === 'NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS'
-) {
-  console.error(
-    '❌ 错误: NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS 环境变量未正确设置！'
-  );
-  console.error(
-    '请在 .env.local 文件中添加: NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS=0x你的合约地址'
-  );
+/**
+ * Hook: 获取当前链的 DirectMessage 合约地址
+ */
+export function useDirectMessageAddress(): Address | null {
+  const chainId = useChainId();
+  return getContractAddress(chainId, 'directMessage');
 }
 
-export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address = contractAddressFromEnv
-  ? getAddress(contractAddressFromEnv)
-  : (contractAddressFromEnv as Address);
+/**
+ * 获取指定链的 DirectMessage 合约地址
+ * @param chainId 链 ID
+ */
+export function getDirectMessageAddress(chainId: number): Address | null {
+  return getContractAddress(chainId, 'directMessage');
+}
+
+// ⚠️ 向后兼容：保留旧的全局常量（默认读取 Arbitrum 地址）
+// 尚未迁移的文件仍依赖此常量
+export const DIRECT_MESSAGE_CONTRACT_ADDRESS: Address =
+  (process.env.NEXT_PUBLIC_DIRECT_MESSAGE_ADDRESS_ARB as Address) ||
+  ('0x0000000000000000000000000000000000000000' as Address);
 
 // 1. 定义数据类型
 export type DMMessage = {
@@ -42,42 +46,37 @@ export type DMMessage = {
 
 /**
  * 钩子：获取指定会话的消息总数
- * @param addressA 地址 A
- * @param addressB 地址 B
- * @returns 消息总数 (bigint)
  */
 export function useGetMessageCount(
   addressA: Address,
   addressB: Address,
   options?: { query?: { enabled?: boolean } }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'messageCount',
     args: [addressA, addressB],
     query: {
-      // 只有当两个地址都有效且外部条件满足时才启用查询
       enabled:
         (options?.query?.enabled !== undefined
           ? options.query.enabled
           : true) &&
         !!addressA &&
-        !!addressB,
-      staleTime: 1000 * 30, // 30秒内数据视为新鲜
-      gcTime: 1000 * 60 * 5, // 5分钟后垃圾回收
-      refetchOnWindowFocus: false // 禁用窗口聚焦刷新
+        !!addressB &&
+        !!contractAddress,
+      staleTime: 1000 * 30,
+      gcTime: 1000 * 60 * 5,
+      refetchOnWindowFocus: false
     }
   });
 }
 
 /**
  * 钩子：分页获取指定会话的消息列表
- * @param addressA 地址 A
- * @param addressB 地址 B
- * @param start 起始下标
- * @param count 读取条数上限
- * @returns 消息列表 (DMMessage[])
  */
 export function useGetMessages(
   addressA: Address,
@@ -85,26 +84,31 @@ export function useGetMessages(
   start: bigint,
   count: bigint
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'getMessages',
     args: [addressA, addressB, start, count],
     query: {
-      // 只有当所有参数都有效时才启用查询
       enabled:
-        !!addressA && !!addressB && start !== undefined && count !== undefined,
-      staleTime: 1000 * 60 * 2, // 2分钟内数据视为新鲜
-      gcTime: 1000 * 60 * 10, // 10分钟后垃圾回收
-      refetchOnWindowFocus: false, // 禁用窗口聚焦刷新
-      refetchOnReconnect: false // 禁用重连刷新
+        !!addressA &&
+        !!addressB &&
+        start !== undefined &&
+        count !== undefined &&
+        !!contractAddress,
+      staleTime: 1000 * 60 * 2,
+      gcTime: 1000 * 60 * 10,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false
     }
   });
 }
 
 /**
  * 钩子：发送消息
- * @returns useWriteContract 的返回值，包含 writeContract, data, isPending, error 等
  */
 export function useSendMessage() {
   return useWriteContract({});
@@ -112,63 +116,62 @@ export function useSendMessage() {
 
 /**
  * 钩子：获取指定用户的通讯录（会话对端）
- * @param user 用户地址
- * @returns 对端地址列表 (Address[])
  */
 export function useGetPeersOf(user: Address) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'peersOf',
     args: [user],
     query: {
-      enabled: !!user
+      enabled: !!user && !!contractAddress
     }
   });
 }
 
 /**
  * 钩子：获取合约定义的最大消息字节数
- * @returns 最大消息字节数 (uint32)
  */
 export function useMaxMessageBytes() {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
-    functionName: 'MAX_MESSAGE_BYTES'
+    functionName: 'MAX_MESSAGE_BYTES',
+    query: {
+      enabled: !!contractAddress
+    }
   });
 }
 
 /**
  * 钩子：监听 MessageSent 事件
- * @param convoId 会话 ID (可选，用于过滤)
- * @param from 发送者地址 (可选，用于过滤)
- * @param to 接收者地址 (可选，用于过滤)
- * @param onLogs 事件回调函数
- * @param enabled 是否启用监听
  */
 export function useListenMessageSent(
   onLogs: (logs: any[]) => void,
   enabled: boolean,
   args?: { convoId?: `0x${string}`; from?: Address; to?: Address }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   useWatchContractEvent({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     eventName: 'MessageSent',
     args: args,
     onLogs: onLogs,
-    enabled: enabled
+    enabled: enabled && !!contractAddress
   });
 }
 
 /**
  * 钩子：统计指定接收者在指定时间范围内接收的消息总数
- * @param recipient 接收者地址
- * @param startTs 开始时间戳 (uint40)
- * @param endTs 结束时间戳 (uint40)
- * @param options 可选配置项
- * @returns 消息总数 (bigint)
  */
 export function useCountReceivedInRange(
   recipient: Address,
@@ -176,8 +179,11 @@ export function useCountReceivedInRange(
   endTs: bigint,
   options?: { query?: { enabled?: boolean } }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'countReceivedInRange',
     args: [recipient, startTs, endTs],
@@ -188,19 +194,14 @@ export function useCountReceivedInRange(
           : true) &&
         !!recipient &&
         startTs !== undefined &&
-        endTs !== undefined
+        endTs !== undefined &&
+        !!contractAddress
     }
   });
 }
 
 /**
  * 钩子：统计指定接收者和对端在指定时间范围内之间的消息数
- * @param recipient 接收者地址
- * @param peer 对端地址
- * @param startTs 开始时间戳 (uint40)
- * @param endTs 结束时间戳 (uint40)
- * @param options 可选配置项
- * @returns 消息总数 (bigint)
  */
 export function useCountReceivedInRangeBetween(
   recipient: Address,
@@ -209,8 +210,11 @@ export function useCountReceivedInRangeBetween(
   endTs: bigint,
   options?: { query?: { enabled?: boolean } }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'countReceivedInRangeBetween',
     args: [recipient, peer, startTs, endTs],
@@ -222,25 +226,25 @@ export function useCountReceivedInRangeBetween(
         !!recipient &&
         !!peer &&
         startTs !== undefined &&
-        endTs !== undefined
+        endTs !== undefined &&
+        !!contractAddress
     }
   });
 }
 
 /**
  * 钩子：统计今天指定用户和对端之间的消息数
- * @param me 当前用户地址
- * @param peer 对端地址
- * @param options 可选配置项
- * @returns 今天的消息总数 (bigint)
  */
 export function useCountReceivedTodayBetween(
   me: Address,
   peer: Address,
   options?: { query?: { enabled?: boolean } }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'countReceivedTodayBetween',
     args: [me, peer],
@@ -250,23 +254,24 @@ export function useCountReceivedTodayBetween(
           ? options.query.enabled
           : true) &&
         !!me &&
-        !!peer
+        !!peer &&
+        !!contractAddress
     }
   });
 }
 
 /**
  * 钩子：获取指定用户的公钥
- * @param user 用户地址
- * @param options 可选配置项
- * @returns 用户的公钥字符串（如果未注册则返回空字符串）
  */
 export function useGetPublicKey(
   user: Address | undefined,
   options?: { query?: { enabled?: boolean } }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'getPublicKey',
     args: user ? [user] : undefined,
@@ -274,23 +279,25 @@ export function useGetPublicKey(
       enabled:
         (options?.query?.enabled !== undefined
           ? options.query.enabled
-          : true) && !!user
+          : true) &&
+        !!user &&
+        !!contractAddress
     }
   });
 }
 
 /**
  * 钩子：获取指定用户的公钥或默认公钥
- * @param user 用户地址
- * @param options 可选配置项
- * @returns 用户的公钥字符串（如果未注册则返回默认公钥）
  */
 export function useGetPublicKeyOrDefault(
   user: Address | undefined,
   options?: { query?: { enabled?: boolean } }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'getPublicKeyOrDefault',
     args: user ? [user] : undefined,
@@ -298,23 +305,25 @@ export function useGetPublicKeyOrDefault(
       enabled:
         (options?.query?.enabled !== undefined
           ? options.query.enabled
-          : true) && !!user
+          : true) &&
+        !!user &&
+        !!contractAddress
     }
   });
 }
 
 /**
  * 钩子：批量获取多个用户的公钥或默认公钥
- * @param users 用户地址数组
- * @param options 可选配置项
- * @returns 公钥字符串数组
  */
 export function useGetPublicKeysOrDefault(
   users: Address[] | undefined,
   options?: { query?: { enabled?: boolean } }
 ) {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
     functionName: 'getPublicKeysOrDefault',
     args: users ? [users] : undefined,
@@ -324,14 +333,14 @@ export function useGetPublicKeysOrDefault(
           ? options.query.enabled
           : true) &&
         !!users &&
-        users.length > 0
+        users.length > 0 &&
+        !!contractAddress
     }
   });
 }
 
 /**
  * 钩子：注册公钥到链上
- * @returns useWriteContract 的返回值，包含 writeContract, data, isPending, error 等
  */
 export function useRegisterPublicKey() {
   return useWriteContract({});
@@ -339,12 +348,17 @@ export function useRegisterPublicKey() {
 
 /**
  * 钩子：获取默认公钥
- * @returns 默认公钥字符串
  */
 export function useGetDefaultPublicKey() {
+  const chainId = useChainId();
+  const contractAddress = getContractAddress(chainId, 'directMessage');
+
   return useReadContract({
-    address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+    address: contractAddress || undefined,
     abi: DirectMessageAbi,
-    functionName: 'defaultPublicKey'
+    functionName: 'defaultPublicKey',
+    query: {
+      enabled: !!contractAddress
+    }
   });
 }

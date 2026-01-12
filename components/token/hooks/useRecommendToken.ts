@@ -5,22 +5,23 @@ import {
   useWaitForTransactionReceipt
 } from 'wagmi';
 import { erc20Abi, formatUnits } from 'viem';
-import { RedPacketAbi, RED_PACKET_CONTRACT_ADDRESS } from '@/lib/RedPacketAbi';
+import { RedPacketAbi, useRedPacketAddress } from '@/lib/RedPacketAbi';
 import { useState, useEffect } from 'react';
 
 export function useRecommendToken() {
   const { address: userAddress } = useAccount();
+  const redPacketAddress = useRedPacketAddress();
 
   // 1. 获取质押金额
   const { data: stakeAmount } = useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: redPacketAddress || undefined,
     abi: RedPacketAbi,
     functionName: 'stakeUnichatAmount'
   });
 
   // 2. 获取 UNICHAT 代币地址
   const { data: unichatTokenAddress } = useReadContract({
-    address: RED_PACKET_CONTRACT_ADDRESS,
+    address: redPacketAddress || undefined,
     abi: RedPacketAbi,
     functionName: 'UNICHAT_TOKEN'
   });
@@ -31,11 +32,11 @@ export function useRecommendToken() {
     abi: erc20Abi,
     functionName: 'allowance',
     args:
-      userAddress && unichatTokenAddress
-        ? [userAddress, RED_PACKET_CONTRACT_ADDRESS]
+      userAddress && unichatTokenAddress && redPacketAddress
+        ? [userAddress, redPacketAddress]
         : undefined,
     query: {
-      enabled: !!userAddress && !!unichatTokenAddress
+      enabled: !!userAddress && !!unichatTokenAddress && !!redPacketAddress
     }
   });
 
@@ -50,14 +51,14 @@ export function useRecommendToken() {
 
   // 执行授权
   const approve = async () => {
-    if (!unichatTokenAddress || !stakeAmount) return;
+    if (!unichatTokenAddress || !stakeAmount || !redPacketAddress) return;
     try {
       setIsProcessing(true);
       const tx = await writeApprove({
         address: unichatTokenAddress as `0x${string}`,
         abi: erc20Abi,
         functionName: 'approve',
-        args: [RED_PACKET_CONTRACT_ADDRESS, stakeAmount as bigint]
+        args: [redPacketAddress, stakeAmount as bigint]
       });
       // 这里通常需要等待交易确认，但在简单的 UI 中，我们可以让用户手动进行下一步
       // 或者使用 useWaitForTransactionReceipt 在组件层处理
@@ -72,10 +73,11 @@ export function useRecommendToken() {
 
   // 执行推荐
   const recommend = async (tokenAddress: string, iconCid: string = '') => {
+    if (!redPacketAddress) return;
     try {
       setIsProcessing(true);
       const tx = await writeRecommend({
-        address: RED_PACKET_CONTRACT_ADDRESS,
+        address: redPacketAddress,
         abi: RedPacketAbi,
         functionName: 'recommendToken',
         args: [tokenAddress, iconCid]

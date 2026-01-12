@@ -18,13 +18,15 @@ import {
 } from 'wagmi';
 import {
   RedPacketAbi,
-  RED_PACKET_CONTRACT_ADDRESS,
+  useRedPacketAddress,
   useRefundExpiredPacket
 } from '@/lib/RedPacketAbi';
 import { formatUnits, erc20Abi, getAddress, Abi } from 'viem';
 import { FormattedAmount } from './utils';
 import { ClaimerAvatar, ClaimerName } from './ClaimerInfo';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import { usePeerProfile } from '@/hooks/usePeerProfile';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 
 interface Claimer {
   name: string;
@@ -39,6 +41,7 @@ interface RedPacketDetailsModalProps {
   onClose: () => void;
   senderName: string;
   senderAvatar?: string;
+  senderAddress?: string;
   message: string;
   packetId?: string;
   type?: 'LUCKY' | 'NORMAL';
@@ -59,6 +62,7 @@ export function RedPacketDetailsModal({
   onClose,
   senderName,
   senderAvatar,
+  senderAddress, // Add this
   message,
   packetId,
   type = 'LUCKY',
@@ -69,13 +73,14 @@ export function RedPacketDetailsModal({
 }: RedPacketDetailsModalProps) {
   const { toast } = useToast();
   const { address: currentAddress } = useAccount();
+  const redPacketAddress = useRedPacketAddress();
 
   // 判断是否是红包群
   const isRedPacketGroup = groupType === 'redpacket';
   const queryAddress =
     isRedPacketGroup && groupAddress
       ? (groupAddress as `0x${string}`)
-      : RED_PACKET_CONTRACT_ADDRESS;
+      : redPacketAddress;
 
   console.log('🎁 [RedPacketDetailsModal] 红包详情配置:', {
     packetId,
@@ -96,7 +101,7 @@ export function RedPacketDetailsModal({
 
   // 1. 获取红包基本信息
   const { data: packet, refetch: refetchPacket } = useReadContract({
-    address: queryAddress,
+    address: queryAddress || undefined,
     abi: (isRedPacketGroup ? RedPacketGroupABI.abi : RedPacketAbi) as Abi,
     functionName: isRedPacketGroup ? 'packets' : 'getPacket',
     args: packetId ? [BigInt(packetId)] : undefined,
@@ -156,7 +161,7 @@ export function RedPacketDetailsModal({
   // 3. 获取领取记录（官方群）
   const { data: officialRecordsData, refetch: refetchOfficialRecords } =
     useReadContract({
-      address: RED_PACKET_CONTRACT_ADDRESS,
+      address: redPacketAddress || undefined,
       abi: RedPacketAbi,
       functionName: 'getClaimRecordsPaged',
       args: packetId ? [BigInt(packetId), BigInt(0), BigInt(100)] : undefined,
@@ -168,7 +173,7 @@ export function RedPacketDetailsModal({
   // 4. 获取领取记录（红包群）
   const { data: redPacketRecordsData, refetch: refetchRedPacketRecords } =
     useReadContract({
-      address: queryAddress,
+      address: queryAddress || undefined,
       abi: RedPacketGroupABI.abi as Abi,
       functionName: 'getPacketClaimDetails',
       args: packetId ? [BigInt(packetId), BigInt(0), BigInt(100)] : undefined,
@@ -221,11 +226,11 @@ export function RedPacketDetailsModal({
 
     if (!records || !Array.isArray(records)) return [];
 
-    console.log('📊 [领取记录] 解析数据:', {
-      isRedPacketGroup,
-      recordsCount: records.length,
-      sampleRecord: records[0]
-    });
+    // console.log('📊 [领取记录] 解析数据:', {
+    //   isRedPacketGroup,
+    //   recordsCount: records.length,
+    //   sampleRecord: records[0]
+    // });
 
     // 判断红包是否已全部领取完毕
     const isFullyClaimed = packetData
@@ -293,6 +298,19 @@ export function RedPacketDetailsModal({
   const claimedCount = packetData ? Number(packetData.claimedShares) : 0;
   const isRandom = packetData?.isRandom;
 
+  // 获取 Profile
+  const packetCreator = packet ? (packet as any).creator : undefined;
+  const effectiveCreator = senderAddress || packetCreator;
+  const { profile } = usePeerProfile(effectiveCreator as `0x${string}`);
+
+  const isMe =
+    effectiveCreator &&
+    currentAddress &&
+    effectiveCreator.toLowerCase() === currentAddress.toLowerCase();
+
+  const finalSenderName = isMe ? '我' : profile?.name || senderName;
+  const finalSenderAvatarCid = profile?.avatarCid;
+
   const getSafeAvatarUrl = (url?: string) => {
     if (!url) return null;
     try {
@@ -317,13 +335,13 @@ export function RedPacketDetailsModal({
 
   // 处理退款
   const handleRefund = async () => {
-    if (!packetId || isRefunding || isConfirming) return;
+    if (!packetId || isRefunding || isConfirming || !redPacketAddress) return;
 
     try {
       setIsRefunding(true);
 
       const hash = await refundPacket({
-        address: RED_PACKET_CONTRACT_ADDRESS,
+        address: redPacketAddress,
         abi: RedPacketAbi,
         functionName: 'refundExpiredPacket',
         args: [BigInt(packetId)]
@@ -423,23 +441,15 @@ export function RedPacketDetailsModal({
         <div className="flex flex-col items-center mt-10 relative z-10 pb-8">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-5 h-5 rounded-sm overflow-hidden bg-gray-200 shrink-0">
-              {safeSenderAvatar ? (
-                <Image
-                  src={safeSenderAvatar}
-                  alt={senderName}
-                  width={20}
-                  height={20}
-                  className="object-cover w-full h-full"
-                  unoptimized
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-500 text-[10px]">
-                  {senderName[0]}
-                </div>
-              )}
+              <IPFSImg
+                src={finalSenderAvatarCid}
+                fallbackSrc={safeSenderAvatar || undefined}
+                alt={finalSenderName}
+                className="w-full h-full object-cover"
+              />
             </div>
             <span className="text-gray-900 font-medium text-[15px]">
-              {senderName}的红包
+              {finalSenderName}的红包
             </span>
             {isRandom && (
               <span className="text-[#e8c37e] border border-[#e8c37e] text-[10px] px-1 rounded-[2px] leading-tight">

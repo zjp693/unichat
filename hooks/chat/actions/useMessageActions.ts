@@ -1,11 +1,13 @@
 import { useCallback } from 'react';
+import { useDispatch } from 'react-redux';
+import { clearDraftInput } from '@/lib/chatSlice';
 import type { Message } from '@/lib/chat/types';
 import { chatEncryption } from '@/lib/keyManagement';
 import type { Address } from 'viem';
 import { getAddress } from 'viem';
 import {
   DirectMessageAbi,
-  DIRECT_MESSAGE_CONTRACT_ADDRESS
+  useDirectMessageAddress
 } from '@/lib/DirectMessageAbi';
 import { toast } from '@/hooks/use-toast';
 
@@ -31,28 +33,29 @@ function updateMessageStatus(
  * 从合约获取接收者公钥，无公钥则返回空字符串
  * @param publicClient viem public client
  * @param recipientAddress 接收者地址
+ * @param contractAddress 当前链的合约地址
  * @returns 公钥字符串或空字符串
  */
 async function fetchRecipientPublicKey(
   publicClient: any,
-  recipientAddress: Address
+  recipientAddress: Address,
+  contractAddress: string
 ): Promise<string> {
   try {
     const result = await publicClient.readContract({
-      address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+      address: contractAddress,
       abi: DirectMessageAbi,
       functionName: 'getPublicKey',
       args: [getAddress(recipientAddress)]
     });
 
     if (result && typeof result === 'string' && result.length > 0) {
-      // console.log('🔑 获取到接收者公钥:', result);
       return result;
     }
     console.log('⚠️ 接收者未注册公钥，将发送明文消息');
     return '';
   } catch (error) {
-    console.warn('⚠️ 未获取到接收者公钥，将发送明文消息');
+    console.warn('⚠️ 未获取到接收者公钥，将发送明文消息', error);
     return '';
   }
 }
@@ -135,7 +138,8 @@ function validatePrivateChatPrerequisites(
   currentAddress: Address | undefined,
   recipientAddress: Address,
   publicClient: any,
-  writeContract: any
+  writeContract: any,
+  contractAddress: string | undefined
 ): { valid: boolean; error?: string } {
   if (!currentAddress || !recipientAddress) {
     return { valid: false, error: '地址无效或未连接钱包' };
@@ -146,17 +150,10 @@ function validatePrivateChatPrerequisites(
   }
 
   // 验证合约地址
-  const contractAddrStr = String(DIRECT_MESSAGE_CONTRACT_ADDRESS);
-  if (
-    !DIRECT_MESSAGE_CONTRACT_ADDRESS ||
-    contractAddrStr === '0x0000000000000000000000000000000000000000' ||
-    contractAddrStr === 'NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS' ||
-    !contractAddrStr.startsWith('0x') ||
-    contractAddrStr.length !== 42
-  ) {
+  if (!contractAddress || !contractAddress.startsWith('0x')) {
     return {
       valid: false,
-      error: `合约地址配置错误！请检查环境变量 NEXT_PUBLIC_DIRECT_MESSAGE_CONTRACT_ADDRESS\n当前值: ${DIRECT_MESSAGE_CONTRACT_ADDRESS}`
+      error: `当前网络不支持私聊或合约地址未配置。`
     };
   }
 
@@ -179,6 +176,7 @@ function validatePrivateChatPrerequisites(
  * @param contentToMatch 要匹配的消息内容
  * @param messageId 乐观消息 ID
  * @param setMessages 状态更新函数
+ * @param contractAddress 合约地址
  */
 async function pollForMessageConfirmation(
   publicClient: any,
@@ -186,14 +184,15 @@ async function pollForMessageConfirmation(
   recipientAddress: Address,
   contentToMatch: string,
   messageId: string,
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
+  contractAddress: string
 ): Promise<void> {
   try {
     console.log('🔄 [兜底] [私聊] 尝试手动拉取最新消息...');
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const count = await publicClient.readContract({
-      address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+      address: contractAddress,
       abi: DirectMessageAbi,
       functionName: 'messageCount',
       args: [currentAddress, getAddress(recipientAddress)]
@@ -202,7 +201,7 @@ async function pollForMessageConfirmation(
     if (count && Number(count) > 0) {
       const lastIndex = Number(count) - 1;
       const result = await publicClient.readContract({
-        address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+        address: contractAddress,
         abi: DirectMessageAbi,
         functionName: 'getMessages',
         args: [
@@ -248,6 +247,7 @@ interface UseMessageActionsProps {
   currentAddress: Address | undefined;
   recipientAddress: Address;
   groupAddress: string | null;
+  groupType?: string;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   scrollToBottom: (behavior?: 'smooth' | 'auto') => void;
   publicClient: any;
@@ -259,6 +259,11 @@ interface UseMessageActionsProps {
   ) => Promise<`0x${string}`>;
   setPendingGroupMessage?: (msg: string) => void;
   setShowSendModeModal?: (show: boolean) => void;
+  // 直接调用加密模块的发送逻辑（带兜底），messageOverride 用于直接传入消息内容
+  handleSendModeSelect?: (
+    mode: 'plaintext' | 'encrypted',
+    messageOverride?: string
+  ) => Promise<void>;
 }
 
 /**
@@ -270,25 +275,21 @@ export function useMessageActions({
   currentAddress,
   recipientAddress,
   groupAddress,
+  groupType,
   setMessages,
   scrollToBottom,
   publicClient,
   writeContract,
   sendGroupMessage,
   setPendingGroupMessage,
-  setShowSendModeModal
+  setShowSendModeModal,
+  handleSendModeSelect
 }: UseMessageActionsProps) {
+  // 动态获取当前链的 DirectMessage 合约地址
+  const directMessageAddress = useDirectMessageAddress();
+
   /**
    * 处理群聊消息发送
-   *
-   * 处理流程：
-   * 1. 验证群聊地址是否有效
-   * 2. 如果配置了发送模式弹窗，打开弹窗让用户选择明文/密文
-   * 3. 否则直接发送明文消息（Fallback）
-   * 4. 创建乐观消息（转圈圈状态）并添加到消息列表
-   * 5. 调用合约发送消息，发送失败时更新消息状态为 failed
-   *
-   * @param originalMessageText 原始消息内容
    */
   const handleGroupMessage = useCallback(
     async (originalMessageText: string) => {
@@ -297,14 +298,25 @@ export function useMessageActions({
         return;
       }
 
-      // 如果配置了发送模式选择弹窗，由弹窗处理后续发送逻辑
+      // 对于 community 和 redpacket 群，直接以明文模式发送，不弹框
+      // 复用 handleSendModeSelect 的完整逻辑（包括兜底）
+      if (
+        (groupType === 'community' || groupType === 'redpacket') &&
+        handleSendModeSelect
+      ) {
+        // 直接调用明文发送，传入消息内容（不依赖 Redux 状态）
+        await handleSendModeSelect('plaintext', originalMessageText);
+        return;
+      }
+
+      // 其他群类型：弹框让用户选择加密/明文
       if (setPendingGroupMessage && setShowSendModeModal) {
         setPendingGroupMessage(originalMessageText);
         setShowSendModeModal(true);
         return;
       }
 
-      // Fallback: 直接发送明文消息（当未配置弹窗时）
+      // Fallback: 如果没有配置弹窗逻辑，直接发送明文（无兜底）
       const optimisticMessage = createOptimisticMessage({
         chatType: 'group',
         content: originalMessageText,
@@ -314,31 +326,31 @@ export function useMessageActions({
         currentAddress: currentAddress
       });
 
-      // 乐观更新 UI：立即显示消息
       setMessages((prev) => [...prev, optimisticMessage]);
       setTimeout(() => scrollToBottom('smooth'), 100);
 
       try {
         console.log('🔵 [消息操作] [群聊] 正在请求钱包签名 (支付 Gas)...');
         await sendGroupMessage(originalMessageText, 0);
-        console.log('✅ [消息操作] [群聊] 交易已提交，等待上链确认...');
+        console.log('✅ [消息操作] [群聊] 交易已提交');
+        // 简单清除 sending 状态
+        updateMessageStatus(setMessages, optimisticMessage.id, undefined);
       } catch (error: any) {
         console.error('❌ [消息操作] [群聊] 发送失败或用户取消:', error);
         updateMessageStatus(setMessages, optimisticMessage.id, 'failed');
-
-        // 显示友好的错误提示
-        const errorMessage = error?.message || '发送失败';
         toast({
           title: '发送失败',
-          description: errorMessage,
+          description: error?.message || '发送失败',
           variant: 'destructive'
         });
       }
     },
     [
       groupAddress,
+      groupType,
       setPendingGroupMessage,
       setShowSendModeModal,
+      handleSendModeSelect,
       currentAddress,
       setMessages,
       scrollToBottom,
@@ -348,17 +360,6 @@ export function useMessageActions({
 
   /**
    * 处理私聊消息发送
-   *
-   * 处理流程：
-   * 1. 验证前置条件（地址、合约、钱包等）
-   * 2. 从合约获取接收者公钥
-   * 3. 根据公钥决定是否加密消息（有公钥则加密，无则明文）
-   * 4. 创建乐观消息并添加到消息列表
-   * 5. 调用合约发送消息
-   * 6. 手动拉取最新消息作为兜底（防止事件监听失败）
-   * 7. 发送失败时更新消息状态为 failed
-   *
-   * @param originalMessageText 原始消息内容
    */
   const handlePrivateMessage = useCallback(
     async (originalMessageText: string) => {
@@ -367,18 +368,23 @@ export function useMessageActions({
         currentAddress,
         recipientAddress,
         publicClient,
-        writeContract
+        writeContract,
+        directMessageAddress || undefined
       );
 
-      if (!validation.valid) {
-        toast({ title: validation.error, variant: 'destructive' });
+      if (!validation.valid || !directMessageAddress) {
+        toast({
+          title: validation.error || '无法获取合约地址',
+          variant: 'destructive'
+        });
         return;
       }
 
       // 从合约获取接收者公钥（不缓存，每次实时获取）
       const recipientPublicKey = await fetchRecipientPublicKey(
         publicClient,
-        recipientAddress
+        recipientAddress,
+        directMessageAddress
       );
 
       let contentToSend: string;
@@ -418,7 +424,7 @@ export function useMessageActions({
         // 调用合约发送消息
         console.log('🔵 [消息操作] [私聊] 正在请求钱包签名 (支付 Gas)...');
         await writeContract({
-          address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+          address: directMessageAddress,
           abi: DirectMessageAbi,
           functionName: 'sendMessage',
           args: [getAddress(recipientAddress), contentToSend],
@@ -434,7 +440,8 @@ export function useMessageActions({
           recipientAddress,
           contentToSend,
           newMessageObject.id,
-          setMessages
+          setMessages,
+          directMessageAddress
         );
       } catch (error: any) {
         console.error('❌ [消息操作] [私聊] 发送失败或用户取消:', error);
@@ -447,18 +454,13 @@ export function useMessageActions({
       publicClient,
       writeContract,
       setMessages,
-      scrollToBottom
+      scrollToBottom,
+      directMessageAddress
     ]
   );
 
   /**
    * 发送新消息（统一入口）
-   *
-   * 根据聊天类型路由到对应的发送函数：
-   * - 群聊 → handleGroupMessage
-   * - 私聊 → handlePrivateMessage
-   *
-   * @param content 消息内容
    */
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -477,15 +479,6 @@ export function useMessageActions({
 
   /**
    * 重发失败的消息
-   *
-   * 处理流程：
-   * 1. 更新消息状态为 sending（转圈圈）
-   * 2. 根据聊天类型执行不同的重发逻辑：
-   *    - 私聊：重新获取公钥、加密、调用合约
-   *    - 群聊：直接调用 sendGroupMessage
-   * 3. 发送失败时更新消息状态为 failed
-   *
-   * @param failedMessage 失败的消息对象
    */
   const handleRetryMessage = useCallback(
     async (failedMessage: Message) => {
@@ -495,24 +488,21 @@ export function useMessageActions({
         content: failedMessage.content.substring(0, 20)
       });
 
-      // 1. 更新状态为发送中
       updateMessageStatus(setMessages, failedMessage.id, 'sending');
 
-      // 2. 根据聊天类型重新发送
       if (chatType === 'private') {
-        // 私聊：重新调用发送逻辑
         try {
-          if (!currentAddress || !recipientAddress) {
-            throw new Error('地址无效');
+          if (!currentAddress || !recipientAddress || !directMessageAddress) {
+            throw new Error('地址无效或合约地址获取失败');
           }
 
-          // 获取对方公钥 (不缓存)
+          // 获取对方公钥
           const recipientPublicKey = await fetchRecipientPublicKey(
             publicClient,
-            recipientAddress
+            recipientAddress,
+            directMessageAddress
           );
 
-          // 准备消息内容
           const originalText =
             failedMessage.originalContent || failedMessage.content;
 
@@ -523,7 +513,7 @@ export function useMessageActions({
 
           // 发送到合约
           await writeContract({
-            address: DIRECT_MESSAGE_CONTRACT_ADDRESS,
+            address: directMessageAddress,
             abi: DirectMessageAbi,
             functionName: 'sendMessage',
             args: [getAddress(recipientAddress), contentToSend],
@@ -531,13 +521,12 @@ export function useMessageActions({
           });
 
           console.log('✅ 重发消息已提交');
+          updateMessageStatus(setMessages, failedMessage.id, 'sent');
         } catch (error: any) {
           console.error('❌ 重发消息失败:', error);
-          // 失败后再次标记为 failed
           updateMessageStatus(setMessages, failedMessage.id, 'failed');
         }
       } else {
-        // 群聊：重新调用群聊发送
         try {
           const isEncrypted = failedMessage.isEncrypted;
           const contentToSend =
@@ -546,12 +535,8 @@ export function useMessageActions({
               : failedMessage.originalContent || failedMessage.content;
 
           await sendGroupMessage(contentToSend, isEncrypted ? 1 : 0);
-
-          // 注意：不要在这里立即清除 status！
-          // 如果交易成功，会通过区块链事件或其他方式清除
-          // 如果交易失败，会通过错误监听来设置为 failed
+          updateMessageStatus(setMessages, failedMessage.id, 'sent');
         } catch (error: any) {
-          // 重发失败，设置状态为 failed
           updateMessageStatus(setMessages, failedMessage.id, 'failed');
         }
       }
@@ -563,12 +548,68 @@ export function useMessageActions({
       recipientAddress,
       publicClient,
       writeContract,
-      sendGroupMessage
+      sendGroupMessage,
+      directMessageAddress
     ]
+  );
+
+  // ============== 补充的辅助功能 ==============
+
+  // 复制消息内容
+  const copyMessage = useCallback((content: string) => {
+    if (!content) return;
+    navigator.clipboard
+      .writeText(content)
+      .then(() => {
+        toast({ title: '已复制' });
+      })
+      .catch(() => {
+        toast({ title: '复制失败', variant: 'destructive' });
+      });
+  }, []);
+
+  // 删除消息 (仅本地乐观删除)
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        // setIsDeleting(true); // 如果有 state 控制 loading
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        toast({ title: '消息已删除', variant: 'success' });
+        return true;
+      } catch (error) {
+        console.error('删除消息失败:', error);
+        toast({ title: '删除失败', variant: 'destructive' });
+        return false;
+      }
+    },
+    [setMessages]
+  );
+
+  // 撤回消息 (Placeholder)
+  const recallMessage = useCallback(async (messageId: string) => {
+    toast({
+      title: '功能开发中',
+      description: '撤回功能暂不可用'
+    });
+  }, []);
+
+  // 清除草稿
+  const dispatch = useDispatch();
+  const clearDraft = useCallback(
+    (chatId: string) => {
+      dispatch(clearDraftInput(chatId));
+    },
+    [dispatch]
   );
 
   return {
     handleSendMessage,
-    handleRetryMessage
+    handleRetryMessage,
+    copyMessage,
+    deleteMessage,
+    recallMessage,
+    clearDraft
   };
 }
