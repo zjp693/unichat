@@ -32,6 +32,7 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 import { TokenDropdown } from '@/components/contract/TokenDropdown';
 import { TransactionProgress } from '@/components/contract/TransactionProgress';
 import { setChatMeta } from '@/lib/chatMetaSlice';
+import { useToast } from '@/hooks/use-toast';
 
 // 类型定义
 interface CreateGroupSheetProps {
@@ -59,6 +60,7 @@ export function CreateGroupSheet({
 }: CreateGroupSheetProps) {
   const router = useRouter();
   const dispatch = useDispatch();
+  const { toast } = useToast();
 
   // 获取已上币代币列表
   const { tokens: allTokens, isLoading: isLoadingTokens } = useAllowedTokens();
@@ -127,35 +129,42 @@ export function CreateGroupSheet({
     if (status.state === 'success' && !hasNavigated.current && selectedToken) {
       hasNavigated.current = true;
 
-      const timer = setTimeout(() => {
+      // TypeScript 类型守卫：此时已确认 state === 'success'
+      if (status.state === 'success') {
+        // 1. 关闭 Sheet
         onClose();
-        // TypeScript 类型守卫：此时已确认 state === 'success'
-        if (status.state === 'success') {
-          // 存储群聊元信息到 Redux
-          dispatch(
-            setChatMeta({
-              chatId: status.groupAddress,
-              meta: {
-                type: 'group',
-                groupType: 'redpacket', // 新建的群都是红包群
-                name: name,
-                address: status.groupAddress,
-                level: 0, // 红包群没有等级
-                memberCount: 1, // 初始只有创建者
-                groupCondition: `入群费: ${entryFee}`,
-                avatar: '' // 红包群暂无头像
-              }
-            })
-          );
 
-          // 跳转到群聊页面
-          router.push(`/chat/${status.groupAddress}?type=group`);
-        }
-      }, 1500);
+        // 2. 显示成功提示 toast
+        toast({
+          title: '🎉 群聊创建成功！',
+          description: '欢迎来到你的红包群',
+          variant: 'success'
+        });
 
-      return () => clearTimeout(timer);
+        // 3. 存储群聊元信息到 Redux
+        dispatch(
+          setChatMeta({
+            chatId: status.groupAddress,
+            meta: {
+              type: 'group',
+              groupType: 'redpacket', // 新建的群都是红包群
+              name: name,
+              address: status.groupAddress,
+              level: 0, // 红包群没有等级
+              memberCount: 1, // 初始只有创建者
+              groupCondition: `入群费: ${entryFee}`,
+              avatar: '' // 红包群暂无头像
+            }
+          })
+        );
+
+        // 4. 立即跳转到群聊页面
+        router.push(
+          `/chat/${status.groupAddress}?type=group&groupType=redpacket`
+        );
+      }
     }
-  }, [status, selectedToken, name, dispatch, onClose, router]);
+  }, [status, selectedToken, name, entryFee, dispatch, onClose, router, toast]);
 
   // 表单验证
   const isFormValid =

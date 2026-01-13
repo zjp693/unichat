@@ -1,12 +1,14 @@
-import { useReadContract, usePublicClient } from 'wagmi';
+import { useReadContract, usePublicClient, useChainId } from 'wagmi';
 import { useQuery } from '@tanstack/react-query';
 import communityABI from '@/contract/abi/community.json';
-import { Abi, parseAbi } from 'viem';
+import { Abi, parseAbi, Address } from 'viem';
+import { getContractAddress } from '@/lib/web3/contracts';
 
-const RedPacketGroupABI = parseAbi([
+const RedPacketGroupViewABI = parseAbi([
   'function memberCount() view returns (uint32)',
-  'function memberListLength() view returns (uint256)',
-  'function getMember(address) view returns (bool exists, uint64 joinAt, uint32 subgroupId)'
+  'function memberListLength(address group) view returns (uint256)',
+  'function getMember(address group, address addr) view returns (bool exists, uint64 joinAt, uint32 subgroupId)',
+  'function getMembers(address group, uint256 offset, uint256 limit) view returns (address[] members, uint256 count)'
 ]);
 
 type GroupType = 'community' | 'redpacket';
@@ -20,6 +22,11 @@ export function useCommunityMembersCount(
   groupAddress?: string,
   groupType: GroupType = 'community'
 ) {
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
   const isRedPacket = groupType === 'redpacket';
 
   const {
@@ -28,26 +35,20 @@ export function useCommunityMembersCount(
     error,
     refetch
   } = useReadContract({
-    address: groupAddress as `0x${string}`,
-    abi: (isRedPacket ? RedPacketGroupABI : communityABI.abi) as any,
-    functionName: isRedPacket ? 'memberCount' : 'getActiveMembersCount',
+    address: isRedPacket
+      ? RED_PACKET_GROUP_VIEW_ADDRESS || undefined
+      : (groupAddress as `0x${string}`),
+    abi: (isRedPacket ? RedPacketGroupViewABI : communityABI.abi) as any,
+    functionName: isRedPacket ? 'memberListLength' : 'getActiveMembersCount',
+    args:
+      isRedPacket && groupAddress ? [groupAddress as `0x${string}`] : undefined,
     query: {
-      enabled: !!groupAddress,
+      enabled:
+        !!groupAddress && (!isRedPacket || !!RED_PACKET_GROUP_VIEW_ADDRESS),
       staleTime: 1000 * 30, // 30秒缓存
       refetchInterval: 1000 * 60 // 每分钟自动刷新一次
     }
   });
-
-  // // 调试日志
-  // console.log('[成员数量查询]', {
-  //   groupAddress,
-  //   groupType,
-  //   isRedPacket,
-  //   functionName: isRedPacket ? 'memberCount' : 'getActiveMembersCount',
-  //   rawMemberCount: memberCount,
-  //   parsedMemberCount: memberCount ? Number(memberCount) : 0,
-  //   error: error?.message
-  // });
 
   return {
     memberCount: memberCount ? Number(memberCount) : 0,
@@ -70,26 +71,28 @@ export function useCommunityMembers(
   count: number = 100,
   groupType: GroupType = 'community'
 ) {
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
   const isRedPacket = groupType === 'redpacket';
 
-  // 红包群使用 getMembers 接口
-  const RedPacketMembersABI = parseAbi([
-    'function getMembers(uint256 offset, uint256 limit) view returns (address[] members, uint256 count)'
-  ]);
-
-  // 红包群成员查询
+  // 红包群成员查询（使用 RedPacketGroupView 合约）
   const {
     data: redPacketMembersData,
     isLoading: isRedPacketLoading,
     error: redPacketError,
     refetch: refetchRedPacket
   } = useReadContract({
-    address: groupAddress as `0x${string}`,
-    abi: RedPacketMembersABI,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI,
     functionName: 'getMembers',
-    args: [BigInt(start), BigInt(count)],
+    args: groupAddress
+      ? [groupAddress as `0x${string}`, BigInt(start), BigInt(count)]
+      : undefined,
     query: {
-      enabled: !!groupAddress && isRedPacket,
+      enabled: !!groupAddress && isRedPacket && !!RED_PACKET_GROUP_VIEW_ADDRESS,
       staleTime: 1000 * 30 // 30秒缓存
     }
   });
@@ -143,6 +146,11 @@ export function useIsActiveMember(
   userAddress?: string,
   groupType: GroupType = 'community'
 ) {
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
   const isRedPacket = groupType === 'redpacket';
 
   const {
@@ -151,12 +159,21 @@ export function useIsActiveMember(
     error,
     refetch
   } = useReadContract({
-    address: groupAddress as `0x${string}`,
-    abi: (isRedPacket ? RedPacketGroupABI : communityABI.abi) as any,
+    address: isRedPacket
+      ? RED_PACKET_GROUP_VIEW_ADDRESS || undefined
+      : (groupAddress as `0x${string}`),
+    abi: (isRedPacket ? RedPacketGroupViewABI : communityABI.abi) as any,
     functionName: isRedPacket ? 'getMember' : 'isActiveMember',
-    args: userAddress ? [userAddress as `0x${string}`] : undefined,
+    args: userAddress
+      ? isRedPacket
+        ? [groupAddress as `0x${string}`, userAddress as `0x${string}`]
+        : [userAddress as `0x${string}`]
+      : undefined,
     query: {
-      enabled: !!groupAddress && !!userAddress,
+      enabled:
+        !!groupAddress &&
+        !!userAddress &&
+        (!isRedPacket || !!RED_PACKET_GROUP_VIEW_ADDRESS),
       staleTime: 1000 * 30 // 30秒缓存
     }
   });
@@ -196,17 +213,26 @@ export async function getAllRedPacketGroupMembers(
     return [];
   }
 
+  const chainId = publicClient.chain?.id;
+  const VIEW_ADDRESS = getContractAddress(chainId, 'redPacketGroupView');
+
+  if (!VIEW_ADDRESS) {
+    console.error('[getAllRedPacketGroupMembers] View 合约地址未配置');
+    return [];
+  }
+
   const MembersABI = parseAbi([
-    'function memberListLength() view returns (uint256)',
-    'function getMembers(uint256 offset, uint256 limit) view returns (address[] members, uint256 count)'
+    'function memberListLength(address group) view returns (uint256)',
+    'function getMembers(address group, uint256 offset, uint256 limit) view returns (address[] members, uint256 count)'
   ]);
 
   try {
     // 1. 获取成员总数
     const total = (await publicClient.readContract({
-      address: groupAddress,
+      address: VIEW_ADDRESS,
       abi: MembersABI,
-      functionName: 'memberListLength'
+      functionName: 'memberListLength',
+      args: [groupAddress]
     })) as bigint;
 
     if (!total || total === 0n) {
@@ -222,10 +248,10 @@ export async function getAllRedPacketGroupMembers(
 
     while (offset < total) {
       const result = (await publicClient.readContract({
-        address: groupAddress,
+        address: VIEW_ADDRESS,
         abi: MembersABI,
         functionName: 'getMembers',
-        args: [offset, pageSize]
+        args: [groupAddress, offset, pageSize]
       })) as [readonly `0x${string}`[], bigint];
 
       if (result && result[0] && result[0].length > 0) {

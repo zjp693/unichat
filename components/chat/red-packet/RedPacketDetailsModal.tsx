@@ -14,7 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 import {
   useReadContract,
   useAccount,
-  useWaitForTransactionReceipt
+  useWaitForTransactionReceipt,
+  useChainId
 } from 'wagmi';
 import {
   RedPacketAbi,
@@ -25,8 +26,10 @@ import { formatUnits, erc20Abi, getAddress, Abi } from 'viem';
 import { FormattedAmount } from './utils';
 import { ClaimerAvatar, ClaimerName } from './ClaimerInfo';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
 import { usePeerProfile } from '@/hooks/usePeerProfile';
 import { IPFSImg } from '@/components/ui/ipfs-img';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 interface Claimer {
   name: string;
@@ -73,6 +76,11 @@ export function RedPacketDetailsModal({
 }: RedPacketDetailsModalProps) {
   const { toast } = useToast();
   const { address: currentAddress } = useAccount();
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
   const redPacketAddress = useRedPacketAddress();
 
   // 判断是否是红包群
@@ -101,12 +109,21 @@ export function RedPacketDetailsModal({
 
   // 1. 获取红包基本信息
   const { data: packet, refetch: refetchPacket } = useReadContract({
-    address: queryAddress || undefined,
-    abi: (isRedPacketGroup ? RedPacketGroupABI.abi : RedPacketAbi) as Abi,
-    functionName: isRedPacketGroup ? 'packets' : 'getPacket',
-    args: packetId ? [BigInt(packetId)] : undefined,
+    address: isRedPacketGroup
+      ? RED_PACKET_GROUP_VIEW_ADDRESS || undefined
+      : queryAddress || undefined,
+    abi: (isRedPacketGroup ? RedPacketGroupViewABI.abi : RedPacketAbi) as Abi,
+    functionName: 'getPacket',
+    args: packetId
+      ? isRedPacketGroup
+        ? [queryAddress as `0x${string}`, BigInt(packetId)]
+        : [BigInt(packetId)]
+      : undefined,
     query: {
-      enabled: !!packetId && isOpen
+      enabled:
+        !!packetId &&
+        isOpen &&
+        (!isRedPacketGroup || !!RED_PACKET_GROUP_VIEW_ADDRESS)
     }
   });
 
@@ -173,12 +190,24 @@ export function RedPacketDetailsModal({
   // 4. 获取领取记录（红包群）
   const { data: redPacketRecordsData, refetch: refetchRedPacketRecords } =
     useReadContract({
-      address: queryAddress || undefined,
-      abi: RedPacketGroupABI.abi as Abi,
+      address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+      abi: RedPacketGroupViewABI.abi as Abi,
       functionName: 'getPacketClaimDetails',
-      args: packetId ? [BigInt(packetId), BigInt(0), BigInt(100)] : undefined,
+      args:
+        packetId && queryAddress
+          ? [
+              queryAddress as `0x${string}`,
+              BigInt(packetId),
+              BigInt(0),
+              BigInt(100)
+            ]
+          : undefined,
       query: {
-        enabled: !!packetId && isOpen && isRedPacketGroup
+        enabled:
+          !!packetId &&
+          isOpen &&
+          isRedPacketGroup &&
+          !!RED_PACKET_GROUP_VIEW_ADDRESS
       }
     });
 
@@ -475,8 +504,9 @@ export function RedPacketDetailsModal({
 
         {/* 汇总栏 */}
         <div className="bg-[#f7f7f7] px-4 py-2 text-[13px] text-gray-500 shrink-0 border-b border-gray-200">
-          {packetData?.packetType === 0 ? (
-            // 私聊红包：显示简单的状态
+          {!isRedPacketGroup && packetData?.packetType === 0 ? (
+            // 官方红包的私聊红包：packetType === PacketType.Personal (0)
+            // 私聊红包只有 1 份，给特定收件人
             claimedCount > 0 ? (
               <>
                 1个红包共{claimedAmountStr}
@@ -489,7 +519,7 @@ export function RedPacketDetailsModal({
               </>
             )
           ) : (
-            // 群红包：显示进度
+            // 群红包：包括官方群红包（packetType=1）和红包群的所有红包
             <>
               已领取{claimedCount}/{totalCount}个红包，共{claimedAmountStr}/
               {totalAmountStr} {displaySymbol}

@@ -498,13 +498,52 @@ export function useMessageLoader({
       console.log('📨 [消息监听] [群聊] 收到群消息:', newMessage.id);
       setMessages((prev) => {
         // 1. 尝试找到对应的乐观更新消息 (发送中且内容相同)
-        const pendingIndex = prev.findIndex(
-          (msg) =>
-            msg.status === 'sending' &&
-            msg.sender === 'user' &&
-            // 对于群聊，content 就是原始内容，可以直接比较
-            msg.content === newMessage.content
-        );
+        // 1. 尝试找到对应的乐观更新消息 (发送中且匹配)
+        const pendingIndex = prev.findIndex((msg) => {
+          if (msg.status !== 'sending' || msg.sender !== 'user') return false;
+
+          // A. 直接内容匹配 (适用于普通文本和格式完全一致的情况)
+          if (msg.content === newMessage.content) return true;
+
+          // B. 尝试红包 Packet ID 匹配 (适用于红包群)
+          // 场景: 发送时是 "ID|JSON" 或纯 ID，接收到的是格式化后的 JSON
+          try {
+            let optPacketId = '';
+            // 1. 尝试从乐观消息提取 ID
+            // 格式可能是: "123", "123|...", 或 JSON
+            const pipeIndex = msg.content.indexOf('|');
+            if (pipeIndex !== -1) {
+              const possibleId = msg.content.substring(0, pipeIndex).trim();
+              if (/^\d+$/.test(possibleId)) {
+                optPacketId = possibleId;
+              }
+            } else if (/^\d+$/.test(msg.content.trim())) {
+              optPacketId = msg.content.trim();
+            } else {
+              // 尝试当作 JSON 解析
+              const parsed = JSON.parse(msg.content);
+              if (parsed.packetId) optPacketId = parsed.packetId.toString();
+            }
+
+            let newPacketId = '';
+            // 2. 尝试从新消息提取 ID (通常已被 useListenCommunityMessage 格式化为 JSON)
+            const newParsed = JSON.parse(newMessage.content);
+            if (newParsed.packetId) newPacketId = newParsed.packetId.toString();
+
+            // 3. 只有当两个 ID 都存在且相等时才认为匹配
+            if (optPacketId && newPacketId && optPacketId === newPacketId) {
+              console.log(
+                '✅ [消息监听] [群聊] 通过 Packet ID 匹配成功:',
+                optPacketId
+              );
+              return true;
+            }
+          } catch (e) {
+            // 解析失败忽略，继续视为不匹配
+          }
+
+          return false;
+        });
 
         if (pendingIndex !== -1) {
           console.log(

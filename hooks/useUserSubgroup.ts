@@ -1,20 +1,28 @@
-import { useReadContract } from 'wagmi';
+import { useReadContract, useChainId } from 'wagmi';
 import { Address, parseAbi } from 'viem';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 /**
  * 获取用户在红包群中的成员信息
  * 用于判断用户是否有分群权限
  */
 export function useUserSubgroup(groupAddress?: Address, userAddress?: Address) {
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
+
   const { data, isLoading, error, refetch } = useReadContract({
-    address: groupAddress,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
     abi: parseAbi([
-      'function getMember(address) view returns (bool exists, uint64 joinAt, uint32 subgroupId)'
+      'function getMember(address group, address addr) view returns (bool exists, uint64 joinAt, uint32 subgroupId)'
     ]),
     functionName: 'getMember',
-    args: userAddress ? [userAddress] : undefined,
+    args: groupAddress && userAddress ? [groupAddress, userAddress] : undefined,
     query: {
-      enabled: !!groupAddress && !!userAddress
+      enabled:
+        !!groupAddress && !!userAddress && !!RED_PACKET_GROUP_VIEW_ADDRESS
     }
   });
 

@@ -16,7 +16,8 @@ export function TransactionProgress({
   status,
   onClose
 }: TransactionProgressProps) {
-  if (status.state === 'idle') return null;
+  // 成功状态不显示弹窗，由调用方处理
+  if (status.state === 'idle' || status.state === 'success') return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -27,8 +28,8 @@ export function TransactionProgress({
             icon={
               <Loader2 className="w-16 h-16 text-purple-600 animate-spin" />
             }
-            title="准备中..."
-            description="正在准备交易参数"
+            title="准备创建..."
+            description="正在准备创建你的红包群"
           />
         )}
 
@@ -38,8 +39,8 @@ export function TransactionProgress({
             icon={
               <Loader2 className="w-16 h-16 text-purple-600 animate-spin" />
             }
-            title="等待签名"
-            description="请在钱包中确认交易"
+            title="💼 请确认钱包"
+            description="请在钱包中确认创建群聊的交易"
           />
         )}
 
@@ -49,19 +50,9 @@ export function TransactionProgress({
             icon={
               <Loader2 className="w-16 h-16 text-purple-600 animate-spin" />
             }
-            title="正在创建群聊..."
-            description="交易已提交，等待确认"
+            title="⏰ 正在创建群聊..."
+            description="交易已提交，区块链正在确认中，请耐心等待"
             txHash={status.txHash}
-          />
-        )}
-
-        {/* 成功 */}
-        {status.state === 'success' && (
-          <StatusContent
-            icon={<CheckCircle className="w-16 h-16 text-green-500" />}
-            title="创建成功！"
-            description={`群地址: ${formatAddress(status.groupAddress)}`}
-            success
           />
         )}
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useAccount, useReadContract } from 'wagmi';
+import { useAccount, useReadContract, useChainId } from 'wagmi';
 import { parseAbi } from 'viem';
 import dayjs from 'dayjs';
 import { RedPacketMessage } from './RedPacketMessage';
@@ -12,6 +12,7 @@ import {
   useRedPacketAddress
 } from '@/lib/RedPacketAbi';
 import type { RedPacketConfig } from './types';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 interface RedPacketMessageWrapperProps {
   config: RedPacketConfig;
@@ -69,26 +70,38 @@ export function RedPacketMessageWrapper({
     currentAddress
   );
 
-  // 红包群红包查询（直接查询群合约）
-  const RedPacketGroupABI = parseAbi([
-    'function getPacket(uint256) view returns (uint8 kind, address token, uint64 createdAt, uint32 targetSubgroupId, uint32 sharesTotal, uint256 totalAmount, uint256 remainingAmount, uint32 remainingShares)',
+  // 红包群红包查询（使用 RedPacketGroupView 合约）
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
+
+  const RedPacketGroupViewABI = parseAbi([
+    'function getPacket(address group, uint256 packetId) view returns (uint8 kind, address token, uint64 createdAt, uint32 targetSubgroupId, uint32 sharesTotal, uint256 totalAmount, uint256 remainingAmount, uint32 remainingShares)',
     'function claimed(uint256, address) view returns (bool)'
   ]);
 
   const { data: redPacketGroupPacket } = useReadContract({
-    address: queryAddress || undefined,
-    abi: RedPacketGroupABI,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI,
     functionName: 'getPacket',
     args:
-      isRedPacketGroup && config.packetId
-        ? [BigInt(config.packetId)]
+      isRedPacketGroup && config.packetId && queryAddress
+        ? [queryAddress, BigInt(config.packetId)]
         : undefined,
-    query: { enabled: isRedPacketGroup && !!config.packetId }
+    query: {
+      enabled:
+        isRedPacketGroup &&
+        !!config.packetId &&
+        !!queryAddress &&
+        !!RED_PACKET_GROUP_VIEW_ADDRESS
+    }
   });
 
   const { data: redPacketGroupClaimed } = useReadContract({
     address: queryAddress || undefined,
-    abi: RedPacketGroupABI,
+    abi: RedPacketGroupViewABI,
     functionName: 'claimed',
     args:
       isRedPacketGroup && config.packetId && currentAddress
@@ -182,7 +195,10 @@ export function RedPacketMessageWrapper({
         )
           return 'expired';
 
-        // 私聊红包：如果已经有人领取了（claimedShares > 0），显示为 claimed
+        // 官方红包合约的私聊红包判断：
+        // 私聊红包（packetType === PacketType.Personal，通常是 0）只有 1 份，给特定收件人
+        // 如果已经被领取了，显示为 claimed
+        // 注意：这个判断只对官方红包有效，红包群没有 packetType 字段
         const packetType = Number(packetData.packetType);
         if (packetType === 0 && claimedShares > 0) return 'claimed';
       }

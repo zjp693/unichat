@@ -23,6 +23,7 @@ import { IPFSImg } from '@/components/ui/ipfs-img';
 import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 import { useUpdateGroupSettings } from '@/hooks/useUpdateGroupSettings';
 import type { Address } from 'viem';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 // 定义布局常量，可以从公共文件导入或在此定义
 const TOP_BAR_HEIGHT = 56;
@@ -221,23 +222,37 @@ export default function GroupChatInfoPanel({
       : false;
 
   // 检查是否是群成员
-  // 红包群使用 getMember，Community 群使用 isActiveMember
+  // 红包群使用 RedPacketGroupView 的 getMember，Community 群使用 isActiveMember
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
+
   const RedPacketMemberABI = parseAbi([
-    'function getMember(address) view returns (bool exists, uint64 joinAt, uint32 subgroupId)'
+    'function getMember(address group, address addr) view returns (bool exists, uint64 joinAt, uint32 subgroupId)'
   ]);
 
   const CommunityMemberABI = parseAbi([
     'function isActiveMember(address account) view returns (bool)'
   ]);
 
-  // 红包群成员查询
+  // 红包群成员查询（使用 View 合约）
   const { data: redPacketMemberData, refetch: refetchRedPacketMember } =
     useReadContract({
-      address: conversationId as `0x${string}`,
+      address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
       abi: RedPacketMemberABI,
       functionName: 'getMember',
-      args: currentUserAddress ? [currentUserAddress] : undefined,
-      query: { enabled: isRedPacket && !!currentUserAddress }
+      args:
+        currentUserAddress && conversationId
+          ? [conversationId as `0x${string}`, currentUserAddress]
+          : undefined,
+      query: {
+        enabled:
+          isRedPacket &&
+          !!currentUserAddress &&
+          !!RED_PACKET_GROUP_VIEW_ADDRESS &&
+          !!conversationId
+      }
     });
 
   // Community 群成员查询
@@ -355,7 +370,11 @@ export default function GroupChatInfoPanel({
 
       console.log('✅ [加入群组] 加入成功:', joinTx);
 
-      toast({ title: '加入成功', description: '你已成功加入群组' });
+      toast({
+        title: '加入成功',
+        description: '你已成功加入群组',
+        variant: 'success'
+      });
 
       // 刷新成员状态
       refetchMember();

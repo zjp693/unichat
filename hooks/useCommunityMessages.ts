@@ -2,9 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useReadContract } from 'wagmi';
 import communityABI from '@/contract/abi/community.json';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
 import { Abi, Address } from 'viem';
 import type { Message } from '@/lib/chat/types';
 import { decodeGroupRedPacketCid } from '@/lib/redpacket/encoding';
+
+import { useChainId } from 'wagmi';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 interface CommunityMessage {
   sender: Address;
@@ -30,6 +34,12 @@ export function useCommunityMessages(
   /** 群聊类型：官方群(community) 或 红包群(redpacket) */
   groupType: 'community' | 'redpacket' = 'community'
 ) {
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
+
   const [messages, setMessages] = useState<Message[]>([]);
 
   const isCommunityGroup = groupType === 'community';
@@ -58,11 +68,16 @@ export function useCommunityMessages(
     refetch: refetchRedPacketCount,
     isLoading: isRedPacketCountLoading
   } = useReadContract({
-    address: communityAddress as `0x${string}`,
-    abi: RedPacketGroupABI.abi as Abi,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI.abi as Abi,
     functionName: 'mainMessageCount',
+    args: [communityAddress as Address],
     query: {
-      enabled: enabled && !!communityAddress && isRedPacketGroup,
+      enabled:
+        enabled &&
+        !!communityAddress &&
+        isRedPacketGroup &&
+        !!RED_PACKET_GROUP_VIEW_ADDRESS,
       staleTime: 1000 * 30,
       gcTime: 1000 * 60 * 5,
       refetchOnWindowFocus: false
@@ -112,12 +127,17 @@ export function useCommunityMessages(
     refetch: refetchRedPacketMessages,
     isLoading: isRedPacketMessagesLoading
   } = useReadContract({
-    address: communityAddress as `0x${string}`,
-    abi: RedPacketGroupABI.abi as Abi,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI.abi as Abi,
     functionName: 'getMainMessages',
-    args: [BigInt(start), BigInt(count)],
+    args: [communityAddress as Address, BigInt(start), BigInt(count)],
     query: {
-      enabled: enabled && !!communityAddress && count > 0 && isRedPacketGroup,
+      enabled:
+        enabled &&
+        !!communityAddress &&
+        count > 0 &&
+        isRedPacketGroup &&
+        !!RED_PACKET_GROUP_VIEW_ADDRESS,
       staleTime: 1000 * 60 * 2,
       gcTime: 1000 * 60 * 10,
       refetchOnWindowFocus: false,

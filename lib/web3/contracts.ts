@@ -18,7 +18,8 @@ export type ContractName =
   | 'directMessage' // 私聊消息合约
   | 'communityFactory' // 社区工厂合约（群聊）
   | 'registry' // 红包群注册中心
-  | 'groupFactory'; // 红包群工厂
+  | 'groupFactory' // 红包群工厂
+  | 'redPacketGroupView'; // 红包群视图合约
 
 /**
  * 单链的合约地址集合
@@ -30,6 +31,7 @@ export interface ChainContracts {
   communityFactory: Address;
   registry: Address;
   groupFactory: Address;
+  redPacketGroupView: Address;
 }
 
 /**
@@ -45,7 +47,9 @@ export const CONTRACTS: Record<SupportedChainId, ChainContracts> = {
       .NEXT_PUBLIC_DIRECT_MESSAGE_ADDRESS_ARB as Address,
     communityFactory: process.env.NEXT_PUBLIC_FACTORY_ADDRESS_ARB as Address,
     registry: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS_ARB as Address,
-    groupFactory: process.env.NEXT_PUBLIC_GROUP_FACTORY_ADDRESS_ARB as Address
+    groupFactory: process.env.NEXT_PUBLIC_GROUP_FACTORY_ADDRESS_ARB as Address,
+    redPacketGroupView: process.env
+      .NEXT_PUBLIC_RED_PACKET_GROUP_VIEW_ADDRESS_ARB as Address
   },
 
   // opBNB (204) - 后缀 _OPBNB
@@ -56,7 +60,10 @@ export const CONTRACTS: Record<SupportedChainId, ChainContracts> = {
       .NEXT_PUBLIC_DIRECT_MESSAGE_ADDRESS_OPBNB as Address,
     communityFactory: process.env.NEXT_PUBLIC_FACTORY_ADDRESS_OPBNB as Address,
     registry: process.env.NEXT_PUBLIC_REGISTRY_ADDRESS_OPBNB as Address,
-    groupFactory: process.env.NEXT_PUBLIC_GROUP_FACTORY_ADDRESS_OPBNB as Address
+    groupFactory: process.env
+      .NEXT_PUBLIC_GROUP_FACTORY_ADDRESS_OPBNB as Address,
+    redPacketGroupView: process.env
+      .NEXT_PUBLIC_RED_PACKET_GROUP_VIEW_ADDRESS_OPBNB as Address
   }
 };
 

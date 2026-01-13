@@ -9,9 +9,11 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { useReadContract, useWatchContractEvent } from 'wagmi';
+import { useReadContract, useWatchContractEvent, useChainId } from 'wagmi';
 import { Address, Abi } from 'viem';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
+import { getContractAddress } from '@/lib/web3/contracts';
 
 // ============================================
 // 类型定义
@@ -170,6 +172,11 @@ export function useReferralLeaderboard(
   page: number = 0,
   pageSize: number = 20
 ) {
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
   const [shouldRefetch, setShouldRefetch] = useState(0);
 
   // 监听邀请计数更新事件，自动刷新
@@ -186,12 +193,12 @@ export function useReferralLeaderboard(
 
   // 获取排行榜数据
   const { data, isLoading, error, refetch } = useReadContract({
-    address: groupAddress,
-    abi: LEADERBOARD_ABI,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI.abi as Abi,
     functionName: 'getReferralLeaderboard',
-    args: [BigInt(page * pageSize), BigInt(pageSize)],
+    args: [groupAddress as Address, BigInt(page * pageSize), BigInt(pageSize)],
     query: {
-      enabled: !!groupAddress
+      enabled: !!groupAddress && !!RED_PACKET_GROUP_VIEW_ADDRESS
     }
   });
 
@@ -251,12 +258,18 @@ export function useReferralLeaderboard(
  * 获取推荐人总数
  */
 export function useReferrerListLength(groupAddress: Address | undefined) {
+  const chainId = useChainId();
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
   return useReadContract({
-    address: groupAddress,
-    abi: LEADERBOARD_ABI,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI.abi as Abi,
     functionName: 'referrerListLength',
+    args: [groupAddress as Address],
     query: {
-      enabled: !!groupAddress
+      enabled: !!groupAddress && !!RED_PACKET_GROUP_VIEW_ADDRESS
     }
   });
 }

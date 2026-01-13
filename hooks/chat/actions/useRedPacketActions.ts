@@ -863,36 +863,89 @@ export function useRedPacketActions({
       }
 
       try {
-        // 先获取红包信息，判断是否是发送者
-        const packet = (await publicClient.readContract({
-          address: redPacketAddress as `0x${string}`,
-          abi: RedPacketAbi,
-          functionName: 'getPacket',
-          args: [BigInt(packetId)]
-        })) as any;
+        // 判断是否是红包群的红包
+        let isRedPacketGroup = groupType === 'redpacket';
+        let targetGroupAddress: Address | undefined = groupAddress;
 
-        // 如果是私聊红包且当前用户是发送者，直接打开详情页
-        if (
-          packet.packetType === 0 &&
-          packet.creator?.toLowerCase() === currentAddress.toLowerCase()
-        ) {
-          console.log('👀 发送者查看自己发的私聊红包');
-          setDetailsRedPacket(message);
-          return;
+        // 尝试从消息内容中获取更准确的类型信息
+        try {
+          const messageContent = JSON.parse(message.content);
+          if (messageContent.groupType === 'redpacket') {
+            isRedPacketGroup = true;
+          }
+          if (messageContent.groupAddress) {
+            targetGroupAddress = messageContent.groupAddress;
+          }
+        } catch (e) {
+          // JSON 解析失败，使用默认值
         }
 
-        // 检查是否已领取
-        const claimed = (await publicClient.readContract({
-          address: redPacketAddress as `0x${string}`,
-          abi: RedPacketAbi,
-          functionName: 'hasClaimed',
-          args: [BigInt(packetId), currentAddress]
-        })) as boolean;
+        console.log('🎁 [打开红包] 红包信息:', {
+          packetId,
+          isRedPacketGroup,
+          targetGroupAddress,
+          groupType
+        });
 
-        if (claimed) {
-          setDetailsRedPacket(message);
+        // 根据红包类型选择不同的查询逻辑
+        if (isRedPacketGroup && targetGroupAddress) {
+          // ========== 红包群红包 ==========
+          console.log('🎁 [红包群] 查询红包状态...');
+
+          const RedPacketGroupClaimedABI = parseAbi([
+            'function claimed(uint256 packetId, address claimer) view returns (bool)'
+          ]);
+
+          // 检查是否已领取（直接在群合约上调用）
+          const claimed = (await publicClient.readContract({
+            address: targetGroupAddress,
+            abi: RedPacketGroupClaimedABI,
+            functionName: 'claimed',
+            args: [BigInt(packetId), currentAddress]
+          })) as boolean;
+
+          console.log('🎁 [红包群] 领取状态:', { claimed });
+
+          // 红包群的红包：发送者也可以领取
+          if (claimed) {
+            setDetailsRedPacket(message);
+          } else {
+            setSelectedRedPacket(message);
+          }
         } else {
-          setSelectedRedPacket(message);
+          // ========== 官方红包（群/私聊）==========
+          console.log('🎁 [官方红包] 查询红包状态...');
+
+          const packet = (await publicClient.readContract({
+            address: redPacketAddress as `0x${string}`,
+            abi: RedPacketAbi,
+            functionName: 'getPacket',
+            args: [BigInt(packetId)]
+          })) as any;
+
+          // 如果是私聊红包且当前用户是发送者，直接打开详情页
+          if (
+            packet.packetType === 0 &&
+            packet.creator?.toLowerCase() === currentAddress.toLowerCase()
+          ) {
+            console.log('👀 发送者查看自己发的私聊红包');
+            setDetailsRedPacket(message);
+            return;
+          }
+
+          // 检查是否已领取
+          const claimed = (await publicClient.readContract({
+            address: redPacketAddress as `0x${string}`,
+            abi: RedPacketAbi,
+            functionName: 'hasClaimed',
+            args: [BigInt(packetId), currentAddress]
+          })) as boolean;
+
+          if (claimed) {
+            setDetailsRedPacket(message);
+          } else {
+            setSelectedRedPacket(message);
+          }
         }
       } catch (e: any) {
         const errorMessage = e?.message || String(e);
@@ -911,7 +964,15 @@ export function useRedPacketActions({
         }
       }
     },
-    [publicClient, currentAddress, setSelectedRedPacket, setDetailsRedPacket]
+    [
+      publicClient,
+      currentAddress,
+      setSelectedRedPacket,
+      setDetailsRedPacket,
+      groupType,
+      groupAddress,
+      redPacketAddress
+    ]
   );
 
   return {

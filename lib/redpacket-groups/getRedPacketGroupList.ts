@@ -1,20 +1,19 @@
 import { publicClient } from '@/lib/viem';
 
 import UniChatRegistryArtifact from '@/contract/abi/UniChatRegistry.json';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
 import { parseAbi } from 'viem';
+import { getContractAddress } from '@/lib/web3/contracts';
 
-// 定义 RedPacketGroup 所需的最小 ABI
+// RedPacketGroup 合约的写操作 ABI（仅保留非 View 函数）
 const RedPacketGroupABI = parseAbi([
-  'function getGroupSettings() view returns (string groupName, string economicModel, string groupRules, string announcement)',
   'function entryFeeAmount() view returns (uint256)',
-  'function memberCount() view returns (uint32)',
-  'function getMember(address) view returns (bool exists, uint64 joinAt, uint32 subgroupId)',
   'function getMainRank() view returns (string)',
-  'function mainOwner() view returns (address)',
-  // 消息相关
-  'function mainMessageCount() view returns (uint256)',
-  'function mainMessages(uint256) view returns (address from, string content, uint64 timestamp, uint32 subgroupId)'
+  'function mainOwner() view returns (address)'
 ]);
+
+// RedPacketGroupView 合约的 ABI（所有 View 函数）
+const ViewABI = RedPacketGroupViewABI.abi as any;
 
 export interface RedPacketGroupMetadata {
   address: `0x${string}`;
@@ -39,6 +38,11 @@ export async function getRedPacketGroupList(
   registryAddress: `0x${string}`,
   userAddress?: `0x${string}`
 ): Promise<RedPacketGroupMetadata[]> {
+  const chainId = publicClient.chain?.id;
+  const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+    chainId,
+    'redPacketGroupView'
+  );
   // 1. 获取群组总数
   const count = (await publicClient.readContract({
     address: registryAddress,
@@ -66,50 +70,58 @@ export async function getRedPacketGroupList(
     allowFailure: false
   })) as `0x${string}`[];
 
-  // 3. 批量获取所有群的详情 (RedPacketGroup Contract)
+  // 3. 批量获取所有群的详情 (RedPacketGroupView Contract)
   // 如果群数量很大，建议分页，这里假设数量可控
   const metadataCalls: any[] = [];
 
+  if (!RED_PACKET_GROUP_VIEW_ADDRESS) {
+    console.error('[getRedPacketGroupList] View 合约地址未配置');
+    return [];
+  }
+
   groupAddresses.forEach((addr) => {
-    // 3.1 获取群设置 (Name)
+    // 3.1 获取群设置 (Name) - 使用 View 合约
     metadataCalls.push({
-      address: addr,
-      abi: RedPacketGroupABI,
-      functionName: 'getGroupSettings'
+      address: RED_PACKET_GROUP_VIEW_ADDRESS,
+      abi: ViewABI,
+      functionName: 'getGroupSettings',
+      args: [addr]
     });
-    // 3.2 获取入群费
+    // 3.2 获取入群费 - 还在主合约
     metadataCalls.push({
       address: addr,
       abi: RedPacketGroupABI,
       functionName: 'entryFeeAmount'
     });
-    // 3.3 获取成员数
+    // 3.3 获取成员数 - 使用 View 合约（注意函数名改变）
     metadataCalls.push({
-      address: addr,
-      abi: RedPacketGroupABI,
-      functionName: 'memberCount'
+      address: RED_PACKET_GROUP_VIEW_ADDRESS,
+      abi: ViewABI,
+      functionName: 'memberListLength',
+      args: [addr]
     });
-    // 3.4 获取 MainOwner (用于判断创建者是否加入)
+    // 3.4 获取 MainOwner - 还在主合约
     metadataCalls.push({
       address: addr,
       abi: RedPacketGroupABI,
       functionName: 'mainOwner'
     });
 
-    // 3.5 获取消息总数
+    // 3.5 获取消息总数 - 使用 View 合约
     metadataCalls.push({
-      address: addr,
-      abi: RedPacketGroupABI,
-      functionName: 'mainMessageCount'
+      address: RED_PACKET_GROUP_VIEW_ADDRESS,
+      abi: ViewABI,
+      functionName: 'mainMessageCount',
+      args: [addr]
     });
 
-    // 3.6 检查是否已加入 (如果有 userAddress)
+    // 3.6 检查是否已加入 - 使用 View 合约
     if (userAddress) {
       metadataCalls.push({
-        address: addr,
-        abi: RedPacketGroupABI,
+        address: RED_PACKET_GROUP_VIEW_ADDRESS,
+        abi: ViewABI,
         functionName: 'getMember',
-        args: [userAddress]
+        args: [addr, userAddress]
       });
     }
   });
@@ -202,12 +214,17 @@ export async function getRedPacketGroupList(
 
   // 5. 批量获取有消息的群的最后一条消息时间戳
   const groupsWithMessages = groups.filter((g) => g.mainMessageCount > 0);
-  if (groupsWithMessages.length > 0) {
+  if (groupsWithMessages.length > 0 && RED_PACKET_GROUP_VIEW_ADDRESS) {
+    // 使用 getMainMessages 获取每个群的最后一条消息
     const lastMsgCalls = groupsWithMessages.map((g) => ({
-      address: g.address,
-      abi: RedPacketGroupABI,
-      functionName: 'mainMessages' as const,
-      args: [BigInt(g.mainMessageCount - 1)] // 获取最后一条消息
+      address: RED_PACKET_GROUP_VIEW_ADDRESS,
+      abi: ViewABI,
+      functionName: 'getMainMessages' as const,
+      args: [
+        g.address,
+        BigInt(g.mainMessageCount - 1), // offset: 最后一条消息的索引
+        BigInt(1) // limit: 只获取1条
+      ]
     }));
 
     const lastMsgResults = await publicClient.multicall({
@@ -218,10 +235,14 @@ export async function getRedPacketGroupList(
     // 解析最后消息时间戳
     lastMsgResults.forEach((res: any, idx: number) => {
       if (res.status === 'success') {
-        // mainMessages 返回: [from, content, timestamp, subgroupId]
-        const data = res.result as [string, string, bigint, number];
-        const timestamp = Number(data[2]); // timestamp 是第3个元素
-        groupsWithMessages[idx].lastMessageTimestamp = timestamp;
+        // getMainMessages 返回: [messages[], count]
+        // messages[] 是 Message 结构数组: {from, content, timestamp, subgroupId}
+        const [messages] = res.result as [any[], bigint];
+        if (messages && messages.length > 0) {
+          const lastMsg = messages[0];
+          const timestamp = Number(lastMsg.timestamp);
+          groupsWithMessages[idx].lastMessageTimestamp = timestamp;
+        }
       }
     });
   }

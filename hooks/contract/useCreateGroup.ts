@@ -49,7 +49,7 @@ export function useCreateGroup() {
   const chainId = useChainId();
 
   const {
-    writeContract,
+    writeContractAsync,
     data: txHash,
     isPending,
     error: writeError
@@ -60,7 +60,7 @@ export function useCreateGroup() {
     isSuccess,
     data: receipt
   } = useWaitForTransactionReceipt({
-    hash: txHash
+    hash: status.state === 'creating' ? status.txHash : undefined
   });
 
   /**
@@ -79,7 +79,7 @@ export function useCreateGroup() {
       setStatus({ state: 'waiting_signature' });
 
       // 调用合约
-      writeContract({
+      const hash = await writeContractAsync({
         address: factoryAddress,
         abi: GroupFactoryArtifact.abi,
         functionName: 'createGroup',
@@ -90,24 +90,36 @@ export function useCreateGroup() {
           params.groupRules
         ]
       });
+
+      console.log('✅ 交易已发送，Hash:', hash);
+      setStatus({ state: 'creating', txHash: hash });
     } catch (error) {
+      console.error('❌ 创建群组失败:', error);
       const errorMessage =
         error instanceof Error ? error.message : '创建群组失败';
-      setStatus({ state: 'error', error: errorMessage });
-      throw error;
+
+      // 解析用户拒绝
+      if (errorMessage.toLowerCase().includes('user rejected')) {
+        setStatus({ state: 'idle' });
+      } else {
+        setStatus({ state: 'error', error: errorMessage });
+      }
+      // 不再抛出错误，让 UI 通过 status 响应
     }
   };
 
-  // 监听交易提交状态
-  useEffect(() => {
-    if (txHash && !isSuccess && !isConfirming) {
-      setStatus({ state: 'creating', txHash });
-    }
-  }, [txHash, isSuccess, isConfirming]);
+  // 移除监听交易提交状态的 useEffect (已通过 await writeContractAsync 处理)
+  // useEffect(() => {
+  //   if (txHash && !isSuccess && !isConfirming) {
+  //     setStatus({ state: 'creating', txHash });
+  //   }
+  // }, [txHash, isSuccess, isConfirming]);
 
   // 监听交易成功并解析事件
   useEffect(() => {
-    if (isSuccess && receipt) {
+    if (isSuccess && receipt && status.state === 'creating') {
+      console.log('✅ 交易已确认，Receipt:', receipt);
+
       // 从 GroupCreated 事件中获取新群地址
       const groupCreatedLog = receipt.logs.find((log) => {
         try {
@@ -123,25 +135,42 @@ export function useCreateGroup() {
       });
 
       if (groupCreatedLog) {
-        const decoded = decodeEventLog({
-          abi: GroupFactoryArtifact.abi,
-          data: groupCreatedLog.data,
-          topics: groupCreatedLog.topics
-        });
+        try {
+          const decoded = decodeEventLog({
+            abi: GroupFactoryArtifact.abi,
+            data: groupCreatedLog.data,
+            topics: groupCreatedLog.topics
+          });
 
-        const groupAddress = (decoded.args as any).group as `0x${string}`;
-        setStatus({ state: 'success', groupAddress });
+          const groupAddress = (decoded.args as any).group as `0x${string}`;
+          console.log('🎉 解析到新群地址:', groupAddress);
+          setStatus({ state: 'success', groupAddress });
+        } catch (e) {
+          console.error('解析 GroupCreated 事件失败:', e);
+          setStatus({ state: 'error', error: '群组创建成功但地址解析失败' });
+        }
+      } else {
+        console.warn('⚠️ 未找到 GroupCreated 事件');
+        // 可能是因为 receipt status 为 reverted?
+        if (receipt.status === 'reverted') {
+          setStatus({ state: 'error', error: '交易被回滚 (Reverted)' });
+        } else {
+          setStatus({ state: 'error', error: '未找到群组创建事件' });
+        }
       }
     }
-  }, [isSuccess, receipt]);
+  }, [isSuccess, receipt, status.state]);
 
-  // 监听写入错误
+  // 监听写入错误 (保留作为兜底，虽然 try-catch 已经处理了大部分)
   useEffect(() => {
     if (writeError) {
       const errorMessage = parseContractError(writeError);
-      setStatus({ state: 'error', error: errorMessage });
+      // 只有在非 idle/success 状态下才更新 error，避免覆盖
+      if (status.state !== 'idle' && status.state !== 'success') {
+        setStatus({ state: 'error', error: errorMessage });
+      }
     }
-  }, [writeError]);
+  }, [writeError, status.state]);
 
   // 稳定的 reset 函数
   const reset = useCallback(() => {

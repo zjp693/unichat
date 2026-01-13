@@ -23,6 +23,7 @@ import {
   useDirectMessageAddress,
   DirectMessageAbi
 } from '@/lib/DirectMessageAbi';
+import { getContractAddress } from '@/lib/web3/contracts';
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage';
 import { useChatParams } from '@/hooks/chat/data/useChatParams';
 import { useChatRefs } from '@/hooks/chat/state/useChatRefs';
@@ -241,38 +242,57 @@ function ChatContent() {
           let isMember = false;
 
           if (groupType === 'redpacket') {
-            // 红包群使用 getMember 方法
-            const result = await publicClient.readContract({
-              address: groupAddress as `0x${string}`,
-              abi: [
-                {
-                  inputs: [
-                    { internalType: 'address', name: '', type: 'address' }
-                  ],
-                  name: 'getMember',
-                  outputs: [
-                    { internalType: 'bool', name: 'exists', type: 'bool' },
-                    { internalType: 'uint64', name: 'joinAt', type: 'uint64' },
-                    {
-                      internalType: 'uint32',
-                      name: 'subgroupId',
-                      type: 'uint32'
-                    }
-                  ],
-                  stateMutability: 'view',
-                  type: 'function'
-                }
-              ],
-              functionName: 'getMember',
-              args: [currentAddress]
-            });
+            // 红包群使用 RedPacketGroupView 的 getMember 方法
+            const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
+              chainId,
+              'redPacketGroupView'
+            );
 
-            isMember = result[0];
-            console.log('🔍 [调试] 红包群成员状态:', {
-              exists: isMember,
-              joinAt: result[1]?.toString(),
-              subgroupId: result[2]
-            });
+            if (!RED_PACKET_GROUP_VIEW_ADDRESS) {
+              console.error('[成员检查] View 合约地址未配置');
+              isMember = false;
+            } else {
+              const result = await publicClient.readContract({
+                address: RED_PACKET_GROUP_VIEW_ADDRESS,
+                abi: [
+                  {
+                    inputs: [
+                      {
+                        internalType: 'address',
+                        name: 'group',
+                        type: 'address'
+                      },
+                      { internalType: 'address', name: 'addr', type: 'address' }
+                    ],
+                    name: 'getMember',
+                    outputs: [
+                      { internalType: 'bool', name: 'exists', type: 'bool' },
+                      {
+                        internalType: 'uint64',
+                        name: 'joinAt',
+                        type: 'uint64'
+                      },
+                      {
+                        internalType: 'uint32',
+                        name: 'subgroupId',
+                        type: 'uint32'
+                      }
+                    ],
+                    stateMutability: 'view',
+                    type: 'function'
+                  }
+                ],
+                functionName: 'getMember',
+                args: [groupAddress as `0x${string}`, currentAddress]
+              });
+
+              isMember = result[0];
+              console.log('🔍 [调试] 红包群成员状态:', {
+                exists: isMember,
+                joinAt: result[1]?.toString(),
+                subgroupId: result[2]
+              });
+            }
           } else {
             // Community 群使用 isActiveMember 方法
             const result = await publicClient.readContract({

@@ -14,6 +14,7 @@ import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { useReferrerInviteCount } from '@/hooks/useReferrerInviteCount';
 import { useContractAddress } from '@/lib/web3/hooks/useActiveContracts';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
 
 // Registry ABI
 const REGISTRY_ABI = parseAbi([
@@ -37,8 +38,10 @@ export function useGroupJoinInfo() {
   const referralCode = searchParams.get('code') as `0x${string}` | null;
   const groupAddress = searchParams.get('group') as `0x${string}` | null;
 
-  // 从多链配置获取 Registry 合约地址
+  // 从多链配置获取 Registry 和 View 合约地址
   const registryAddress = useContractAddress('registry');
+  const RED_PACKET_GROUP_VIEW_ADDRESS =
+    useContractAddress('redPacketGroupView');
 
   // 1️⃣ 验证邀请码
   const { data: codeExists } = useReadContract({
@@ -58,44 +61,31 @@ export function useGroupJoinInfo() {
     query: { enabled: !!referralCode && !!registryAddress }
   });
 
-  // 3️⃣ 获取群信息
+  // 3️⃣ 获取群信息（使用 RedPacketGroupView 合约的 getGroupSettings）
   const {
-    data: groupName,
+    data: groupSettings,
     isLoading: isLoadingGroupName,
     isError: isGroupError
   } = useReadContract({
-    address: groupAddress || undefined,
-    abi: RedPacketGroupABI.abi as any,
-    functionName: 'groupName',
-    query: { enabled: !!groupAddress }
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI.abi as any,
+    functionName: 'getGroupSettings',
+    args: groupAddress ? [groupAddress] : undefined,
+    query: { enabled: !!groupAddress && !!RED_PACKET_GROUP_VIEW_ADDRESS }
   });
+
+  // 解析 groupSettings 数组：[groupName, economicModel, groupRules, announcement]
+  const groupName = groupSettings ? (groupSettings as any)[0] : '';
+  const economicModel = groupSettings ? (groupSettings as any)[1] : '';
+  const groupRules = groupSettings ? (groupSettings as any)[2] : '';
+  const announcement = groupSettings ? (groupSettings as any)[3] : '';
 
   const { data: memberCount } = useReadContract({
-    address: groupAddress || undefined,
-    abi: RedPacketGroupABI.abi as any,
-    functionName: 'memberCount',
-    query: { enabled: !!groupAddress }
-  });
-
-  const { data: economicModel } = useReadContract({
-    address: groupAddress || undefined,
-    abi: RedPacketGroupABI.abi as any,
-    functionName: 'economicModel',
-    query: { enabled: !!groupAddress }
-  });
-
-  const { data: groupRules } = useReadContract({
-    address: groupAddress || undefined,
-    abi: RedPacketGroupABI.abi as any,
-    functionName: 'groupRules',
-    query: { enabled: !!groupAddress }
-  });
-
-  const { data: announcement } = useReadContract({
-    address: groupAddress || undefined,
-    abi: RedPacketGroupABI.abi as any,
-    functionName: 'announcement',
-    query: { enabled: !!groupAddress }
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI.abi as any,
+    functionName: 'memberListLength',
+    args: groupAddress ? [groupAddress] : undefined,
+    query: { enabled: !!groupAddress && !!RED_PACKET_GROUP_VIEW_ADDRESS }
   });
 
   const { data: entryFeeAmount } = useReadContract({
@@ -134,13 +124,21 @@ export function useGroupJoinInfo() {
     name: referrerName
   } = usePeerAvatar(referrerAddress as `0x${string}` | undefined);
 
-  // 6️⃣ 检查当前用户是否已是群成员
+  // 6️⃣ 检查当前用户是否已是群成员（使用 RedPacketGroupView 合约）
   const { data: memberData } = useReadContract({
-    address: groupAddress || undefined,
-    abi: RedPacketGroupABI.abi as any,
+    address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
+    abi: RedPacketGroupViewABI.abi as any,
     functionName: 'getMember',
-    args: currentUserAddress ? [currentUserAddress] : undefined,
-    query: { enabled: !!groupAddress && !!currentUserAddress }
+    args:
+      currentUserAddress && groupAddress
+        ? [groupAddress, currentUserAddress]
+        : undefined,
+    query: {
+      enabled:
+        !!groupAddress &&
+        !!currentUserAddress &&
+        !!RED_PACKET_GROUP_VIEW_ADDRESS
+    }
   });
 
   // 7️⃣ 获取邀请人在该群的邀请人数
