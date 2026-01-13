@@ -71,6 +71,8 @@ export function useChatParams() {
     groupType:
       (getParam('groupType') as 'community' | 'redpacket') ||
       chatMeta?.groupType ||
-      'community'
+      'community',
+    // 来源标记 - 用于判断返回行为
+    from: getParam('from')
   };
 }

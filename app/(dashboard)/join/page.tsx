@@ -71,7 +71,9 @@ function JoinPageContent() {
   // 处理进入群聊（已是成员）
   const handleEnterGroup = () => {
     if (groupAddress) {
-      router.push(`/chat/${groupAddress}?type=group&groupType=redpacket`);
+      router.push(
+        `/chat/${groupAddress}?type=group&groupType=redpacket&from=join`
+      );
     }
   };
 

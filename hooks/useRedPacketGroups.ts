@@ -8,7 +8,7 @@ import { useChainId, usePublicClient } from 'wagmi';
 import { getContractAddress } from '@/lib/web3/contracts';
 
 export function useRedPacketGroups(userAddress?: string) {
-  console.log('[useRedPacketGroups] Hook called with address:', userAddress);
+  // console.log('[useRedPacketGroups] Hook called with address:', userAddress);
 
   const chainId = useChainId();
   const publicClient = usePublicClient();

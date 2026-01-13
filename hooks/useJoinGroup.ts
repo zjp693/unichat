@@ -155,7 +155,9 @@ export function useJoinGroup() {
 
       // 跳转到群聊页面
       setTimeout(() => {
-        router.push(`/chat/${groupAddress}?type=group&groupType=redpacket`);
+        router.push(
+          `/chat/${groupAddress}?type=group&groupType=redpacket&from=join`
+        );
       }, 1000);
     } catch (error: any) {
       console.error('加入群聊失败:', error);
@@ -209,7 +211,7 @@ export function useJoinGroup() {
               });
               setTimeout(() => {
                 router.push(
-                  `/chat/${groupAddress}?type=group&groupType=redpacket`
+                  `/chat/${groupAddress}?type=group&groupType=redpacket&from=join`
                 );
               }, 1500);
               return;

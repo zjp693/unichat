@@ -17,7 +17,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKeyManagement } from '@/hooks/useKeyManagement';
 import { chatEncryption } from '@/lib/keyManagement';
 import { usePeerAvatar, usePeerProfile } from '@/hooks/usePeerProfile';
-import { useSendMessage } from '@/lib/DirectMessageAbi';
+import {
+  useSendMessage,
+  useRegisterPublicKey,
+  useDirectMessageAddress,
+  DirectMessageAbi
+} from '@/lib/DirectMessageAbi';
 import { useSendCommunityMessage } from '@/hooks/useSendCommunityMessage';
 import { useChatParams } from '@/hooks/chat/data/useChatParams';
 import { useChatRefs } from '@/hooks/chat/state/useChatRefs';
@@ -97,22 +102,62 @@ function ChatContent() {
     groupLevel,
     groupCondition,
     invitedMembersMessage,
-    groupType
+    groupType,
+    from
   } = useChatParams();
 
   // --- 基础钩子 ---
   const router = useRouter();
+  /* Key Management & Registration */
   const {
     keys,
     generateNewKeyPair,
     loading: isGeneratingKey
   } = useKeyManagement();
 
-  // 处理密钥生成
+  // Public Key Registration
+  const { writeContractAsync: registerPublicKey } = useRegisterPublicKey();
+  const directMessageAddress = useDirectMessageAddress();
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Combined Loading State
+  const isKeyActionLoading = isGeneratingKey || isRegistering;
+
+  // Handle Key Generation & Registration
   const handleGenerateKey = async () => {
-    const defaultName = `Key-${new Date().toISOString().slice(0, 10)}`;
-    await generateNewKeyPair(defaultName);
-    dispatch(setShowGenerationModal(false));
+    if (!directMessageAddress) {
+      console.error('无法获取合约地址');
+      return;
+    }
+
+    try {
+      // 1. Generate Key Pair Locally
+      const defaultName = `Key-${new Date().toISOString().slice(0, 10)}`;
+      const keyPair = await generateNewKeyPair(defaultName);
+
+      if (!keyPair) {
+        throw new Error('密钥生成失败');
+      }
+
+      // 2. Register Public Key On-Chain
+      console.log('开始注册公钥:', keyPair.publicKey);
+      setIsRegistering(true);
+      await registerPublicKey({
+        address: directMessageAddress,
+        abi: DirectMessageAbi,
+        functionName: 'registerPublicKey',
+        args: [keyPair.publicKey]
+      });
+      console.log('公钥注册成功');
+
+      // 3. Close Modal
+      dispatch(setShowGenerationModal(false));
+    } catch (error) {
+      console.error('密钥生成或注册失败:', error);
+      // Optional: Add toast notification here
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
   // --- 实时从合约读取群名（针对红包群） ---
@@ -583,7 +628,13 @@ function ChatContent() {
             if (chatType === 'group') dispatch(setShowGroupInfoPanel(true));
             else dispatch(setShowPrivateChatSettingsPanel(true));
           }}
-          onBack={() => router.back()}
+          onBack={() => {
+            if (from === 'join') {
+              router.push('/');
+            } else {
+              router.back();
+            }
+          }}
         />
 
         {/* 分群 Tab 切换 - 仅红包群显示 */}
@@ -689,7 +740,7 @@ function ChatContent() {
       {/* 弹窗组件 */}
       <ChatModals
         onGenerateKey={handleGenerateKey}
-        isGeneratingKey={isGeneratingKey}
+        isGeneratingKey={isKeyActionLoading}
         handleKeySelect={handleKeySelect}
         handleBatchDecrypt={handleBatchDecrypt}
         handleSendModeSelect={handleSendModeSelect}

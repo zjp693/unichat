@@ -164,9 +164,9 @@ export default function ChatPage() {
           <div className="flex items-center justify-center h-full min-h-[400px]">
             <p className="text-sm text-gray-400">请连接钱包以查看聊天列表</p>
           </div>
-        ) : isPeersLoading ||
-          isCommunitiesLoading ||
-          isRedPacketGroupsLoading ? (
+        ) : (isPeersLoading && privateChats.length === 0) ||
+          (isCommunitiesLoading && chainCommunities.length === 0) ||
+          (isRedPacketGroupsLoading && redPacketGroups.length === 0) ? (
           <ChatListSkeleton count={5} />
         ) : allChats.length === 0 ? (
           <div className="flex items-center justify-center h-full min-h-[400px]">
