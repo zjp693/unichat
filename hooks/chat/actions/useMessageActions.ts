@@ -52,7 +52,6 @@ async function fetchRecipientPublicKey(
     if (result && typeof result === 'string' && result.length > 0) {
       return result;
     }
-    console.log('⚠️ 接收者未注册公钥，将发送明文消息');
     return '';
   } catch (error) {
     console.warn('⚠️ 未获取到接收者公钥，将发送明文消息', error);
@@ -188,7 +187,6 @@ async function pollForMessageConfirmation(
   contractAddress: string
 ): Promise<void> {
   try {
-    console.log('🔄 [兜底] [私聊] 尝试手动拉取最新消息...');
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const count = await publicClient.readContract({
@@ -215,7 +213,6 @@ async function pollForMessageConfirmation(
       if (result && Array.isArray(result) && result.length > 0) {
         const lastMsg = result[0];
         if (lastMsg.content === contentToMatch) {
-          console.log('✅ [兜底] [私聊] 手动拉取成功，更新消息状态');
           const realId = `${lastMsg.timestamp}-${lastMsg.sender.toLowerCase()}-${Date.now()}`;
 
           setMessages((prev) => {
@@ -330,9 +327,7 @@ export function useMessageActions({
       setTimeout(() => scrollToBottom('smooth'), 100);
 
       try {
-        console.log('🔵 [消息操作] [群聊] 正在请求钱包签名 (支付 Gas)...');
         await sendGroupMessage(originalMessageText, 0);
-        console.log('✅ [消息操作] [群聊] 交易已提交');
         // 简单清除 sending 状态
         updateMessageStatus(setMessages, optimisticMessage.id, undefined);
       } catch (error: any) {
@@ -422,7 +417,6 @@ export function useMessageActions({
 
       try {
         // 调用合约发送消息
-        console.log('🔵 [消息操作] [私聊] 正在请求钱包签名 (支付 Gas)...');
         await writeContract({
           address: directMessageAddress,
           abi: DirectMessageAbi,
@@ -430,8 +424,6 @@ export function useMessageActions({
           args: [getAddress(recipientAddress), contentToSend],
           account: currentAddress
         });
-
-        console.log('✅ [消息操作] [私聊] 交易已提交，等待上链确认...');
 
         // 手动拉取最新消息作为兜底（防止 WebSocket 事件监听失败）
         await pollForMessageConfirmation(
@@ -482,12 +474,6 @@ export function useMessageActions({
    */
   const handleRetryMessage = useCallback(
     async (failedMessage: Message) => {
-      console.log('🔄 [重发] 开始重发消息:', {
-        id: failedMessage.id,
-        chatType,
-        content: failedMessage.content.substring(0, 20)
-      });
-
       updateMessageStatus(setMessages, failedMessage.id, 'sending');
 
       if (chatType === 'private') {
@@ -520,7 +506,6 @@ export function useMessageActions({
             account: currentAddress
           });
 
-          console.log('✅ 重发消息已提交');
           updateMessageStatus(setMessages, failedMessage.id, 'sent');
         } catch (error: any) {
           console.error('❌ 重发消息失败:', error);

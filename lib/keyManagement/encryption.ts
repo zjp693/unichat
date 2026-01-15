@@ -154,22 +154,14 @@ export class ChatEncryption {
         processedMessage = message.substring(0, MAX_MESSAGE_LENGTH);
       }
 
-      console.log('🔐 开始双公钥加密:', {
-        messageLength: processedMessage.length,
-        senderKeyLength: senderPublicKey.length,
-        recipientKeyLength: recipientPublicKey.length
-      });
-
       // 1. 生成随机 AES 密钥
       const aesKey = this._generateAesKey();
-      console.log('✅ AES 密钥已生成');
 
       // 2. 用 AES 密钥加密消息
       const aesEncryptedMessage = this._encryptWithAes(
         processedMessage,
         aesKey
       );
-      console.log('✅ 消息已用 AES 加密');
 
       // 3. 用发送者公钥加密 AES 密钥
       const jsEncryptSender = new JSEncrypt();
@@ -182,7 +174,6 @@ export class ChatEncryption {
       if (!senderEncryptedAesKey) {
         throw new Error('用发送者公钥加密 AES 密钥失败');
       }
-      console.log('✅ AES 密钥已用发送者公钥加密');
 
       // 4. 用接收者公钥加密 AES 密钥
       const jsEncryptRecipient = new JSEncrypt();
@@ -195,15 +186,9 @@ export class ChatEncryption {
       if (!recipientEncryptedAesKey) {
         throw new Error('用接收者公钥加密 AES 密钥失败');
       }
-      console.log('✅ AES 密钥已用接收者公钥加密');
 
       // 5. 组合三段
       const result = `${senderEncryptedAesKey}:${recipientEncryptedAesKey}:${aesEncryptedMessage}`;
-
-      console.log('✅ 双公钥加密完成:', {
-        parts: result.split(':').length,
-        totalLength: result.length
-      });
 
       return result;
     } catch (error) {
@@ -237,7 +222,6 @@ export class ChatEncryption {
         );
       }
 
-      console.log('🔓 开始解密消息（单公钥格式）');
       const encryptedAesKey = parts[0];
       const aesEncryptedMessage = parts[1];
 
@@ -250,7 +234,6 @@ export class ChatEncryption {
       }
 
       const decrypted = this._decryptWithAes(aesEncryptedMessage, aesKey);
-      console.log('✅ 消息解密成功');
       return decrypted;
     } catch (error: any) {
       console.warn('⚠️ 解密错误:', error.message || error);
@@ -281,7 +264,6 @@ export class ChatEncryption {
               encryptedMessage,
               DEFAULT_PRIVATE_KEY
             );
-            console.log('✅ 默认私钥解密成功');
             return { success: true as const, decrypted };
           } catch (defaultError: any) {
             console.warn(

@@ -60,7 +60,6 @@ export function useJoinCommunity() {
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
       if (receipt.status === 'success') {
-        console.log('✅ [加入群聊] 成功加入群聊!');
         return { success: true, hash };
       } else {
         throw new Error('交易失败');

@@ -8,7 +8,7 @@ export interface RedPacketConfig {
   count: number;
   message: string;
   packetId?: string; // 红包ID（用于查询已领取状态）
-  status?: 'active' | 'claimed' | 'expired'; // 红包状态
+  status?: 'active' | 'claimed' | 'expired' | 'empty'; // 红包状态
   groupType?: 'community' | 'redpacket'; // 群类型：官方群 or 红包群
   groupAddress?: string; // 群合约地址（红包群需要）
 }

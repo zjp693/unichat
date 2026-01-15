@@ -17,7 +17,6 @@ export function TopNavbar({ className }: TopNavbarProps) {
     // 检查是否有密钥
     const chatKeys = localStorage.getItem('chat_keys');
     if (!chatKeys) {
-      console.log('ℹ️ 当前没有存储的密钥');
       return;
     }
 
@@ -26,7 +25,6 @@ export function TopNavbar({ className }: TopNavbarProps) {
       const count = Array.isArray(keys) ? keys.length : 0;
 
       if (count === 0) {
-        console.log('ℹ️ 当前没有存储的密钥');
         return;
       }
 
@@ -42,20 +40,13 @@ export function TopNavbar({ className }: TopNavbarProps) {
     setShowConfirm(false);
     setIsClearing(true);
 
-    console.log('🗑️ 开始清除密钥...');
-    console.log('清除前的值:', localStorage.getItem('chat_keys'));
-
     // 直接删除 localStorage
     localStorage.removeItem('chat_keys');
 
     // 验证是否真的清除了
     const afterRemove = localStorage.getItem('chat_keys');
-    console.log('清除后的值:', afterRemove);
 
     if (afterRemove === null) {
-      console.log(
-        '✅ 已成功清除所有本地密钥！localStorage.removeItem 执行成功'
-      );
     } else {
       console.error('❌ 清除失败！localStorage 中仍有数据:', afterRemove);
     }

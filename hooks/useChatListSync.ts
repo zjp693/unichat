@@ -34,11 +34,6 @@ export function useChatListSync(
 
         // 只处理发给当前用户的消息（接收方是当前用户）
         if (to && from && to.toLowerCase() === currentUser.toLowerCase()) {
-          console.log('🔔 useChatListSync: 收到新消息事件', {
-            from,
-            to,
-            currentUser
-          });
           // 触发回调，通知父组件有新消息
           onNewMessageRef.current(from, to);
         }

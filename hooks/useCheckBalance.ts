@@ -103,13 +103,6 @@ export function useCheckBalance() {
           };
         }
 
-        console.log('✅ 余额检查通过:', {
-          balance: formatEther(balance),
-          estimatedCost: formatEther(estimatedCost),
-          gasEstimate: gasEstimate.toString(),
-          symbol
-        });
-
         return { success: true, estimatedCost };
       } catch (estimateError: any) {
         // Gas 估算失败,使用固定值检查

@@ -239,8 +239,6 @@ export async function getAllRedPacketGroupMembers(
       return [];
     }
 
-    console.log('[getAllRedPacketGroupMembers] 成员总数:', total.toString());
-
     // 2. 分页获取所有成员
     const allMembers: `0x${string}`[] = [];
     const pageSize = 100n;
@@ -257,9 +255,6 @@ export async function getAllRedPacketGroupMembers(
       if (result && result[0] && result[0].length > 0) {
         allMembers.push(...result[0]);
         offset += BigInt(result[0].length);
-        console.log(
-          `[getAllRedPacketGroupMembers] 已获取 ${allMembers.length}/${total} 成员`
-        );
       } else {
         break;
       }

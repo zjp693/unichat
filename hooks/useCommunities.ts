@@ -24,18 +24,12 @@ export function useCommunitiesWithStatus(userAddress?: string): {
     queryFn: async () => {
       if (!userAddress) return [];
 
-      console.log('🔍 [群聊列表] 开始获取群聊列表和用户状态...', { chainId });
       const response = await fetch(
         `/api/communities/user-status?address=${userAddress}&chainId=${chainId}`
       );
       const result: UserStatusResponse = await response.json();
 
       if (result.success && result.data) {
-        console.log(
-          '✅ [群聊列表] 成功获取:',
-          result.data.communities.length,
-          '个群聊'
-        );
         return result.data.communities as CommunityWithStatus[];
       } else {
         console.error('❌ [群聊列表] 获取失败:', result.error);

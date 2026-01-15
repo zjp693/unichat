@@ -12,6 +12,7 @@ interface UseRedPacketEventsProps {
   groupAddress?: Address;
   recipientAddress?: Address;
   currentAddress?: Address;
+  groupType?: 'community' | 'redpacket';
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   messages: Message[];
 }
@@ -212,21 +213,22 @@ async function handleGroupClaimEvent(
   currentAddress: Address,
   publicClient: any,
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  contractAddress: Address // 新增参数
+  contractAddress: Address,
+  isRedPacketGroup: boolean = false
 ): Promise<void> {
   try {
     const { id, claimer, amount } = log.args;
 
-    console.log('🔥 群红包领取事件', { id: id.toString(), claimer, amount });
-
-    // 检查红包是否属于当前群组
-    const isRelevant = await isGroupPacketRelevant(
-      publicClient,
-      id,
-      groupAddress,
-      contractAddress
-    );
-    if (!isRelevant) return;
+    // 检查红包是否属于当前群组 (如果是红包群，天然属于当前群组，跳过检查)
+    if (!isRedPacketGroup) {
+      const isRelevant = await isGroupPacketRelevant(
+        publicClient,
+        id,
+        groupAddress,
+        contractAddress
+      );
+      if (!isRelevant) return;
+    }
 
     // 创建领取消息
     const claimMessage = await createClaimMessage(
@@ -328,7 +330,8 @@ export function useRedPacketEvents({
   recipientAddress,
   currentAddress,
   setMessages,
-  messages
+  messages,
+  groupType = 'community'
 }: UseRedPacketEventsProps) {
   const publicClient = usePublicClient();
   const chainId = useChainId();
@@ -480,8 +483,6 @@ export function useRedPacketEvents({
     eventName: 'GroupPacketClaimed',
     enabled: chatType === 'group' && !!groupAddress && !!contractAddress,
     onLogs(logs) {
-      console.log('⚡ 收到群红包领取事件:', logs.length);
-
       if (!publicClient || !currentAddress || !groupAddress || !contractAddress)
         return;
 
@@ -521,6 +522,47 @@ export function useRedPacketEvents({
           publicClient,
           setMessages,
           contractAddress
+        );
+      });
+    }
+  });
+
+  // ===== 监听红包群领取事件（实时）=====
+  useWatchContractEvent({
+    address:
+      groupType === 'redpacket' && groupAddress ? groupAddress : undefined,
+    abi: [
+      {
+        anonymous: false,
+        inputs: [
+          { indexed: true, name: 'packetId', type: 'uint256' },
+          { indexed: true, name: 'user', type: 'address' },
+          { indexed: false, name: 'amount', type: 'uint256' }
+        ],
+        name: 'Claimed',
+        type: 'event'
+      }
+    ] as const,
+    eventName: 'Claimed',
+    enabled:
+      chatType === 'group' && groupType === 'redpacket' && !!groupAddress,
+    onLogs(logs) {
+      if (!publicClient || !currentAddress || !groupAddress) return;
+
+      logs.forEach((log) => {
+        // 将红包群的 Claimed 事件映射到统一的处理函数
+        // 红包群的 log.args 是 { packetId, user, amount }
+        const { packetId, user, amount } = log.args;
+        handleGroupClaimEvent(
+          {
+            args: { id: packetId, claimer: user, amount }
+          },
+          groupAddress,
+          currentAddress,
+          publicClient,
+          setMessages,
+          groupAddress, // 红包群合约地址就是群地址
+          true // isRedPacketGroup
         );
       });
     }

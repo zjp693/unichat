@@ -35,8 +35,6 @@ export async function uploadImageToPinata(file: File): Promise<string> {
     });
     formData.append('pinataMetadata', metadata);
 
-    console.log('🔑 使用 JWT 上传图片到 Pinata...');
-
     const response = await fetch(
       'https://api.pinata.cloud/pinning/pinFileToIPFS',
       {
@@ -54,7 +52,6 @@ export async function uploadImageToPinata(file: File): Promise<string> {
     }
 
     const data = await response.json();
-    console.log('✅ 图片上传成功，CID:', data.IpfsHash);
     return data.IpfsHash;
   } catch (error) {
     console.error('❌ 上传图片到 Pinata 失败:', error);
@@ -75,9 +72,6 @@ export async function uploadMetadataToPinata(
   }
 
   try {
-    console.log('🔑 使用 JWT 上传 metadata 到 Pinata...');
-    console.log('📦 Metadata:', metadata);
-
     const response = await fetch(
       'https://api.pinata.cloud/pinning/pinJSONToIPFS',
       {
@@ -97,7 +91,6 @@ export async function uploadMetadataToPinata(
     }
 
     const data = await response.json();
-    console.log('✅ Metadata 上传成功，CID:', data.IpfsHash);
     return data.IpfsHash;
   } catch (error) {
     console.error('❌ 上传 metadata 到 Pinata 失败:', error);

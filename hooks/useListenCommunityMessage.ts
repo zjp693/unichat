@@ -60,7 +60,6 @@ export function useListenCommunityMessage(
     eventName: 'CommunityMessageBroadcasted',
     enabled: enabled && !!communityAddress && isCommunityGroup,
     onLogs: async (logs) => {
-      console.log('📨 [官方群监听] 收到事件日志:', logs.length);
       for (const log of logs) {
         const { sender, seq, ts } = (log as any).args;
         const messageId = `${ts?.toString()}-${sender}-${seq?.toString()}`;
@@ -125,7 +124,6 @@ export function useListenCommunityMessage(
     eventName: 'MainMessage',
     enabled: enabled && !!communityAddress && isRedPacketGroup,
     onLogs: async (logs) => {
-      console.log('📨 [红包群监听] 收到 MainMessage 事件:', logs.length);
       for (const log of logs) {
         const { from, content } = (log as any).args;
         const isOwn = from?.toLowerCase() === currentAddress?.toLowerCase();
@@ -178,7 +176,6 @@ export function useListenCommunityMessage(
             }
 
             messageContent = JSON.stringify(redPacketData);
-            console.log('[红包群监听] 识别到红包消息并注入 ID:', extractedId);
           } else {
             // 不符合 "ID |" 格式的消息，视为普通文本
             messageType = 'text';
@@ -201,12 +198,6 @@ export function useListenCommunityMessage(
           senderAddress: from
         };
 
-        console.log(
-          '📨 [红包群监听] 推送消息:',
-          newMessage.id,
-          '类型:',
-          messageType
-        );
         onMessage(newMessage);
       }
     }

@@ -182,24 +182,17 @@ export function useJoinGroup() {
 
       // 使用 viem 的方式解析合约错误
       const baseError = error as BaseError;
-      console.log('🔍 baseError:', baseError);
 
       const revertError = baseError.walk(
         (err) => err instanceof ContractFunctionRevertedError
       );
-      console.log('🔍 revertError:', revertError);
 
       if (revertError instanceof ContractFunctionRevertedError) {
-        console.log('🔍 revertError.data:', revertError.data);
-
         try {
           const decodedError = decodeErrorResult({
             abi: RedPacketGroupABI.abi as any,
             data: (revertError.data || '0x') as `0x${string}`
           });
-
-          console.log('✅ 解析的错误:', decodedError);
-          console.log('✅ 错误名称:', decodedError?.errorName);
 
           // 根据错误名称显示对应的提示
           switch (decodedError.errorName) {

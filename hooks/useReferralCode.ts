@@ -62,8 +62,6 @@ export function useReferralCode() {
     setError(null);
 
     try {
-      console.log('🔍 [获取邀请码] 调用 getCodesByAddress...');
-
       // ✅ 直接调用合约方法查询邀请码
       const codes = (await publicClient.readContract({
         address: registryAddress,
@@ -72,19 +70,11 @@ export function useReferralCode() {
         args: [userAddress]
       })) as `0x${string}`[];
 
-      console.log('📊 [获取邀请码] 查询结果:', {
-        address: userAddress,
-        codesCount: codes?.length || 0,
-        codes: codes
-      });
-
       if (codes && codes.length > 0) {
         // 获取最新的邀请码（数组最后一个）
         const latestCode = codes[codes.length - 1];
-        console.log('✅ [获取邀请码] 找到邀请码:', latestCode);
         setReferralCode(latestCode);
       } else {
-        console.log('ℹ️ [获取邀请码] 未找到邀请码');
         setReferralCode(null);
       }
     } catch (err) {
@@ -162,7 +152,6 @@ export function useCreateReferralCode() {
           }) as any;
 
           const code = decoded.args.code as `0x${string}`;
-          console.log('✅ [创建邀请码] 从事件中解析到邀请码:', code);
           setCreatedCode(code);
         }
       } catch (err) {

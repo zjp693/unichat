@@ -147,7 +147,6 @@ export async function getProducts(
 export async function deleteProductById(id: number) {
   // 在实际应用中，这里会从数据库中删除产品
   // 在这个模拟版本中，我们只是打印一条消息
-  console.log(`删除产品 ID: ${id}`);
 }
 
 // ==================== Merkle Proof 相关类型和函数 ====================

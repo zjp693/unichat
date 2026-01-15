@@ -141,10 +141,6 @@ export function useEncryptionActions({
             return msg;
           });
         });
-
-        console.log(
-          `✅ 成功解密 ${results.filter((r) => r.success).length} 条消息`
-        );
       } catch (error: any) {
         console.error('批量解密失败:', error);
         alert(`批量解密失败: ${error.message || '未知错误'}`);
@@ -198,8 +194,6 @@ export function useEncryptionActions({
         currentAddress
       ) {
         try {
-          console.log('🔍 [预检查] 检查消息发送权限...');
-
           // 并行获取限制配置和当前计数
           const [limitType, limitCount, msgCount] = await Promise.all([
             publicClient.readContract({
@@ -224,12 +218,6 @@ export function useEncryptionActions({
           const maxCount = Number(limitCount);
           const limitTypeNum = Number(limitType);
 
-          console.log('🔍 [预检查] 消息限制:', {
-            limitType: limitTypeNum,
-            limitCount: maxCount,
-            currentCount
-          });
-
           // 检查是否超过限制 (limitType: 0=无限制, 1=每日, 2=每周)
           if (limitTypeNum !== 0 && currentCount >= maxCount) {
             const periodText = limitTypeNum === 1 ? '每日' : '每周';
@@ -238,12 +226,9 @@ export function useEncryptionActions({
               description: `已达到消息发送限制（${periodText} ${maxCount} 条）`,
               variant: 'destructive'
             });
-            console.log('❌ [预检查] 已达到消息发送限制');
             setPendingGroupMessage('');
             return;
           }
-
-          console.log('✅ [预检查] 权限检查通过');
         } catch (error) {
           console.warn('⚠️ [预检查] 检查失败，继续尝试发送:', error);
           // 检查失败不阻止发送，让合约来决定
@@ -272,7 +257,6 @@ export function useEncryptionActions({
             messageContent,
             userPublicKey
           );
-          console.log('✅ 群聊消息加密成功');
         } catch (error) {
           console.error('❌ 群聊消息加密失败:', error);
           setPendingGroupMessage(''); // 清空待发送消息
@@ -294,19 +278,7 @@ export function useEncryptionActions({
         senderAddress: currentAddress as Address // 🆕 群聊需要发送者地址
       };
 
-      console.log('🔵 [群聊] 创建乐观消息:', {
-        id: optimisticMessage.id,
-        sender: optimisticMessage.sender,
-        status: optimisticMessage.status,
-        senderAddress: optimisticMessage.senderAddress
-      });
-
-      setMessages((prev) => {
-        console.log('🔵 [群聊] 添加消息前 prev 数量:', prev.length);
-        const newMessages = [...prev, optimisticMessage];
-        console.log('🔵 [群聊] 添加消息后数量:', newMessages.length);
-        return newMessages;
-      });
+      setMessages((prev) => [...prev, optimisticMessage]);
       setPendingGroupMessage(''); // 清空待发送消息
       inputRef.current?.setValue(''); // 清空输入框
 
@@ -332,7 +304,6 @@ export function useEncryptionActions({
             groupAddress &&
             groupType === 'community'
           ) {
-            console.log('🔄 [兜底] 尝试手动拉取最新消息...');
             // 等待一小会儿让节点同步
             await new Promise((resolve) => setTimeout(resolve, 2000));
 
@@ -357,7 +328,6 @@ export function useEncryptionActions({
                 const lastMsg = result[0];
                 // 检查内容是否匹配
                 if (lastMsg.content === contentToSend) {
-                  console.log('✅ [兜底] 手动拉取成功，更新消息状态');
                   const realId = `${lastMsg.ts}-${lastMsg.sender}-${lastSeq}`;
 
                   setMessages((prev) => {
@@ -391,12 +361,10 @@ export function useEncryptionActions({
             groupType === 'redpacket'
           ) {
             if (hash) {
-              console.log('🔄 [兜底-红包群] 等待交易上链...', hash);
               try {
                 const receipt = await publicClient.waitForTransactionReceipt({
                   hash
                 });
-                console.log('✅ [兜底-红包群] 交易已确认，移除转圈');
 
                 // 1. 交易确认成功，立即移除 loading 状态 (乐观确认)
                 setMessages((prev) => {
@@ -490,7 +458,6 @@ export function useEncryptionActions({
                 (async () => {
                   for (let i = 0; i < 5; i++) {
                     try {
-                      console.log(`🔄 [兜底-后台] 第 ${i + 1} 次尝试拉取...`);
                       await new Promise((r) => setTimeout(r, 2000)); // 每次间隔 2s
 
                       const resultCount = (await publicClient.readContract({
@@ -516,7 +483,6 @@ export function useEncryptionActions({
                         if (messages && messages.length > 0) {
                           const lastMsg = messages[0];
                           if (lastMsg.content === contentToSend) {
-                            console.log('✅ [兜底-后台] 拉取成功，修正消息 ID');
                             const realId = `${lastMsg.timestamp}-${lastMsg.from}-${lastSeq}`;
 
                             setMessages((prev) => {

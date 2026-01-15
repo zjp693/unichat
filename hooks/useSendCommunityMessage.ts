@@ -33,26 +33,9 @@ export function useSendCommunityMessage(
       throw new Error('消息内容不能为空');
     }
 
-    console.log('📤 [发送群聊消息]', {
-      communityAddress,
-      content,
-      groupType,
-      kind: kind === 0 ? '明文' : '密文',
-      cid,
-      charLength: content.length,
-      byteLength: new TextEncoder().encode(content).length,
-      maxBytes: 280,
-      isOverLimit: new TextEncoder().encode(content).length > 280
-    });
-
-    // 🔍 调试：如果超过 280 字节，打印警告
+    // 检查字节限制
     const byteLength = new TextEncoder().encode(content).length;
     if (byteLength > 280) {
-      console.warn('⚠️ [警告] 消息超过 280 字节限制！', {
-        byteLength,
-        maxBytes: 280,
-        overflow: byteLength - 280
-      });
       throw new Error(`消息内容过长！当前 ${byteLength} 字节，最大 280 字节`);
     }
 
@@ -61,7 +44,6 @@ export function useSendCommunityMessage(
     try {
       if (groupType === 'redpacket') {
         // RedPacketGroup 使用完整 ABI
-        console.log('🔍 [调试] 使用完整 RedPacketGroupABI 发送消息');
         txHash = await writeContractAsync({
           address: communityAddress as `0x${string}`,
           abi: RedPacketGroupABI.abi as Abi,
@@ -82,11 +64,8 @@ export function useSendCommunityMessage(
         });
       }
 
-      console.log('✅ [发送成功] 交易哈希:', txHash);
       return txHash;
     } catch (error: any) {
-      console.error('❌ [发送失败]', error);
-
       // 解析错误信息
       let errorMessage = '发送失败';
 

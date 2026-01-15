@@ -81,10 +81,6 @@ export async function GET(request: NextRequest) {
       id: 1
     };
 
-    console.log(
-      `正在获取交易收据: ${transactionHash} 在网络 ${normalizedNetwork} (${alchemyNetwork})`
-    );
-
     // 调用Alchemy API
     let alchemyResponse: Response;
     try {
@@ -209,10 +205,6 @@ export async function GET(request: NextRequest) {
         { status: 422 }
       );
     }
-
-    console.log(
-      `成功获取交易收据: gasUsed=${receipt.gasUsed}, effectiveGasPrice=${receipt.effectiveGasPrice}`
-    );
 
     // 返回完整的收据数据
     return NextResponse.json({

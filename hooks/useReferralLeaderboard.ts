@@ -185,7 +185,6 @@ export function useReferralLeaderboard(
     abi: LEADERBOARD_ABI,
     eventName: 'ReferralCountIncremented',
     onLogs: () => {
-      console.log('📊 [排行榜] 检测到邀请计数更新，刷新数据...');
       setShouldRefetch((prev) => prev + 1);
     },
     enabled: !!groupAddress

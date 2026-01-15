@@ -168,7 +168,6 @@ export function useMessageLoader({
     const isDataLoading =
       chatType === 'private' ? isPrivateLoading : isGroupLoading;
     if (isDataLoading) {
-      console.log('[消息处理] 数据加载中，等待...');
       return;
     }
 
@@ -425,7 +424,6 @@ export function useMessageLoader({
         //   to,
         //   contentLen: content.length
         // });
-        console.log('📨 [消息监听] [私聊] 收到区块链消息事件:');
         // 处理自己发送的消息确认
         if (isFromMe) {
           setMessages((prev) =>
@@ -433,10 +431,6 @@ export function useMessageLoader({
               // 比较加密后的内容 (msg.content) 而不是原始内容 (msg.originalContent)
               // 同时确保只更新发送中的消息
               if (msg.status === 'sending' && msg.content === content) {
-                console.log(
-                  '✅ [消息监听] [私聊] 确认消息已上链，移除转圈圈状态:',
-                  msg.id
-                );
                 return {
                   ...msg,
                   status: undefined, // 清除发送中状态
@@ -495,7 +489,6 @@ export function useMessageLoader({
     groupAddress || '',
     currentAddress,
     (newMessage) => {
-      console.log('📨 [消息监听] [群聊] 收到群消息:', newMessage.id);
       setMessages((prev) => {
         // 1. 尝试找到对应的乐观更新消息 (发送中且内容相同)
         // 1. 尝试找到对应的乐观更新消息 (发送中且匹配)
@@ -532,10 +525,6 @@ export function useMessageLoader({
 
             // 3. 只有当两个 ID 都存在且相等时才认为匹配
             if (optPacketId && newPacketId && optPacketId === newPacketId) {
-              console.log(
-                '✅ [消息监听] [群聊] 通过 Packet ID 匹配成功:',
-                optPacketId
-              );
               return true;
             }
           } catch (e) {
@@ -546,10 +535,6 @@ export function useMessageLoader({
         });
 
         if (pendingIndex !== -1) {
-          console.log(
-            '✅ [消息监听] [群聊] 确认消息已上链，移除转圈圈状态:',
-            prev[pendingIndex].id
-          );
           // 找到乐观消息，用新消息替换它
           const newPrev = [...prev];
           newPrev[pendingIndex] = newMessage;

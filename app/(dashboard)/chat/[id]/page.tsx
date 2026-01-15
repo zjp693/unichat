@@ -221,263 +221,6 @@ function ChatContent() {
     }
   }, [groupType, fetchedSubgroupId, dispatch]);
 
-  // 🔍 调试：检查群类型和成员状态
-  useEffect(() => {
-    if (
-      chatType === 'group' &&
-      groupAddress &&
-      currentAddress &&
-      publicClient
-    ) {
-      console.log('🔍 [调试] 群聊信息:', {
-        groupAddress,
-        groupType,
-        currentAddress,
-        chatType
-      });
-
-      // 检查当前用户是否是群成员
-      const checkMembership = async () => {
-        try {
-          let isMember = false;
-
-          if (groupType === 'redpacket') {
-            // 红包群使用 RedPacketGroupView 的 getMember 方法
-            const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
-              chainId,
-              'redPacketGroupView'
-            );
-
-            if (!RED_PACKET_GROUP_VIEW_ADDRESS) {
-              console.error('[成员检查] View 合约地址未配置');
-              isMember = false;
-            } else {
-              const result = await publicClient.readContract({
-                address: RED_PACKET_GROUP_VIEW_ADDRESS,
-                abi: [
-                  {
-                    inputs: [
-                      {
-                        internalType: 'address',
-                        name: 'group',
-                        type: 'address'
-                      },
-                      { internalType: 'address', name: 'addr', type: 'address' }
-                    ],
-                    name: 'getMember',
-                    outputs: [
-                      { internalType: 'bool', name: 'exists', type: 'bool' },
-                      {
-                        internalType: 'uint64',
-                        name: 'joinAt',
-                        type: 'uint64'
-                      },
-                      {
-                        internalType: 'uint32',
-                        name: 'subgroupId',
-                        type: 'uint32'
-                      }
-                    ],
-                    stateMutability: 'view',
-                    type: 'function'
-                  }
-                ],
-                functionName: 'getMember',
-                args: [groupAddress as `0x${string}`, currentAddress]
-              });
-
-              isMember = result[0];
-              console.log('🔍 [调试] 红包群成员状态:', {
-                exists: isMember,
-                joinAt: result[1]?.toString(),
-                subgroupId: result[2]
-              });
-            }
-          } else {
-            // Community 群使用 isActiveMember 方法
-            const result = await publicClient.readContract({
-              address: groupAddress as `0x${string}`,
-              abi: [
-                {
-                  inputs: [
-                    {
-                      internalType: 'address',
-                      name: 'account',
-                      type: 'address'
-                    }
-                  ],
-                  name: 'isActiveMember',
-                  outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
-                  stateMutability: 'view',
-                  type: 'function'
-                }
-              ],
-              functionName: 'isActiveMember',
-              args: [currentAddress]
-            });
-
-            isMember = result as boolean;
-            console.log('🔍 [调试] Community成员状态:', {
-              isActiveMember: isMember
-            });
-          }
-
-          if (!isMember) {
-            console.error('❌ [错误] 你还不是群成员！请先加入群组。');
-            return;
-          }
-
-          // 以下检查仅适用于红包群
-          if (groupType === 'redpacket') {
-            // 同时检查是否是群主
-            const mainOwner = await publicClient.readContract({
-              address: groupAddress as `0x${string}`,
-              abi: [
-                {
-                  inputs: [],
-                  name: 'mainOwner',
-                  outputs: [
-                    { internalType: 'address', name: '', type: 'address' }
-                  ],
-                  stateMutability: 'view',
-                  type: 'function'
-                }
-              ],
-              functionName: 'mainOwner'
-            });
-
-            // console.log('🔍 [调试] 群主信息:', {
-            //   mainOwner,
-            //   isCurrentUserMainOwner:
-            //     mainOwner?.toString().toLowerCase() ===
-            //     currentAddress.toLowerCase()
-            // });
-
-            // 检查消息限制配置
-            const limitType = await publicClient.readContract({
-              address: groupAddress as `0x${string}`,
-              abi: [
-                {
-                  inputs: [],
-                  name: 'mainMessageLimitType',
-                  outputs: [{ internalType: 'uint8', name: '', type: 'uint8' }],
-                  stateMutability: 'view',
-                  type: 'function'
-                }
-              ],
-              functionName: 'mainMessageLimitType'
-            });
-
-            const limitCount = await publicClient.readContract({
-              address: groupAddress as `0x${string}`,
-              abi: [
-                {
-                  inputs: [],
-                  name: 'mainMessageLimitCount',
-                  outputs: [
-                    { internalType: 'uint32', name: '', type: 'uint32' }
-                  ],
-                  stateMutability: 'view',
-                  type: 'function'
-                }
-              ],
-              functionName: 'mainMessageLimitCount'
-            });
-
-            console.log('🔍 [调试] 消息限制配置:', {
-              limitType: limitType, // 0=无限制, 1=每日, 2=每周
-              limitCount: limitCount
-            });
-
-            // 检查禁言状态
-            const muteUntil = await publicClient.readContract({
-              address: groupAddress as `0x${string}`,
-              abi: [
-                {
-                  inputs: [
-                    { internalType: 'address', name: '', type: 'address' }
-                  ],
-                  name: 'globalMuteUntil',
-                  outputs: [
-                    { internalType: 'uint64', name: '', type: 'uint64' }
-                  ],
-                  stateMutability: 'view',
-                  type: 'function'
-                }
-              ],
-              functionName: 'globalMuteUntil',
-              args: [currentAddress]
-            });
-
-            const now = Math.floor(Date.now() / 1000);
-            const isMuted = Number(muteUntil) > now;
-            console.log('🔍 [调试] 禁言状态:', {
-              muteUntil: muteUntil?.toString(),
-              currentTimestamp: now,
-              isMuted
-            });
-
-            if (isMuted) {
-              const muteEndTime = new Date(
-                Number(muteUntil) * 1000
-              ).toLocaleString();
-              console.error(
-                `❌ [错误] 你已被禁言！禁言结束时间: ${muteEndTime}`
-              );
-              return;
-            }
-
-            // 检查用户消息计数
-            const msgCount = await publicClient.readContract({
-              address: groupAddress as `0x${string}`,
-              abi: [
-                {
-                  inputs: [
-                    { internalType: 'address', name: '', type: 'address' }
-                  ],
-                  name: 'mainMessageCounts',
-                  outputs: [
-                    { internalType: 'uint32', name: 'count', type: 'uint32' },
-                    {
-                      internalType: 'uint64',
-                      name: 'periodStart',
-                      type: 'uint64'
-                    }
-                  ],
-                  stateMutability: 'view',
-                  type: 'function'
-                }
-              ],
-              functionName: 'mainMessageCounts',
-              args: [currentAddress]
-            });
-
-            const currentCount = msgCount[0];
-            console.log('🔍 [调试] 用户消息计数:', {
-              count: currentCount,
-              periodStart: msgCount[1]?.toString(),
-              limitCount: limitCount
-            });
-
-            // 检查是否超过消息限制
-            if (limitType !== 0 && currentCount >= limitCount) {
-              console.error(
-                `❌ [错误] 已达到消息发送限制！当前: ${currentCount}/${limitCount}`
-              );
-              return;
-            }
-          }
-
-          console.log('✅ [成功] 所有检查通过，可以发送消息！');
-        } catch (error) {
-          console.error('🔍 [调试] 检查成员状态失败:', error);
-        }
-      };
-
-      checkMembership();
-    }
-  }, [chatType, groupAddress, currentAddress, publicClient, groupType]);
-
   // 使用实时成员数，如果加载中则使用 URL 参数的回退值
   const displayMemberCount =
     chatType === 'group'
@@ -552,7 +295,8 @@ function ChatContent() {
     recipientAddress,
     currentAddress: currentAddress as Address,
     setMessages,
-    messages
+    messages,
+    groupType: groupType as 'community' | 'redpacket'
   });
 
   // 加密操作
@@ -779,18 +523,11 @@ function ChatContent() {
           let packetId: string | undefined;
 
           try {
-            console.log('📦 [红包解析] 原始内容:', selectedRedPacket.content);
-            console.log(
-              '📦 [红包解析] 原始完整内容:',
-              (selectedRedPacket as any).originalContent
-            );
-
             // 1. 尝试解析 JSON (群红包 / Optimistic UI)
             try {
               const json = JSON.parse(selectedRedPacket.content);
               if (json.packetId) {
                 packetId = json.packetId.toString();
-                console.log('✅ [红包解析] 从 JSON 中解析到 ID:', packetId);
               }
             } catch (e) {
               // 忽略 JSON 解析错误，继续下一种格式
@@ -802,10 +539,7 @@ function ChatContent() {
               const firstPart = parts[0].trim();
               if (firstPart && !isNaN(Number(firstPart))) {
                 packetId = firstPart;
-                console.log(
-                  '✅ [红包解析] 从 "ID | JSON" 格式中解析到 ID:',
-                  packetId
-                );
+                packetId = firstPart;
               }
             }
 
@@ -814,17 +548,14 @@ function ChatContent() {
               const parts = selectedRedPacket.content.split('|');
               if (parts.length >= 3) {
                 packetId = parts[2];
-                console.log('✅ [红包解析] 从 RP 格式中解析到 ID:', packetId);
+                packetId = parts[2];
               }
             }
-          } catch (err) {
-            console.error('❌ [红包解析] 解析过程出错:', err);
-          }
+          } catch (err) {}
 
           if (packetId) {
             await handleClaimRedPacket(packetId, startAnimation);
           } else {
-            console.error('无法解析红包 ID', selectedRedPacket);
           }
         }}
         onDetails={() => {

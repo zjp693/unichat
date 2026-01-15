@@ -212,11 +212,6 @@ export function useCommunityMessages(
     }
 
     const rawMessages = rawData[0];
-    console.log('[红包群消息] 获取到消息:', {
-      count: rawMessages.length,
-      start,
-      rawData
-    });
 
     const formattedMessages: Message[] = rawMessages.map(
       (msg: RedPacketGroupMessage, index: number) => {
@@ -226,13 +221,6 @@ export function useCommunityMessages(
         // 🎁 检查是否是红包消息
         let messageType: 'text' | 'red-packet' = 'text';
         let messageContent = msg.content || '';
-
-        console.log('📝 [消息解析] 原始消息:', {
-          index: start + index,
-          from: msg.from,
-          content: msg.content,
-          timestamp: msg.timestamp.toString()
-        });
 
         try {
           // 只要是以 "数字 |" 开头就算红包 (允许后面为空或非规范 JSON)
@@ -257,30 +245,17 @@ export function useCommunityMessages(
                 redPacketData = { ...redPacketData, ...parsed };
                 // 确保 ID 以提取的为准
                 redPacketData.packetId = extractedId;
-                console.log('✅ [JSON 解析] 成功合并:', parsed);
               } catch (e) {
                 // JSON 解析失败，保持默认数据
-                console.warn(
-                  '⚠️ [JSON 解析] 失败，使用默认数据:',
-                  remainingPart
-                );
               }
             }
 
             messageContent = JSON.stringify(redPacketData);
-            console.log('🎁 [红包群] 识别到红包消息:', {
-              packetId: extractedId,
-              原始内容: msg.content,
-              解析后JSON: redPacketData,
-              最终content: messageContent
-            });
           } else {
             // 不符合 "ID |" 格式的消息，视为普通文本
             messageType = 'text';
-            console.log('💬 [普通消息] 文本内容:', msg.content);
           }
         } catch (e) {
-          console.error('❌ [红包群] 消息类型判定过程出错:', e);
           messageType = 'text';
         }
 

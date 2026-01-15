@@ -232,8 +232,6 @@ export async function getIPFSUrl(
 export async function warmupGateways(
   testCid: string = 'QmPZ9gcCEpqKTo6aq61g2nXGUhM4iCL3ewB6LDXZCtioEB' // IPFS logo
 ): Promise<void> {
-  console.log('🔥 开始预热 IPFS 网关...');
-
   const results = await Promise.allSettled(
     IPFS_GATEWAYS.map(async (gateway) => {
       const url = `${gateway}${testCid}`;
@@ -241,16 +239,13 @@ export async function warmupGateways(
         const response = await tryFetchFromGateway(url, 5000);
         if (response.ok) {
           recordGatewaySuccess(gateway);
-          console.log(`✅ 网关可用: ${gateway}`);
           return { gateway, success: true };
         } else {
           recordGatewayFailure(gateway);
-          console.log(`❌ 网关失败: ${gateway} (HTTP ${response.status})`);
           return { gateway, success: false };
         }
       } catch (error) {
         recordGatewayFailure(gateway);
-        console.log(`❌ 网关失败: ${gateway} (${error})`);
         return { gateway, success: false };
       }
     })
@@ -259,5 +254,4 @@ export async function warmupGateways(
   const successCount = results.filter(
     (r) => r.status === 'fulfilled' && r.value.success
   ).length;
-  console.log(`🔥 网关预热完成: ${successCount}/${IPFS_GATEWAYS.length} 可用`);
 }

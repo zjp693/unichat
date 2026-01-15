@@ -57,8 +57,6 @@ export async function checkTokenBalance(
     args: [userAddress]
   })) as bigint;
 
-  console.log('💰 当前余额:', formatUnits(balance, decimals));
-
   if (balance < requiredAmount) {
     alert(`余额不足，当前余额: ${formatUnits(balance, decimals)}`);
     return false;
@@ -92,8 +90,6 @@ export async function approveTokenIfNeeded(
     return true;
   }
 
-  console.log('1️⃣ 检查 Token 授权...');
-
   // 检查当前授权额度
   const allowance = (await publicClient.readContract({
     address: tokenAddress,
@@ -103,14 +99,12 @@ export async function approveTokenIfNeeded(
   })) as bigint;
 
   if (allowance >= amount) {
-    console.log('✅ 已有足够授权，跳过');
     return true;
   }
 
   // 请求无限授权（MaxUint256）
   // 行业惯例：Uniswap、Aave 等主流 DeFi 都使用无限授权
   // 优点：用户只需首次授权一次，后续操作无需再授权，节省 gas
-  console.log('⏳ 请求 Token 无限授权...');
   const approveTxHash = await approveFunc({
     address: tokenAddress,
     abi: erc20Abi,
@@ -120,9 +114,7 @@ export async function approveTokenIfNeeded(
     ...(chainId ? { chainId } : {})
   });
 
-  console.log('⏳ 等待授权确认...', approveTxHash);
   await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
-  console.log('✅ 授权成功');
 
   return true;
 }

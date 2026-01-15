@@ -122,6 +122,8 @@ export function RedPacketMessageWrapper({
   const status = useMemo(() => {
     // 优先使用 config 中的 status（如果已明确设置）
     if (config.status === 'expired') return 'expired';
+    if (config.status === 'claimed') return 'claimed';
+    if (config.status === 'empty') return 'empty';
 
     // 如果当前用户已领取，显示为 claimed
     if (hasClaimed) return 'claimed';

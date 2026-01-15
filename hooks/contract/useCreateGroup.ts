@@ -91,7 +91,6 @@ export function useCreateGroup() {
         ]
       });
 
-      console.log('✅ 交易已发送，Hash:', hash);
       setStatus({ state: 'creating', txHash: hash });
     } catch (error) {
       console.error('❌ 创建群组失败:', error);
@@ -118,8 +117,6 @@ export function useCreateGroup() {
   // 监听交易成功并解析事件
   useEffect(() => {
     if (isSuccess && receipt && status.state === 'creating') {
-      console.log('✅ 交易已确认，Receipt:', receipt);
-
       // 从 GroupCreated 事件中获取新群地址
       const groupCreatedLog = receipt.logs.find((log) => {
         try {
@@ -143,7 +140,6 @@ export function useCreateGroup() {
           });
 
           const groupAddress = (decoded.args as any).group as `0x${string}`;
-          console.log('🎉 解析到新群地址:', groupAddress);
           setStatus({ state: 'success', groupAddress });
         } catch (e) {
           console.error('解析 GroupCreated 事件失败:', e);
