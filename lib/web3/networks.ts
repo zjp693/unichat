@@ -29,6 +29,12 @@ export const opBNB = defineChain({
       name: 'opBNBScan',
       url: 'https://opbnbscan.com'
     }
+  },
+  // 添加 multicall3 合约配置，这是 viem 批量调用所必需的
+  contracts: {
+    multicall3: {
+      address: '0xcA11bde05977b3631167028862bE2a173976CA11'
+    }
   }
 });
 

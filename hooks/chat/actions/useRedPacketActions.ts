@@ -166,7 +166,8 @@ export function useRedPacketActions({
             totalAmount,
             currentAddress,
             publicClient,
-            approve
+            approve,
+            chainId
           );
 
           console.log('4️⃣ [红包群] 创建红包...', {
@@ -356,7 +357,8 @@ export function useRedPacketActions({
             amount,
             currentAddress,
             publicClient,
-            approve
+            approve,
+            chainId
           );
 
           console.log('2️⃣ [官方群] 调用群合约发送红包...');
@@ -447,7 +449,8 @@ export function useRedPacketActions({
       writeContract,
       setMessages,
       setIsActionsOpen,
-      scrollToBottom
+      scrollToBottom,
+      chainId
     ]
   );
 
@@ -503,7 +506,8 @@ export function useRedPacketActions({
           amount,
           currentAddress,
           publicClient,
-          approve
+          approve,
+          chainId
         );
 
         console.log('2️⃣ 调用 DirectMessage 发送私聊红包...');
@@ -589,7 +593,8 @@ export function useRedPacketActions({
       writeContract,
       setMessages,
       setIsActionsOpen,
-      scrollToBottom
+      scrollToBottom,
+      chainId
     ]
   );
 

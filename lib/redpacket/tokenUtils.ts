@@ -75,6 +75,7 @@ export async function checkTokenBalance(
  * @param userAddress 用户地址
  * @param publicClient Wagmi 的 publicClient
  * @param approveFunc Wagmi 的 writeContractAsync 函数
+ * @param chainId 可选，当前链 ID（用于解决某些钱包连接器的兼容性问题）
  * @returns 授权是否成功
  */
 export async function approveTokenIfNeeded(
@@ -83,7 +84,8 @@ export async function approveTokenIfNeeded(
   amount: bigint,
   userAddress: Address,
   publicClient: any,
-  approveFunc: any
+  approveFunc: any,
+  chainId?: number
 ): Promise<boolean> {
   // 原生代币 ETH 不需要授权
   if (tokenAddress === '0x0000000000000000000000000000000000000000') {
@@ -113,7 +115,9 @@ export async function approveTokenIfNeeded(
     address: tokenAddress,
     abi: erc20Abi,
     functionName: 'approve',
-    args: [spenderAddress, maxUint256]
+    args: [spenderAddress, maxUint256],
+    // 显式传入 chainId，解决 Reown AppKit 连接器兼容性问题
+    ...(chainId ? { chainId } : {})
   });
 
   console.log('⏳ 等待授权确认...', approveTxHash);

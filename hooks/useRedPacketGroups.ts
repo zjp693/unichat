@@ -8,8 +8,6 @@ import { useChainId, usePublicClient } from 'wagmi';
 import { getContractAddress } from '@/lib/web3/contracts';
 
 export function useRedPacketGroups(userAddress?: string) {
-  // console.log('[useRedPacketGroups] Hook called with address:', userAddress);
-
   const chainId = useChainId();
   const publicClient = usePublicClient();
   // 注意：getContractAddress 返回 null 如果 chainId 不支持。
@@ -31,7 +29,9 @@ export function useRedPacketGroups(userAddress?: string) {
         ? (userAddress as Address)
         : undefined;
 
-      if (!registryAddress || !publicClient) return [];
+      if (!registryAddress || !publicClient) {
+        return [];
+      }
 
       return await getRedPacketGroupList(publicClient, registryAddress, addr);
     },

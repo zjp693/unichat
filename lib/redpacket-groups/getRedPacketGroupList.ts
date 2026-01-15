@@ -41,6 +41,7 @@ export async function getRedPacketGroupList(
     chainId,
     'redPacketGroupView'
   );
+
   // 1. 获取群组总数
   const count = (await publicClient.readContract({
     address: registryAddress,
@@ -63,10 +64,16 @@ export async function getRedPacketGroupList(
   }
 
   // Multicall: 获取地址列表
-  const groupAddresses = (await publicClient.multicall({
-    contracts: calls,
-    allowFailure: false
-  })) as `0x${string}`[];
+  let groupAddresses: `0x${string}`[];
+  try {
+    groupAddresses = (await publicClient.multicall({
+      contracts: calls,
+      allowFailure: false
+    })) as `0x${string}`[];
+  } catch (error) {
+    console.error('[getRedPacketGroupList] 获取群地址列表失败:', error);
+    return [];
+  }
 
   // 3. 批量获取所有群的详情 (RedPacketGroupView Contract)
   // 如果群数量很大，建议分页，这里假设数量可控
