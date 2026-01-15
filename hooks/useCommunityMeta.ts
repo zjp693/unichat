@@ -1,9 +1,9 @@
-import { useReadContract } from 'wagmi';
+import { useReadContract, useChainId } from 'wagmi';
 import { Address } from 'viem';
 import { useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import communityFactoryABI from '@/contract/abi/CommunityFactory.json';
-import { FACTORY_ADDRESS } from '@/lib/viem';
+import { getContractAddress } from '@/lib/web3/contracts';
 import { updateChatMeta } from '@/lib/chatMetaSlice';
 
 interface CommunityMetadata {
@@ -22,15 +22,17 @@ interface CommunityMetadata {
  */
 export function useCommunityMeta(communityAddress?: string) {
   const dispatch = useDispatch();
+  const chainId = useChainId();
+  const factoryAddress = getContractAddress(chainId, 'communityFactory');
   const lastUpdatedAddressRef = useRef<string | null>(null);
 
   const { data, isLoading, error } = useReadContract({
-    address: FACTORY_ADDRESS,
+    address: factoryAddress || undefined,
     abi: communityFactoryABI.abi,
     functionName: 'getCommunityMetadataExternal',
     args: communityAddress ? [communityAddress as Address] : undefined,
     query: {
-      enabled: !!communityAddress
+      enabled: !!communityAddress && !!factoryAddress
     }
   });
 

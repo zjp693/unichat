@@ -12,9 +12,12 @@ import {
 import {
   useUniChatProfileWrite,
   buildMintProfileArgs,
-  useDefaultAvatarCid
+  useDefaultAvatarCid,
+  useProfileAddress
 } from '@/lib/UniChatProfileAbi';
 import { IPFSImg } from '@/components/ui/ipfs-img';
+import { useCheckBalance } from '@/hooks/useCheckBalance';
+import UniChatProfileABI from '@/contract/abi/UniChatProfile.json';
 
 interface NewUserSetupModalProps {
   isOpen: boolean;
@@ -30,6 +33,8 @@ export function NewUserSetupModal({
   const { toast } = useToast();
   const { writeContractAsync } = useUniChatProfileWrite();
   const { data: defaultAvatarCid } = useDefaultAvatarCid();
+  const profileAddress = useProfileAddress();
+  const { checkNativeBalance } = useCheckBalance();
 
   useEffect(() => {
     console.log('👀 [Debug] Contract Default Avatar CID:', defaultAvatarCid);
@@ -134,6 +139,43 @@ export function NewUserSetupModal({
       return;
     }
 
+    // 💰 余额检查
+    if (!profileAddress) {
+      toast({
+        title: '合约地址未找到',
+        description: '请稍后重试',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // 根据是否使用默认头像,准备合适的估算参数
+    const tempAvatarCid = useDefaultAvatar
+      ? ''
+      : 'QmTemporaryHashForGasEstimation1234567890123456789012'; // 临时假CID用于估算
+
+    const balanceCheck = await checkNativeBalance(
+      profileAddress,
+      UniChatProfileABI.abi as any,
+      'mintProfile',
+      [
+        name,
+        '', // description
+        useDefaultAvatar,
+        tempAvatarCid, // 使用合适的临时值
+        'ipfs://temp' // tokenUri (临时值)
+      ]
+    );
+
+    if (!balanceCheck.success) {
+      toast({
+        title: '余额不足',
+        description: balanceCheck.message,
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       setStep('uploading');
 
@@ -176,7 +218,8 @@ export function NewUserSetupModal({
           '', // 简介为空
           useDefaultAvatar,
           useDefaultAvatar ? '' : avatarCid,
-          tokenUri
+          tokenUri,
+          profileAddress // 🔧 传入当前链的合约地址
         )
       );
 

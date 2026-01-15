@@ -72,7 +72,11 @@ export function useHasProfile(user?: Address) {
     functionName: 'hasProfile',
     args: user ? [user] : undefined,
     query: {
-      enabled: !!user && !!address
+      enabled: !!user && !!address,
+      // 缓存策略优化
+      staleTime: 30 * 1000, // 30秒内使用缓存，避免频繁查询
+      refetchOnWindowFocus: true, // 窗口重新聚焦时重新查询
+      refetchOnMount: true // 组件挂载时重新查询
     }
   });
 }

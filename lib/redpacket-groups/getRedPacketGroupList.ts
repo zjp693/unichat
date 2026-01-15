@@ -1,5 +1,3 @@
-import { publicClient } from '@/lib/viem';
-
 import UniChatRegistryArtifact from '@/contract/abi/UniChatRegistry.json';
 import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
 import { parseAbi } from 'viem';

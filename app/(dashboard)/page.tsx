@@ -30,7 +30,11 @@ export default function ChatPage() {
   const prevAddressRef = useRef<string | undefined>(undefined);
 
   // 新用户检测
-  const { isNewUser, isLoading: isCheckingProfile } = useProfileCheck();
+  const {
+    isNewUser,
+    isLoading: isCheckingProfile,
+    refetch: refetchProfile
+  } = useProfileCheck();
   const [showSetupModal, setShowSetupModal] = useState(false);
 
   // 检测新用户并显示设置弹窗
@@ -197,6 +201,8 @@ export default function ChatPage() {
         onClose={() => setShowSetupModal(false)}
         onSuccess={() => {
           setShowSetupModal(false);
+          // 刷新 Profile 状态
+          refetchProfile();
           toast({
             title: '欢迎加入 UniChat！',
             description: '您的个人资料已创建成功',

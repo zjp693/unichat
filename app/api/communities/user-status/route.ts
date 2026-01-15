@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { publicClient } from '@/lib/viem';
+import { createPublicClient, http, Abi } from 'viem';
 import { getUserProofs } from '@/lib/db';
 import {
   getCommunityList,
   CommunityMetadata
 } from '@/lib/communities/getCommunityList';
+import {
+  getNetworkById,
+  type SupportedChainId,
+  SUPPORTED_CHAIN_IDS
+} from '@/lib/web3/networks';
 import communityABI from '@/contract/abi/community.json';
-import { Abi } from 'viem';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +41,8 @@ function parseProof(proofData: string | any[]): string[] {
  */
 async function batchCheckMembership(
   communities: CommunityMetadata[],
-  userAddress: string
+  userAddress: string,
+  chainId: SupportedChainId
 ): Promise<Map<string, boolean>> {
   const resultMap = new Map<string, boolean>();
 
@@ -46,6 +51,16 @@ async function batchCheckMembership(
   }
 
   try {
+    const network = getNetworkById(chainId);
+    if (!network) {
+      throw new Error(`Unsupported chain ID: ${chainId}`);
+    }
+
+    const publicClient = createPublicClient({
+      chain: network,
+      transport: http()
+    });
+
     // 构建 multicall 请求
     const calls = communities.map((community) => ({
       address: community.communityAddress as `0x${string}`,
@@ -78,6 +93,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const address = searchParams.get('address');
+    const chainIdParam = searchParams.get('chainId');
 
     if (!address) {
       return NextResponse.json(
@@ -86,8 +102,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // 解析 chainId，默认使用 Arbitrum
+    const chainId = chainIdParam ? parseInt(chainIdParam) : 42161;
+
+    // 验证 chainId 是否支持
+    if (!SUPPORTED_CHAIN_IDS.includes(chainId as any)) {
+      return NextResponse.json(
+        { success: false, error: `不支持的链 ID: ${chainId}` },
+        { status: 400 }
+      );
+    }
+
     // 1. 获取群聊列表
-    const { communities: allCommunities } = await getCommunityList();
+    const { communities: allCommunities } = await getCommunityList(
+      chainId as SupportedChainId
+    );
 
     if (!allCommunities.length) {
       return NextResponse.json({
@@ -99,7 +128,7 @@ export async function GET(request: NextRequest) {
     // 2. 并行执行：查询 proof + 批量检查成员状态
     const [userProofs, membershipMap] = await Promise.all([
       getUserProofs(address),
-      batchCheckMembership(allCommunities, address)
+      batchCheckMembership(allCommunities, address, chainId as SupportedChainId)
     ]);
 
     // 3. 组装结果

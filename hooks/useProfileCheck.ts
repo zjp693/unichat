@@ -11,12 +11,13 @@ import {
 export function useProfileCheck() {
   const { address, isConnected } = useAccount();
 
-  const { data: hasProfile, isLoading } = useHasProfileBase(address);
+  const { data: hasProfile, isLoading, refetch } = useHasProfileBase(address);
 
   return {
     hasProfile: hasProfile as boolean | undefined,
     isLoading,
-    isNewUser: isConnected && hasProfile === false
+    isNewUser: isConnected && hasProfile === false,
+    refetch // 返回 refetch 函数
   };
 }
 

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useChainId } from 'wagmi';
 import { CommunityWithStatus, UserStatusResponse } from '@/lib/types/community';
 
 /**
@@ -11,19 +12,21 @@ export function useCommunitiesWithStatus(userAddress?: string): {
   error: string | null;
   refetch: () => void;
 } {
+  const chainId = useChainId();
+
   const {
     data: communities = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: ['communities-with-status', userAddress],
+    queryKey: ['communities-with-status', userAddress, chainId],
     queryFn: async () => {
       if (!userAddress) return [];
 
-      console.log('🔍 [群聊列表] 开始获取群聊列表和用户状态...');
+      console.log('🔍 [群聊列表] 开始获取群聊列表和用户状态...', { chainId });
       const response = await fetch(
-        `/api/communities/user-status?address=${userAddress}`
+        `/api/communities/user-status?address=${userAddress}&chainId=${chainId}`
       );
       const result: UserStatusResponse = await response.json();
 
