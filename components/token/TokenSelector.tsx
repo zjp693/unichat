@@ -18,14 +18,7 @@ export function TokenSelector({
 }: TokenSelectorProps) {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [isAddingToken, setIsAddingToken] = useState(false);
-  // 只存储自定义代币的地址
-  const [customAddresses, setCustomAddresses] = useState<string[]>([]);
   const { toast } = useToast();
-
-  // 🔍 监控自定义地址的变化
-  useEffect(() => {
-    console.log('🔄 [TokenSelector] 当前自定义代币地址列表:', customAddresses);
-  }, [customAddresses]);
 
   // 当弹窗关闭时，重置搜索关键词
   useEffect(() => {
@@ -35,8 +28,7 @@ export function TokenSelector({
   }, [isOpen]);
 
   // 传入自定义地址，统一获取所有代币信息（包括余额）
-  const { tokens: allTokens, isLoading } =
-    useRecommendedTokens(customAddresses);
+  const { tokens: allTokens, isLoading, refetch } = useRecommendedTokens([]);
 
   const filteredTokens = useTokenFilter(allTokens, searchKeyword);
 
@@ -48,25 +40,8 @@ export function TokenSelector({
   const handleAddCustomToken = (token: Token) => {
     const newAddress = token.address.toLowerCase();
 
-    console.log('➕ [TokenSelector] 尝试添加新代币:', newAddress);
-
-    // 检查是否已存在（在所有代币中检查）
-    const exists = allTokens.some(
-      (t) => t.address.toLowerCase() === newAddress
-    );
-
-    if (exists) {
-      console.log('⚠️ [TokenSelector] 代币已存在，跳过添加');
-      toast({
-        title: '代币已存在',
-        description: `${token.symbol} 已经在列表中了`,
-        variant: 'destructive'
-      });
-      return; // 👈 直接返回，不执行后续操作
-    }
-
-    console.log('✅ [TokenSelector] 代币不存在，添加到列表');
-    setCustomAddresses((prev) => [newAddress, ...prev]);
+    // 强制触发链上数据刷新
+    refetch().then(() => {});
 
     // 只在成功添加时才执行这些操作
     onSelectToken(token);

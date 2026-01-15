@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TopNavbar } from '@/components/ui/top-navbar';
+import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
+import { useAccount } from 'wagmi';
 import { IPFSImg } from '@/components/ui/ipfs-img';
 import Image from 'next/image';
 import { Address } from 'viem';
@@ -17,6 +18,7 @@ import type { SearchHistoryItem } from '@/lib/searchHistorySlice';
 
 export default function SearchPage() {
   const router = useRouter();
+  const { isConnected } = useAccount();
   const [searchTerm, setSearchTerm] = useState('');
   const [validationError, setValidationError] = useState('');
   const {
@@ -124,7 +126,9 @@ export default function SearchPage() {
   return (
     <div className="flex flex-col h-screen bg-white">
       {/* 顶部导航栏 */}
-      <TopNavbar />
+      <div className="flex items-center justify-between py-4 px-4 bg-white border-gray-200">
+        {isConnected ? <ChainSelectorDropdown /> : <appkit-button />}
+      </div>
 
       {/* 搜索栏 */}
       <div className="flex items-center gap-2 px-3 py-3 bg-white border-gray-200">

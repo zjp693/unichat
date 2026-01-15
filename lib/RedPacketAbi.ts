@@ -22,12 +22,6 @@ export function getRedPacketAddress(chainId: number): Address | null {
   return getContractAddress(chainId, 'redPacket');
 }
 
-// ⚠️ 向后兼容：保留旧的全局常量（默认读取 Arbitrum 地址）
-// 尚未迁移的文件仍依赖此常量
-export const RED_PACKET_CONTRACT_ADDRESS: Address =
-  (process.env.NEXT_PUBLIC_RED_PACKET_ADDRESS_ARB as Address) ||
-  ('0x0000000000000000000000000000000000000000' as Address);
-
 // 枚举类型
 export enum PacketType {
   Personal = 0,
@@ -232,5 +226,12 @@ export function useGetDefaultExpiryDuration() {
  * 钩子: 退款过期红包
  */
 export function useRefundExpiredPacket() {
+  return useWriteContract();
+}
+
+/**
+ * 钩子: 推荐新代币到列表
+ */
+export function useRecommendToken() {
   return useWriteContract();
 }

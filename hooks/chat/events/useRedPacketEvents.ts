@@ -462,8 +462,11 @@ export function useRedPacketEvents({
         console.log('📜 加载历史红包领取事件...');
 
         const currentBlock = await publicClient.getBlockNumber();
-        // Arbitrum: 1区块≈0.25秒, 24小时≈345600个区块
-        const fromBlock = currentBlock - BigInt(345600);
+        // 限制查询范围，防止触发 RPC 限制。
+        // opBNB 限制为 50,000 块，许多 Arbitrum 公共节点限制更严（如 10,000 或 5,000）。
+        // 我们取一个通用的保守值 10,000。
+        const blockRange = BigInt(10000);
+        const fromBlock = currentBlock - blockRange;
 
         const logs = await publicClient.getLogs({
           address: contractAddress as `0x${string}`,

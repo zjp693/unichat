@@ -54,8 +54,11 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
   const redPacketAddress = useRedPacketAddress();
 
   // 使用新的分页 API 获取推荐代币地址列表
-  const { data: recommendedAddresses, isLoading: isLoadingAddresses } =
-    useGetRecommendedTokensPaged(BigInt(0), BigInt(100));
+  const {
+    data: recommendedAddresses,
+    isLoading: isLoadingAddresses,
+    refetch: refetchRecommended
+  } = useGetRecommendedTokensPaged(BigInt(0), BigInt(100));
 
   // 合并推荐代币和自定义代币地址
   const allTokenAddresses = useMemo(() => {
@@ -63,7 +66,8 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
 
     // 添加推荐代币地址
     if (recommendedAddresses && Array.isArray(recommendedAddresses)) {
-      recommendedAddresses.forEach((addr: string) => {
+      const addressesList = recommendedAddresses as string[];
+      addressesList.forEach((addr: string) => {
         if (addr && addr !== '0x0000000000000000000000000000000000000000') {
           addresses.push(addr.toLowerCase());
         }
@@ -92,13 +96,16 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
     }));
   }, [allTokenAddresses, redPacketAddress]);
 
-  const { data: tokenInfosData, isLoading: isLoadingTokenInfos } =
-    useReadContracts({
-      contracts: tokenInfoContracts as any,
-      query: {
-        enabled: tokenInfoContracts.length > 0
-      }
-    });
+  const {
+    data: tokenInfosData,
+    isLoading: isLoadingTokenInfos,
+    refetch: refetchTokenInfos
+  } = useReadContracts({
+    contracts: tokenInfoContracts as any,
+    query: {
+      enabled: tokenInfoContracts.length > 0
+    }
+  });
 
   // 解析代币信息并构建 tokenAddresses 数组（包含 iconCid）
   const tokenAddresses = useMemo(() => {
@@ -121,7 +128,9 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
         iconCid,
         isRecommended:
           (Array.isArray(recommendedAddresses) &&
-            recommendedAddresses.includes(addr as `0x${string}`)) ||
+            (recommendedAddresses as string[]).includes(
+              addr as `0x${string}`
+            )) ||
           false
       };
     });
@@ -164,13 +173,16 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
     [tokenAddresses, userAddress]
   );
 
-  const { data: contractsData, isLoading: isLoadingContracts } =
-    useReadContracts({
-      contracts,
-      query: {
-        enabled: tokenAddresses.length > 0
-      }
-    });
+  const {
+    data: contractsData,
+    isLoading: isLoadingContracts,
+    refetch: refetchERC20
+  } = useReadContracts({
+    contracts,
+    query: {
+      enabled: tokenAddresses.length > 0
+    }
+  });
 
   // 合并数据
   const tokens = useMemo(() => {
@@ -220,6 +232,13 @@ export function useRecommendedTokens(customAddresses: string[] = []) {
   return {
     tokens,
     isLoading: isLoadingAddresses || isLoadingTokenInfos || isLoadingContracts,
+    refetch: async () => {
+      await Promise.all([
+        refetchRecommended(),
+        refetchTokenInfos(),
+        refetchERC20()
+      ]);
+    },
     error: null
   };
 }

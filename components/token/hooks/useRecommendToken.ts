@@ -2,15 +2,16 @@ import {
   useReadContract,
   useWriteContract,
   useAccount,
-  useWaitForTransactionReceipt
+  usePublicClient
 } from 'wagmi';
-import { erc20Abi, formatUnits } from 'viem';
+import { erc20Abi, formatUnits, maxUint256 } from 'viem';
 import { RedPacketAbi, useRedPacketAddress } from '@/lib/RedPacketAbi';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 export function useRecommendToken() {
   const { address: userAddress } = useAccount();
   const redPacketAddress = useRedPacketAddress();
+  const publicClient = usePublicClient();
 
   // 1. 获取质押金额
   const { data: stakeAmount } = useReadContract({
@@ -54,18 +55,13 @@ export function useRecommendToken() {
     if (!unichatTokenAddress || !stakeAmount || !redPacketAddress) return;
     try {
       setIsProcessing(true);
-      const tx = await writeApprove({
+      const hash = await writeApprove({
         address: unichatTokenAddress as `0x${string}`,
         abi: erc20Abi,
         functionName: 'approve',
-        args: [redPacketAddress, stakeAmount as bigint]
+        args: [redPacketAddress, maxUint256]
       });
-      // 这里通常需要等待交易确认，但在简单的 UI 中，我们可以让用户手动进行下一步
-      // 或者使用 useWaitForTransactionReceipt 在组件层处理
-      return tx;
-    } catch (error) {
-      console.error('Approve failed:', error);
-      throw error;
+      return hash;
     } finally {
       setIsProcessing(false);
     }
@@ -76,15 +72,60 @@ export function useRecommendToken() {
     if (!redPacketAddress) return;
     try {
       setIsProcessing(true);
-      const tx = await writeRecommend({
+      const hash = await writeRecommend({
         address: redPacketAddress,
         abi: RedPacketAbi,
         functionName: 'recommendToken',
-        args: [tokenAddress, iconCid]
+        args: [tokenAddress as `0x${string}`, iconCid]
       });
-      return tx;
+      return hash;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  /**
+   * 核心 orchestrator：执行完整的推荐流程（含自动授权）
+   */
+  const handleExecuteRecommend = async (
+    tokenAddress: string,
+    iconCid: string,
+    onProgress?: (msg: string) => void
+  ) => {
+    if (!redPacketAddress || !stakeAmount) return;
+
+    try {
+      setIsProcessing(true);
+
+      // 1. 检查授权
+      const isAllowanceSufficient =
+        allowance && (allowance as bigint) >= (stakeAmount as bigint);
+
+      if (!isAllowanceSufficient) {
+        onProgress?.('正在发起授权交易...');
+        const approveHash = await approve();
+        if (approveHash) {
+          onProgress?.('等待授权确认...');
+          await publicClient?.waitForTransactionReceipt({ hash: approveHash });
+          await refetchAllowance();
+        }
+      }
+
+      // 2. 发起推荐
+      onProgress?.('正在发起推荐交易...');
+      const recommendHash = await recommend(tokenAddress, iconCid);
+
+      if (recommendHash) {
+        onProgress?.('等待推荐确认...');
+        const receipt = await publicClient?.waitForTransactionReceipt({
+          hash: recommendHash
+        });
+        if (receipt?.status === 'reverted') {
+          throw new Error('交易被回滚，请确保账户有足够的 UNICHAT');
+        }
+        return recommendHash;
+      }
     } catch (error) {
-      console.error('Recommend failed:', error);
       throw error;
     } finally {
       setIsProcessing(false);
@@ -94,7 +135,6 @@ export function useRecommendToken() {
   const formattedStakeAmount = stakeAmount
     ? formatUnits(stakeAmount as bigint, 18)
     : '...';
-  // 假设 UNICHAT 也是 18 位精度，通常是的
 
   const isAllowanceSufficient =
     allowance && stakeAmount
@@ -105,9 +145,8 @@ export function useRecommendToken() {
     stakeAmount: stakeAmount as bigint | undefined,
     formattedStakeAmount,
     isAllowanceSufficient,
-    approve,
-    recommend,
     isProcessing: isProcessing || isApproving || isRecommending,
+    handleExecuteRecommend,
     refetchAllowance
   };
 }

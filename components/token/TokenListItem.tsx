@@ -39,7 +39,7 @@ export function TokenListItem({
       onClick={onClick}
       className={cn(
         'flex items-center gap-3 py-3 px-0 w-full transition-colors border-b border-gray-100',
-        isSelected && 'bg-blue-50/50'
+        isSelected
       )}
     >
       {/* 左侧：图标 */}
