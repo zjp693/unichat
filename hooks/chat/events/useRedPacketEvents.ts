@@ -3,7 +3,7 @@ import { useWatchContractEvent, usePublicClient, useChainId } from 'wagmi';
 import { RedPacketAbi, getRedPacketAddress } from '@/lib/RedPacketAbi';
 import type { Message } from '@/lib/chat/types';
 import type { Address } from 'viem';
-import { decodeEventLog, erc20Abi, formatUnits } from 'viem';
+import { erc20Abi, formatUnits } from 'viem';
 
 // ============= 类型定义 =============
 
@@ -316,130 +316,11 @@ async function handlePersonalClaimEvent(
   }
 }
 
-/**
- * 批量处理历史事件
- */
-async function processHistoricalEvents(
-  logs: any[],
-  chatType: 'private' | 'group',
-  groupAddress: Address | undefined,
-  recipientAddress: Address | undefined,
-  currentAddress: Address,
-  publicClient: any,
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-  contractAddress: Address // 新增参数
-): Promise<void> {
-  const claimMessages = await Promise.all(
-    logs.map(async (log) => {
-      try {
-        const decoded = decodeEventLog({
-          abi: RedPacketAbi,
-          data: log.data,
-          topics: log.topics
-        });
-
-        const isGroupClaim = decoded.eventName === 'GroupPacketClaimed';
-        const isPersonalClaim = decoded.eventName === 'PersonalPacketClaimed';
-
-        // 处理群红包领取事件
-        if (isGroupClaim && chatType === 'group' && groupAddress) {
-          const { id, claimer, amount } = decoded.args as any;
-          const isRelevant = await isGroupPacketRelevant(
-            publicClient,
-            id,
-            groupAddress,
-            contractAddress
-          );
-
-          if (isRelevant) {
-            return await createClaimMessage(
-              publicClient,
-              id,
-              claimer,
-              true,
-              groupAddress,
-              contractAddress,
-              currentAddress,
-              amount
-            );
-          }
-        }
-        // 处理私聊红包领取事件
-        else if (
-          isPersonalClaim &&
-          chatType === 'private' &&
-          recipientAddress
-        ) {
-          const { id, claimer, amount } = decoded.args as any;
-          const isRelevant = await isPersonalPacketRelevant(
-            publicClient,
-            id,
-            currentAddress,
-            recipientAddress,
-            contractAddress
-          );
-
-          if (isRelevant) {
-            return await createClaimMessage(
-              publicClient,
-              id,
-              claimer,
-              false,
-              recipientAddress,
-              contractAddress,
-              currentAddress,
-              amount
-            );
-          }
-        }
-        return null;
-      } catch (e) {
-        return null;
-      }
-    })
-  );
-
-  // 过滤掉 null 值并添加到消息列表（去重）
-  const validMessages = claimMessages.filter(
-    (msg): msg is Message => msg !== null
-  );
-
-  if (validMessages.length > 0) {
-    setMessages((prev) => {
-      let updatedMessages = [...prev];
-
-      // 1. 批量更新红包状态
-      validMessages.forEach((msg) => {
-        try {
-          // 从消息ID中提取 packetId: claim-event-{packetId}-{claimer}
-          const packetId = msg.id.split('-')[2];
-          updatedMessages = updateRedPacketStatus(
-            updatedMessages,
-            packetId,
-            currentAddress
-          );
-        } catch (e) {
-          console.warn('解析消息ID失败:', msg.id);
-        }
-      });
-
-      // 2. 添加提示消息（去重）
-      validMessages.forEach((msg) => {
-        if (!updatedMessages.some((m) => m.id === msg.id)) {
-          updatedMessages.push(msg);
-        }
-      });
-
-      return updatedMessages;
-    });
-  }
-}
-
 // ============= 主 Hook =============
 
 /**
  * 监听红包领取事件，并添加系统提示消息
- * 包括实时事件监听和历史事件查询
+ * 包括实时事件监听和基于消息内容的历史领取记录查询
  */
 export function useRedPacketEvents({
   chatType,
@@ -453,53 +334,143 @@ export function useRedPacketEvents({
   const chainId = useChainId();
   const contractAddress = getRedPacketAddress(chainId);
 
-  // ===== 加载历史领取事件 =====
+  // ===== 基于消息内容加载历史领取记录 =====
   useEffect(() => {
     if (!publicClient || !currentAddress || !contractAddress) return;
 
-    const loadHistoricalEvents = async () => {
+    const loadClaimRecordsFromMessages = async () => {
       try {
-        console.log('📜 加载历史红包领取事件...');
-
-        const currentBlock = await publicClient.getBlockNumber();
-        // 限制查询范围，防止触发 RPC 限制。
-        // opBNB 限制为 50,000 块，许多 Arbitrum 公共节点限制更严（如 10,000 或 5,000）。
-        // 我们取一个通用的保守值 10,000。
-        const blockRange = BigInt(10000);
-        const fromBlock = currentBlock - blockRange;
-
-        const logs = await publicClient.getLogs({
-          address: contractAddress as `0x${string}`,
-          fromBlock,
-          toBlock: currentBlock
+        // 1. 从消息列表中提取所有红包 ID
+        const packetIds: string[] = [];
+        messages.forEach((msg) => {
+          if (msg.type === 'red-packet') {
+            try {
+              const content = JSON.parse(msg.content);
+              if (content.packetId) {
+                packetIds.push(content.packetId);
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
         });
 
-        console.log(`📦 找到 ${logs.length} 个历史事件（最近24小时）`);
+        if (packetIds.length === 0) return;
 
-        await processHistoricalEvents(
-          logs,
-          chatType,
-          groupAddress,
-          recipientAddress,
-          currentAddress,
-          publicClient,
-          setMessages,
-          contractAddress // 传入合约地址
+        // 去重
+        const uniquePacketIds = [...new Set(packetIds)];
+
+        // 2. 24 小时前的时间戳
+        const twentyFourHoursAgo = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+
+        // 3. 对每个红包查询领取记录
+        const claimMessagesPromises = uniquePacketIds.map(
+          async (packetIdStr) => {
+            try {
+              const packetId = BigInt(packetIdStr);
+
+              // 调用合约获取领取记录
+              const claimRecords = (await publicClient.readContract({
+                address: contractAddress as `0x${string}`,
+                abi: RedPacketAbi,
+                functionName: 'getClaimRecordsPaged',
+                args: [packetId, BigInt(0), BigInt(50)] // 最多获取 50 条
+              })) as Array<{
+                claimer: Address;
+                amount: bigint;
+                claimedAt: bigint;
+              }>;
+
+              if (!claimRecords || claimRecords.length === 0) return [];
+
+              // 4. 过滤出 24 小时内的记录
+              const recentRecords = claimRecords.filter(
+                (record) => Number(record.claimedAt) > twentyFourHoursAgo
+              );
+
+              // 5. 转换为系统提示消息
+              const claimMessages = await Promise.all(
+                recentRecords.map(async (record) => {
+                  const isGroup = chatType === 'group';
+                  const recipient = isGroup
+                    ? (groupAddress as Address)
+                    : (recipientAddress as Address);
+
+                  return createClaimMessage(
+                    publicClient,
+                    packetId,
+                    record.claimer,
+                    isGroup,
+                    recipient,
+                    contractAddress,
+                    currentAddress,
+                    record.amount
+                  );
+                })
+              );
+
+              return claimMessages;
+            } catch (e) {
+              // 单个红包查询失败不影响其他
+              return [];
+            }
+          }
         );
+
+        const allClaimMessages = (
+          await Promise.all(claimMessagesPromises)
+        ).flat();
+
+        if (allClaimMessages.length > 0) {
+          setMessages((prev) => {
+            let updatedMessages = [...prev];
+
+            // 添加提示消息（去重）
+            allClaimMessages.forEach((msg) => {
+              if (!updatedMessages.some((m) => m.id === msg.id)) {
+                // 找到对应红包消息的位置，在其后插入
+                const packetId = msg.id.split('-')[2];
+                const packetMsgIndex = updatedMessages.findIndex((m) => {
+                  if (m.type !== 'red-packet') return false;
+                  try {
+                    const content = JSON.parse(m.content);
+                    return content.packetId === packetId;
+                  } catch {
+                    return false;
+                  }
+                });
+
+                if (packetMsgIndex !== -1) {
+                  // 在红包消息后面插入领取提示
+                  updatedMessages.splice(packetMsgIndex + 1, 0, msg);
+                } else {
+                  // 找不到对应红包，追加到末尾
+                  updatedMessages.push(msg);
+                }
+              }
+            });
+
+            return updatedMessages;
+          });
+        }
       } catch (error) {
-        console.error('加载历史红包领取事件失败:', error);
+        // 静默处理错误，不影响用户体验
       }
     };
 
-    loadHistoricalEvents();
+    // 只在消息列表有内容时执行
+    if (messages.length > 0) {
+      loadClaimRecordsFromMessages();
+    }
   }, [
+    messages.length, // 消息数量变化时重新检查
     chatType,
     groupAddress,
     recipientAddress,
     currentAddress,
     publicClient,
     setMessages,
-    contractAddress // 新增依赖
+    contractAddress
   ]);
 
   // ===== 监听群红包领取事件（实时）=====
