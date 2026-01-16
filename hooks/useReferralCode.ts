@@ -3,35 +3,34 @@
 /**
  * 邀请码管理 Hook
  *
- * 提供邀请码查询和生成功能：
- * 1. 查询用户已有的邀请码
- * 2. 生成新的邀请码
- * 3. 验证邀请码是否存在
+ * ⚠️ 重要变更：合约已升级，createReferral 函数已被移除
+ *
+ * 新方案：邀请码直接在前端由推荐人地址编码生成（见 lib/referral.ts）
+ * - 无需链上交易
+ * - 任何用户都可以生成
+ * - 节省 Gas，用户体验更好
+ *
+ * 本文件保留的功能：
+ * 1. 查询用户已有的邀请码（兼容旧数据）
+ * 2. 验证邀请码格式和存在性
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  useAccount,
-  usePublicClient,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useChainId
-} from 'wagmi';
-import { parseAbi, keccak256, toHex, decodeEventLog } from 'viem';
-import UniChatRegistryArtifact from '@/contract/abi/UniChatRegistry.json';
+import { useAccount, usePublicClient, useChainId } from 'wagmi';
+import { parseAbi } from 'viem';
 import { getContractAddress } from '@/lib/web3/contracts';
 
 const REGISTRY_ABI = parseAbi([
-  'function createReferral(uint16 listingShareBps, bytes32 salt) external returns (bytes32 code)',
   'function referralExists(bytes32 code) external view returns (bool)',
   'function getReferrer(bytes32 code) external view returns (address)',
-  'function getListingShareBps(bytes32 code) external view returns (uint16)',
-  'function getCodesByAddress(address addr) external view returns (bytes32[] memory codes)',
-  'event ReferralCreated(bytes32 indexed code, address indexed referrer, uint16 listingShareBps)'
+  'function getCodesByAddress(address addr) external view returns (bytes32[] memory codes)'
 ]);
 
 /**
- * 查询用户的邀请码
+ * 查询用户的邀请码（查询旧的链上创建的邀请码，如果存在）
+ *
+ * ⚠️ 注意：新方案中不再需要此功能，因为邀请码由前端直接生成
+ * 此 Hook 仅用于兼容可能存在的旧邀请码数据
  */
 export function useReferralCode() {
   const { address: userAddress } = useAccount();
@@ -57,12 +56,11 @@ export function useReferralCode() {
     }
 
     setIsFetching(true);
-    // 如果是初次加载，显示 loading
     if (!referralCode) setIsLoading(true);
     setError(null);
 
     try {
-      // ✅ 直接调用合约方法查询邀请码
+      // 尝试查询旧的邀请码（如果合约仍支持此方法）
       const codes = (await publicClient.readContract({
         address: registryAddress,
         abi: REGISTRY_ABI,
@@ -71,26 +69,25 @@ export function useReferralCode() {
       })) as `0x${string}`[];
 
       if (codes && codes.length > 0) {
-        // 获取最新的邀请码（数组最后一个）
         const latestCode = codes[codes.length - 1];
         setReferralCode(latestCode);
       } else {
         setReferralCode(null);
       }
     } catch (err) {
-      console.error('❌ [获取邀请码] 失败:', err);
-      setError(err instanceof Error ? err : new Error('获取邀请码失败'));
+      // 如果合约不支持此方法，静默失败（这是正常的）
+      console.log('ℹ️ [查询邀请码] 合约可能不支持此功能（新方案无需查询）');
+      setReferralCode(null);
     } finally {
       setIsLoading(false);
       setIsFetching(false);
     }
-  }, [publicClient, userAddress]); // ✅ 只依赖外部稳定的值
+  }, [publicClient, userAddress, chainId, isFetching, referralCode]);
 
   useEffect(() => {
     fetchReferralCode();
   }, [fetchReferralCode, refetchTrigger]);
 
-  // 手动重新获取
   const refetch = () => {
     setRefetchTrigger((prev) => prev + 1);
   };
@@ -105,99 +102,10 @@ export function useReferralCode() {
 }
 
 /**
- * 生成邀请码
- */
-export function useCreateReferralCode() {
-  const publicClient = usePublicClient();
-  const chainId = useChainId();
-  const {
-    writeContract,
-    data: hash,
-    isPending,
-    error: writeError
-  } = useWriteContract();
-  const {
-    isLoading: isConfirming,
-    isSuccess,
-    data: receipt
-  } = useWaitForTransactionReceipt({
-    hash
-  });
-
-  const [createdCode, setCreatedCode] = useState<`0x${string}` | null>(null);
-
-  // ✅ 监听交易成功，从 receipt 中解析邀请码
-  useEffect(() => {
-    if (isSuccess && receipt) {
-      try {
-        // 从 logs 中查找 ReferralCreated 事件
-        const log = receipt.logs.find((log) => {
-          try {
-            const decoded = decodeEventLog({
-              abi: REGISTRY_ABI,
-              data: log.data,
-              topics: log.topics
-            });
-            return decoded.eventName === 'ReferralCreated';
-          } catch {
-            return false;
-          }
-        });
-
-        if (log) {
-          const decoded = decodeEventLog({
-            abi: REGISTRY_ABI,
-            data: log.data,
-            topics: log.topics
-          }) as any;
-
-          const code = decoded.args.code as `0x${string}`;
-          setCreatedCode(code);
-        }
-      } catch (err) {
-        console.error('❌ [创建邀请码] 解析事件失败:', err);
-      }
-    }
-  }, [isSuccess, receipt]);
-
-  const createReferralCode = async (listingShareBps: number = 6500) => {
-    const registryAddress = getContractAddress(chainId, 'registry');
-    if (!registryAddress) {
-      throw new Error('Registry 合约地址未配置');
-    }
-
-    // 验证分润比例范围
-    if (listingShareBps < 5000 || listingShareBps > 8000) {
-      throw new Error('分润比例必须在 50%-80% 之间');
-    }
-
-    // 生成随机 salt
-    const salt = keccak256(
-      toHex(`${Date.now()}-${Math.random()}-${Math.random()}`)
-    );
-
-    // 调用合约
-    return writeContract({
-      address: registryAddress,
-      abi: REGISTRY_ABI,
-      functionName: 'createReferral',
-      args: [listingShareBps, salt]
-    });
-  };
-
-  return {
-    createReferralCode,
-    hash,
-    isPending,
-    isConfirming,
-    isSuccess,
-    createdCode, // ✅ 新增：直接返回创建的邀请码
-    error: writeError
-  };
-}
-
-/**
  * 验证邀请码是否存在
+ *
+ * 用途：检查用户输入的邀请码是否在合约中注册
+ * 新方案中：由于邀请码是地址编码，可以通过提取地址来验证有效性
  */
 export function useCheckReferralCode(code: `0x${string}` | null) {
   const publicClient = usePublicClient();

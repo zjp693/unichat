@@ -13,15 +13,12 @@ import { parseAbi, formatUnits } from 'viem';
 import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { useReferrerInviteCount } from '@/hooks/useReferrerInviteCount';
 import { useContractAddress } from '@/lib/web3/hooks/useActiveContracts';
+import {
+  isValidReferralCodeFormat,
+  extractReferrerFromCode
+} from '@/lib/referral';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
-
-// Registry ABI
-const REGISTRY_ABI = parseAbi([
-  'function referralExists(bytes32 code) external view returns (bool)',
-  'function getReferrer(bytes32 code) external view returns (address)',
-  'function getListingShareBps(bytes32 code) external view returns (uint16)'
-]);
 
 // ERC20 ABI
 const ERC20_ABI = parseAbi([
@@ -38,28 +35,17 @@ export function useGroupJoinInfo() {
   const referralCode = searchParams.get('code') as `0x${string}` | null;
   const groupAddress = searchParams.get('group') as `0x${string}` | null;
 
-  // 从多链配置获取 Registry 和 View 合约地址
-  const registryAddress = useContractAddress('registry');
+  // 从多链配置获取 View 合约地址
   const RED_PACKET_GROUP_VIEW_ADDRESS =
     useContractAddress('redPacketGroupView');
 
-  // 1️⃣ 验证邀请码
-  const { data: codeExists } = useReadContract({
-    address: registryAddress || undefined,
-    abi: REGISTRY_ABI,
-    functionName: 'referralExists',
-    args: referralCode ? [referralCode] : undefined,
-    query: { enabled: !!referralCode && !!registryAddress }
-  });
+  // 1️⃣ 验证邀请码格式（新方案：前端直接编码，只需验证格式）
+  const isValidCode = isValidReferralCodeFormat(referralCode);
 
-  // 2️⃣ 获取推荐人地址
-  const { data: referrerAddress } = useReadContract({
-    address: registryAddress || undefined,
-    abi: REGISTRY_ABI,
-    functionName: 'getReferrer',
-    args: referralCode ? [referralCode] : undefined,
-    query: { enabled: !!referralCode && !!registryAddress }
-  });
+  // 2️⃣ 从邀请码提取推荐人地址（新方案：前端直接提取，无需调用合约）
+  const referrerAddress = referralCode
+    ? extractReferrerFromCode(referralCode)
+    : null;
 
   // 3️⃣ 获取群信息（使用 RedPacketGroupView 合约的 getGroupSettings）
   const {
@@ -165,7 +151,7 @@ export function useGroupJoinInfo() {
     groupAddress,
 
     // 邀请码信息
-    isValidCode: !!codeExists,
+    isValidCode, // ✅ 使用格式验证结果
     referrerAddress: referrerAddress as `0x${string}` | undefined,
 
     // 群信息
