@@ -112,7 +112,11 @@ export function useGetProfile(tokenId?: bigint) {
     functionName: 'getProfile',
     args: tokenId !== undefined ? [tokenId] : undefined,
     query: {
-      enabled: tokenId !== undefined && !!address
+      enabled: tokenId !== undefined && !!address,
+      // 缓存策略优化 - 确保头像更新后能及时刷新
+      staleTime: 0, // 立即标记为过期，每次都重新获取
+      refetchOnWindowFocus: true, // 窗口聚焦时重新获取
+      refetchOnMount: true // 组件挂载时重新获取
     }
   });
 }

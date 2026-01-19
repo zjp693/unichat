@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { TopNavbar } from '@/components/ui/top-navbar';
+import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 import { ChevronLeft, ChevronRight, QrCode, Check, X } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -10,7 +10,8 @@ import { useAccount, useWaitForTransactionReceipt } from 'wagmi';
 import { useUserProfiles, useProfile } from '@/hooks/useProfileCheck';
 import {
   useUniChatProfileWrite,
-  buildUpdateProfileArgs
+  buildUpdateProfileArgs,
+  useProfileAddress
 } from '@/lib/UniChatProfileAbi';
 import { IPFSImg } from '@/components/ui/ipfs-img';
 
@@ -20,6 +21,7 @@ export default function ProfilePage() {
   const { address } = useAccount();
   const { tokenIds } = useUserProfiles();
   const { writeContractAsync } = useUniChatProfileWrite();
+  const profileAddress = useProfileAddress(); // 获取当前链的合约地址
 
   // 获取第一个 Profile（主 Profile）
   const firstTokenId =
@@ -30,10 +32,20 @@ export default function ProfilePage() {
     refetch
   } = useProfile(firstTokenId);
 
+  // 乐观更新：临时头像 CID（上传成功后立即显示，不等区块链确认）
+  const [optimisticAvatarCid, setOptimisticAvatarCid] = useState<string>('');
+  // 乐观更新：临时头像预览（base64，立即显示无延迟）
+  const [optimisticAvatarPreview, setOptimisticAvatarPreview] =
+    useState<string>('');
+  // 乐观更新：临时昵称（交易提交后立即显示，不等区块链确认）
+  const [optimisticUserName, setOptimisticUserName] = useState<string>('');
+
   // 从 profile 中提取数据
   const profileData = profile as any;
-  const userName = profileData?.name || '未设置';
-  const avatarCid = profileData?.avatarCid || '';
+  // 优先使用乐观更新的昵称，如果没有则使用区块链数据
+  const userName = optimisticUserName || profileData?.name || '未设置';
+  // 优先使用乐观更新的头像，如果没有则使用区块链数据
+  const avatarCid = optimisticAvatarCid || profileData?.avatarCid || '';
 
   // 昵称编辑状态
   const [isEditingName, setIsEditingName] = useState(false);
@@ -67,6 +79,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (isConfirmed) {
       const message = updateType === 'avatar' ? '头像已更新' : '昵称已更新';
+      const wasAvatarUpdate = updateType === 'avatar'; // 保存状态
 
       toast({
         title: '更新成功！',
@@ -80,10 +93,18 @@ export default function ProfilePage() {
       setTxHash(undefined);
       setUpdateType(null);
 
-      // 等待一下让区块链数据更新，然后重新获取 profile 数据
+      // 延长等待时间，给区块链更多同步时间，然后重新获取 profile 数据
       setTimeout(() => {
         refetch();
-      }, 1000);
+        // 清除乐观更新状态，使用真实的区块链数据
+        if (wasAvatarUpdate) {
+          setOptimisticAvatarCid('');
+          setOptimisticAvatarPreview('');
+        } else {
+          // 昵称更新
+          setOptimisticUserName('');
+        }
+      }, 2500); // 从1秒增加到2.5秒
     }
   }, [isConfirmed, updateType, toast, refetch]);
 
@@ -131,11 +152,17 @@ export default function ProfilePage() {
           editedName, // 新昵称
           '', // 不更新简介
           '', // 不更新头像
-          '' // 不更新 tokenUri
+          '', // 不更新 tokenUri
+          profileAddress! // 传递当前链的合约地址
         )
       );
 
       setTxHash(hash);
+
+      // 🎯 乐观更新：立即显示新昵称，不等区块链确认
+      setOptimisticUserName(editedName);
+      // 立即退出编辑模式
+      setIsEditingName(false);
 
       toast({
         title: '交易已提交',
@@ -249,11 +276,17 @@ export default function ProfilePage() {
           '', // 不更新昵称
           '', // 不更新简介
           avatarCid, // 新头像 CID
-          '' // 不更新 tokenUri
+          '', // 不更新 tokenUri
+          profileAddress! // 传递当前链的合约地址
         )
       );
 
       setTxHash(hash);
+
+      // 🎯 乐观更新：立即显示新头像，不等区块链确认
+      setOptimisticAvatarCid(avatarCid);
+      // 使用本地预览图，避免 IPFS 传播延迟
+      setOptimisticAvatarPreview(avatarPreview);
 
       toast({
         title: '交易已提交',
@@ -305,12 +338,11 @@ export default function ProfilePage() {
       });
 
       // 调用合约的 useDefaultAvatar 函数
-      const { buildUseDefaultAvatarArgs } = await import(
-        '@/lib/UniChatProfileAbi'
-      );
+      const { buildUseDefaultAvatarArgs } =
+        await import('@/lib/UniChatProfileAbi');
 
       const hash = await writeContractAsync(
-        buildUseDefaultAvatarArgs(firstTokenId)
+        buildUseDefaultAvatarArgs(firstTokenId, profileAddress!)
       );
 
       setTxHash(hash);
@@ -367,8 +399,10 @@ export default function ProfilePage() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      {/* 顶部导航栏 */}
-      <TopNavbar />
+      {/* 链选择器 */}
+      <div className="px-4 py-3 bg-white border-b border-gray-200">
+        <ChainSelectorDropdown />
+      </div>
 
       {/* 标题栏 */}
       <div className="flex items-center justify-center relative py-4 px-4 bg-white border-b border-gray-200">
@@ -396,6 +430,13 @@ export default function ProfilePage() {
                   <div className="w-full h-full flex items-center justify-center">
                     <span className="text-xs text-gray-400">加载中...</span>
                   </div>
+                ) : optimisticAvatarPreview ? (
+                  // 优先显示本地预览图（乐观更新）
+                  <img
+                    src={optimisticAvatarPreview}
+                    alt="NFT Avatar"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <IPFSImg
                     src={avatarCid}
