@@ -90,13 +90,13 @@ export function RedPacketDetailsModal({
       ? (groupAddress as `0x${string}`)
       : redPacketAddress;
 
-  console.log('🎁 [RedPacketDetailsModal] 红包详情配置:', {
-    packetId,
-    groupType,
-    groupAddress,
-    isRedPacketGroup,
-    queryAddress
-  });
+  // console.log('🎁 [RedPacketDetailsModal] 红包详情配置:', {
+  //   packetId,
+  //   groupType,
+  //   groupAddress,
+  //   isRedPacketGroup,
+  //   queryAddress
+  // });
 
   // 退款相关
   const { writeContractAsync: refundPacket } = useRefundExpiredPacket();

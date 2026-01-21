@@ -24,16 +24,18 @@ import type { Address } from 'viem';
 
 interface OpenRedPacketModalProps {
   isOpen: boolean;
-  // ... (其余 props 保持不变)
   onClose: () => void;
   onOpen: (startAnimation: () => void) => Promise<void>;
   onDetails?: () => void;
   senderName: string;
   senderAvatar?: string;
-  senderAddress?: string; // 新增
+  senderAddress?: string;
   message: string;
   packetId?: string;
   status?: 'active' | 'claimed' | 'expired' | 'empty';
+  // 新增：区分红包类型
+  groupType?: 'community' | 'redpacket';
+  groupAddress?: string;
 }
 
 export function OpenRedPacketModalNew({
@@ -46,7 +48,9 @@ export function OpenRedPacketModalNew({
   senderAddress,
   message,
   packetId,
-  status: initialStatus = 'active'
+  status: initialStatus = 'active',
+  groupType = 'community',
+  groupAddress
 }: OpenRedPacketModalProps) {
   const [isOpening, setIsOpening] = React.useState(false);
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -64,33 +68,74 @@ export function OpenRedPacketModalNew({
   // 计算最终显示的 Avatar (优先用 CID，其次用传入的 URL)
   const displayAvatarCid = profile?.avatarCid;
 
-  // 获取当前链的合约地址
+  // 获取当前链的合约地址（仅用于官方群/私聊）
   const redPacketAddress = useRedPacketAddress();
 
-  // 获取红包信息
+  // 判断是否为红包群
+  const isRedPacketGroup = groupType === 'redpacket';
+
+  // ========== 官方群/私聊 红包状态查询 ==========
+  // 红包群时完全跳过这些查询
+  const shouldQueryRedPacketContract =
+    !isRedPacketGroup && !!packetId && isOpen && !!redPacketAddress;
+
   const { data: packet } = useReadContract({
-    address: redPacketAddress || undefined,
+    address: shouldQueryRedPacketContract ? redPacketAddress : undefined,
     abi: RedPacketAbi,
     functionName: 'getPacket',
-    args: packetId ? [BigInt(packetId)] : undefined,
+    args:
+      shouldQueryRedPacketContract && packetId ? [BigInt(packetId)] : undefined,
     query: {
-      enabled: !!packetId && isOpen && !!redPacketAddress
+      enabled: shouldQueryRedPacketContract
     }
   });
 
-  // 检查是否已领取
   const { data: hasClaimed } = useReadContract({
-    address: redPacketAddress || undefined,
+    address: shouldQueryRedPacketContract ? redPacketAddress : undefined,
     abi: RedPacketAbi,
     functionName: 'hasClaimed',
+    args:
+      shouldQueryRedPacketContract && packetId && address
+        ? [BigInt(packetId), address]
+        : undefined,
+    query: {
+      enabled: shouldQueryRedPacketContract && !!address
+    }
+  });
+
+  // ========== 红包群 红包状态查询 ==========
+  const { data: redPacketGroupClaimed } = useReadContract({
+    address: groupAddress as `0x${string}`,
+    abi: [
+      {
+        inputs: [
+          { internalType: 'uint256', name: '', type: 'uint256' },
+          { internalType: 'address', name: '', type: 'address' }
+        ],
+        name: 'claimed',
+        outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+        stateMutability: 'view',
+        type: 'function'
+      }
+    ],
+    functionName: 'claimed',
     args: packetId && address ? [BigInt(packetId), address] : undefined,
     query: {
-      enabled: !!packetId && !!address && isOpen && !!redPacketAddress
+      enabled:
+        isRedPacketGroup && !!packetId && !!address && isOpen && !!groupAddress
     }
   });
 
   // 计算实时状态
   const currentStatus = React.useMemo(() => {
+    // 红包群：直接使用 redPacketGroupClaimed 状态
+    if (isRedPacketGroup) {
+      // 如果还没查询完成，返回初始状态
+      if (redPacketGroupClaimed === undefined) return initialStatus;
+      return redPacketGroupClaimed ? 'claimed' : 'active';
+    }
+
+    // 官方群/私聊：使用原有逻辑
     if (!packet) return initialStatus;
 
     // 1. 检查是否已领取
@@ -104,12 +149,16 @@ export function OpenRedPacketModalNew({
     if (Date.now() / 1000 > expiryTime) return 'expired';
 
     // 3. 检查是否领完 (对于群红包/拼手气红包)
-    // 注意：这里简化处理，如果是私聊红包，remainingCount 逻辑可能不同
-    // 但通常 remainingCount == 0 就是领完了
     if (Number(packetData.remainingCount) === 0) return 'empty';
 
     return 'active';
-  }, [packet, hasClaimed, initialStatus]);
+  }, [
+    isRedPacketGroup,
+    redPacketGroupClaimed,
+    packet,
+    hasClaimed,
+    initialStatus
+  ]);
 
   // Debug log to confirm new version is loaded
   // React.useEffect(() => {

@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { readContract } from 'wagmi/actions';
+import { useState, useEffect, useMemo } from 'react';
 import { erc20Abi } from 'viem';
-import { useChainId } from 'wagmi';
+import { useAccount, usePublicClient } from 'wagmi';
 import UniChatRegistryArtifact from '@/contract/abi/UniChatRegistry.json';
-import { config } from 'config/appkit';
 import { getContractAddress } from '@/lib/web3/contracts';
+import { isSupportedChainId } from '@/lib/web3/networks';
 
 /**
  * ERC20 代币完整信息（用于合约交互）
@@ -27,6 +26,11 @@ export interface TokenInfo {
 /**
  * 获取所有已上币代币信息的 Hook
  *
+ * 改进版本：
+ * - 只有连接钱包后才获取数据（避免用默认链读错数据）
+ * - 使用 publicClient.readContract（自动绑定到当前链）
+ * - 单一依赖优化
+ *
  * 流程:
  * 1. 从 UniChatRegistry 获取代币总数
  * 2. 分页获取代币地址列表
@@ -37,24 +41,49 @@ export function useAllowedTokens() {
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const chainId = useChainId();
+
+  const { isConnected } = useAccount();
+  const publicClient = usePublicClient();
+
+  // 派生状态：只有连接后才有"有效客户端"
+  const activeClient = useMemo(
+    () => (isConnected ? publicClient : null),
+    [isConnected, publicClient]
+  );
 
   useEffect(() => {
     let isMounted = true;
 
     async function fetchAllowedTokens() {
+      // 未连接或无有效客户端时，不进行请求
+      if (!activeClient) {
+        setTokens([]);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         setError(null);
 
+        // 从 publicClient 获取当前链 ID
+        const chainId = activeClient.chain?.id;
+
+        // 验证链是否受支持
+        if (!chainId || !isSupportedChainId(chainId)) {
+          throw new Error(
+            `当前链 ${chainId} 不支持，请切换到 Arbitrum 或 opBNB`
+          );
+        }
+
         // 从多链配置获取 Registry 合约地址
         const registryAddress = getContractAddress(chainId, 'registry');
         if (!registryAddress) {
-          throw new Error(`当前链 ${chainId} 不支持或缺少 Registry 合约地址`);
+          throw new Error(`当前链 ${chainId} 缺少 Registry 合约地址`);
         }
 
         // 1. 获取已上币代币总数
-        const totalCount = await readContract(config, {
+        const totalCount = await activeClient.readContract({
           address: registryAddress as `0x${string}`,
           abi: UniChatRegistryArtifact.abi,
           functionName: 'allowedTokensLength'
@@ -76,7 +105,7 @@ export function useAllowedTokens() {
         for (let i = 0; i < totalPages; i++) {
           const offset = i * pageSize;
           addressPromises.push(
-            readContract(config, {
+            activeClient.readContract({
               address: registryAddress as `0x${string}`,
               abi: UniChatRegistryArtifact.abi,
               functionName: 'getAllowedTokens',
@@ -94,22 +123,22 @@ export function useAllowedTokens() {
         const tokenInfoPromises = allAddresses.map(async (address) => {
           try {
             const [symbol, name, decimals, totalSupply] = await Promise.all([
-              readContract(config, {
+              activeClient.readContract({
                 address: address as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'symbol'
               }),
-              readContract(config, {
+              activeClient.readContract({
                 address: address as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'name'
               }),
-              readContract(config, {
+              activeClient.readContract({
                 address: address as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'decimals'
               }),
-              readContract(config, {
+              activeClient.readContract({
                 address: address as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'totalSupply'
@@ -161,7 +190,7 @@ export function useAllowedTokens() {
     return () => {
       isMounted = false;
     };
-  }, [chainId]);
+  }, [activeClient]); // 单一依赖：只有 activeClient
 
   return { tokens, isLoading, error };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -163,12 +163,49 @@ function ChatContent() {
 
   // --- 实时从合约读取群名（针对红包群） ---
   const isRedPacket = groupType === 'redpacket';
+  const redPacketGroupAddress = (conversationId ||
+    groupAddress) as `0x${string}`;
+
   const { data: contractGroupName } = useReadContract({
-    address: (conversationId || groupAddress) as `0x${string}`,
+    address: redPacketGroupAddress,
     abi: parseAbi(['function groupName() view returns (string)']),
     functionName: 'groupName',
-    query: { enabled: isRedPacket && !!(conversationId || groupAddress) }
+    query: { enabled: isRedPacket && !!redPacketGroupAddress }
   });
+
+  // 读取入群费
+  const { data: entryFee } = useReadContract({
+    address: redPacketGroupAddress,
+    abi: parseAbi(['function entryFeeAmount() view returns (uint256)']),
+    functionName: 'entryFeeAmount',
+    query: { enabled: isRedPacket && !!redPacketGroupAddress }
+  });
+
+  // 读取入群代币地址
+  const { data: entryTokenAddress } = useReadContract({
+    address: redPacketGroupAddress,
+    abi: parseAbi(['function entryToken() view returns (address)']),
+    functionName: 'entryToken',
+    query: { enabled: isRedPacket && !!redPacketGroupAddress }
+  });
+
+  // 读取代币符号
+  const { data: tokenSymbol } = useReadContract({
+    address: entryTokenAddress as `0x${string}`,
+    abi: parseAbi(['function symbol() view returns (string)']),
+    functionName: 'symbol',
+    query: { enabled: isRedPacket && !!entryTokenAddress }
+  });
+
+  // 格式化入群费显示
+  const formattedEntryFee = useMemo(() => {
+    if (!entryFee || !tokenSymbol) return null;
+    // 假设 18 位小数，实际可以再读取 decimals
+    const formatted = (Number(entryFee) / 1e18).toLocaleString(undefined, {
+      maximumFractionDigits: 6
+    });
+    return `入群费: ${formatted} ${tokenSymbol}`;
+  }, [entryFee, tokenSymbol]);
 
   // 最终显示的群名优先使用合约里的
   const displayName =
@@ -385,7 +422,7 @@ function ChatContent() {
             memberCount: displayMemberCount,
             groupCondition:
               groupType === 'redpacket'
-                ? groupCondition || '免费入群'
+                ? formattedEntryFee || groupCondition || '加载中...'
                 : groupCondition
           }}
           onMenuClick={() => {
@@ -607,6 +644,8 @@ function ChatContent() {
             return '恭喜发财，大吉大利';
           }
         })()}
+        groupType={groupType as 'community' | 'redpacket'}
+        groupAddress={groupAddress}
       />
 
       {detailsRedPacket &&

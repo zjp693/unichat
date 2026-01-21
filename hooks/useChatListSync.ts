@@ -22,7 +22,7 @@ export function useChatListSync(
     onNewMessageRef.current = onNewMessage;
   }, [onNewMessage]);
 
-  // 监听所有发给当前用户的消息
+  // 监听与当前用户相关的所有消息（发送或接收）
   useListenMessageSent(
     (logs) => {
       if (!currentUser) return;
@@ -32,16 +32,17 @@ export function useChatListSync(
         const from = log.args.from as Address;
         const to = log.args.to as Address;
 
-        // 只处理发给当前用户的消息（接收方是当前用户）
-        if (to && from && to.toLowerCase() === currentUser.toLowerCase()) {
+        // 处理发给当前用户的消息（接收）或当前用户发出的消息（发送）
+        if (
+          (to && from && to.toLowerCase() === currentUser.toLowerCase()) || // 接收
+          (from && to && from.toLowerCase() === currentUser.toLowerCase()) // 发送
+        ) {
           // 触发回调，通知父组件有新消息
           onNewMessageRef.current(from, to);
         }
       });
     },
-    enabled && !!currentUser,
-    {
-      to: currentUser // 只监听发给当前用户的消息
-    }
+    enabled && !!currentUser
+    // 移除 args 过滤，让我们在回调中处理所有消息
   );
 }
