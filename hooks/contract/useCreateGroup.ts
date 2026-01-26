@@ -22,6 +22,8 @@ export interface CreateGroupParams {
   groupName: string;
   /** 群规则 */
   groupRules: string;
+  /** 群头像 CID */
+  groupAvatar: string;
 }
 
 /**
@@ -87,7 +89,8 @@ export function useCreateGroup() {
           params.groupToken,
           params.entryFee,
           params.groupName,
-          params.groupRules
+          params.groupRules,
+          params.groupAvatar || ''
         ]
       });
 

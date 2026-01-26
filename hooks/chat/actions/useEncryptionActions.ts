@@ -6,6 +6,7 @@ import { type Address, type Abi } from 'viem';
 import type { ChatInputAreaRef } from '@/components/chat/ChatInputArea';
 import communityABI from '@/contract/abi/community.json';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
 import { toast } from '@/hooks/use-toast';
 import { useChainId } from 'wagmi';
 import { getContractAddress } from '@/lib/web3/contracts';
@@ -184,6 +185,7 @@ export function useEncryptionActions({
     async (mode: 'plaintext' | 'encrypted', messageOverride?: string) => {
       // 优先使用传入的消息内容，否则使用 Redux 中的 pendingGroupMessage
       const messageContent = messageOverride || pendingGroupMessage;
+
       if (!messageContent) return;
 
       // ========== 红包群：发送前检查消息限制 ==========
@@ -289,245 +291,19 @@ export function useEncryptionActions({
         // 2. 发送到合约 (kind: 0=明文, 1=密文)
         hash = await sendGroupMessage(contentToSend, isEncrypted ? 1 : 0);
 
-        // 注意：不要立即移除 sending 状态
-        // 状态会在交易确认后通过 useEffect 自动更新
+        // 交易提交成功，清除发送中状态
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === tempId ? { ...msg, status: undefined } : msg
+          )
+        );
+
         console.log(
           `📤 群聊消息已提交到区块链 (${isEncrypted ? '密文' : '明文'})`
         );
 
-        // 3. 手动拉取最新消息作为兜底 (防止事件监听失败)
-        // 注意：只对官方群执行，红包群使用不同的合约方法
-        try {
-          if (
-            !isEncrypted &&
-            publicClient &&
-            groupAddress &&
-            groupType === 'community'
-          ) {
-            // 等待一小会儿让节点同步
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-
-            // 获取消息总数
-            const count = await publicClient.readContract({
-              address: groupAddress as Address,
-              abi: communityABI.abi as Abi,
-              functionName: 'communityMessageCount'
-            });
-
-            if (count && Number(count) > 0) {
-              const lastSeq = Number(count) - 1;
-              // 获取最后一条消息
-              const result = await publicClient.readContract({
-                address: groupAddress as Address,
-                abi: communityABI.abi as Abi,
-                functionName: 'getPlaintextMessages',
-                args: [BigInt(lastSeq), BigInt(1)]
-              });
-
-              if (result && Array.isArray(result) && result.length > 0) {
-                const lastMsg = result[0];
-                // 检查内容是否匹配
-                if (lastMsg.content === contentToSend) {
-                  const realId = `${lastMsg.ts}-${lastMsg.sender}-${lastSeq}`;
-
-                  setMessages((prev) => {
-                    const pendingIndex = prev.findIndex(
-                      (msg) => msg.id === tempId
-                    );
-                    if (pendingIndex !== -1) {
-                      const newPrev = [...prev];
-                      newPrev[pendingIndex] = {
-                        ...newPrev[pendingIndex],
-                        id: realId,
-                        status: undefined, // 清除 sending 状态
-                        timestamp: new Date(Number(lastMsg.ts) * 1000),
-                        senderAddress: lastMsg.sender
-                      };
-                      return newPrev;
-                    }
-                    return prev;
-                  });
-                }
-              }
-            }
-          }
-
-          // 红包群兜底逻辑
-          // 红包群兜底逻辑
-          if (
-            !isEncrypted &&
-            publicClient &&
-            groupAddress &&
-            groupType === 'redpacket'
-          ) {
-            if (hash) {
-              try {
-                const receipt = await publicClient.waitForTransactionReceipt({
-                  hash
-                });
-
-                // 1. 交易确认成功，立即移除 loading 状态 (乐观确认)
-                setMessages((prev) => {
-                  const pendingIndex = prev.findIndex(
-                    (msg) => msg.id === tempId
-                  );
-                  if (pendingIndex !== -1) {
-                    const newPrev = [...prev];
-                    newPrev[pendingIndex] = {
-                      ...newPrev[pendingIndex],
-                      status: undefined, // 移除 sending 状态
-                      // 暂时使用临时 ID，等待后台拉取修正
-                      id: `${Date.now()}-${currentAddress}-pending`
-                    };
-                    return newPrev;
-                  }
-                  return prev;
-                });
-
-                // 2. 后台尝试拉取真实数据以修正信息 (重试 5 次)
-                const VIEW_ADDRESS = getContractAddress(
-                  chainId,
-                  'redPacketGroupView'
-                );
-
-                if (!VIEW_ADDRESS) {
-                  console.warn('⚠️ [兜底-后台] 当前链不支持 View 合约');
-                  return;
-                }
-
-                const RedPacketGroupViewPartialABI = [
-                  {
-                    inputs: [
-                      {
-                        internalType: 'address',
-                        name: 'group',
-                        type: 'address'
-                      },
-                      {
-                        internalType: 'uint256',
-                        name: 'offset',
-                        type: 'uint256'
-                      },
-                      {
-                        internalType: 'uint256',
-                        name: 'limit',
-                        type: 'uint256'
-                      }
-                    ],
-                    name: 'getMainMessages',
-                    outputs: [
-                      {
-                        components: [
-                          {
-                            internalType: 'address',
-                            name: 'from',
-                            type: 'address'
-                          },
-                          {
-                            internalType: 'string',
-                            name: 'content',
-                            type: 'string'
-                          },
-                          {
-                            internalType: 'uint64',
-                            name: 'timestamp',
-                            type: 'uint64'
-                          },
-                          {
-                            internalType: 'uint32',
-                            name: 'subgroupId',
-                            type: 'uint32'
-                          }
-                        ],
-                        internalType: 'struct RedPacketGroupView.Message[]',
-                        name: 'messages',
-                        type: 'tuple[]'
-                      },
-                      {
-                        internalType: 'uint256',
-                        name: 'count',
-                        type: 'uint256'
-                      }
-                    ],
-                    stateMutability: 'view',
-                    type: 'function'
-                  }
-                ] as const;
-
-                // 异步后台轮询
-                (async () => {
-                  for (let i = 0; i < 5; i++) {
-                    try {
-                      await new Promise((r) => setTimeout(r, 2000)); // 每次间隔 2s
-
-                      const resultCount = (await publicClient.readContract({
-                        address: VIEW_ADDRESS,
-                        abi: RedPacketGroupViewPartialABI,
-                        functionName: 'getMainMessages',
-                        args: [groupAddress as Address, 0n, 0n]
-                      })) as [any[], bigint];
-
-                      const totalCount = Number(resultCount[1]);
-                      if (totalCount > 0) {
-                        const lastSeq = totalCount - 1;
-                        const resultMessages = (await publicClient.readContract(
-                          {
-                            address: VIEW_ADDRESS,
-                            abi: RedPacketGroupViewPartialABI,
-                            functionName: 'getMainMessages',
-                            args: [groupAddress as Address, BigInt(lastSeq), 1n]
-                          }
-                        )) as [any[], bigint];
-
-                        const messages = resultMessages[0];
-                        if (messages && messages.length > 0) {
-                          const lastMsg = messages[0];
-                          if (lastMsg.content === contentToSend) {
-                            const realId = `${lastMsg.timestamp}-${lastMsg.from}-${lastSeq}`;
-
-                            setMessages((prev) => {
-                              // 寻找刚才乐观确认的那条消息
-                              // 此时它已经没有 sending 状态了，且 ID 是 pending 结尾
-                              // 我们可以通过 content 和 sender 来匹配
-                              const targetIndex = prev.findIndex(
-                                (m) =>
-                                  m.content === contentToSend &&
-                                  m.senderAddress === lastMsg.from &&
-                                  (m.id.includes('pending') || m.id === tempId)
-                              );
-
-                              if (targetIndex !== -1) {
-                                const newPrev = [...prev];
-                                newPrev[targetIndex] = {
-                                  ...newPrev[targetIndex],
-                                  id: realId,
-                                  timestamp: new Date(
-                                    Number(lastMsg.timestamp) * 1000
-                                  )
-                                };
-                                return newPrev;
-                              }
-                              return prev;
-                            });
-                            break; // 成功退出
-                          }
-                        }
-                      }
-                    } catch (err) {
-                      console.warn('⚠️ [兜底-后台] 拉取出错:', err);
-                    }
-                  }
-                })();
-              } catch (e) {
-                console.warn('⚠️ [兜底-红包群] 等待回执失败', e);
-              }
-            } else {
-              // 无 hash 忽略
-            }
-          }
-        } catch (err) {
-          console.warn('⚠️ [兜底] 手动拉取失败 (非致命):', err);
-        }
+        // 交易确认成功
+        console.log('✅ [发送成功] Transaction Hash:', hash);
       } catch (error: any) {
         console.error('❌ [发送群聊消息] 失败:', error);
 

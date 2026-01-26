@@ -7,6 +7,7 @@
  */
 
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { zeroHash } from 'viem';
 import { useToast } from '@/hooks/use-toast';
 import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 
@@ -27,6 +28,7 @@ export function useUpdateGroupSettings() {
       groupRules?: string;
       announcement?: string;
       entryFee?: bigint;
+      groupAvatar?: string;
     }
   ) => {
     try {
@@ -44,7 +46,8 @@ export function useUpdateGroupSettings() {
           settings.economicModel || '',
           settings.groupRules || '',
           settings.announcement || '',
-          settings.entryFee || 0n
+          settings.entryFee || 0n,
+          settings.groupAvatar || '' // 空字符串表示不修改
         ]
       });
 

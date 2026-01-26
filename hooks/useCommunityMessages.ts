@@ -130,11 +130,17 @@ export function useCommunityMessages(
     address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
     abi: RedPacketGroupViewABI.abi as Abi,
     functionName: 'getMainMessages',
-    args: [communityAddress as Address, BigInt(start), BigInt(count)],
+    args: [
+      communityAddress as Address,
+      currentUserAddress as Address, // viewer 参数
+      BigInt(start),
+      BigInt(count)
+    ],
     query: {
       enabled:
         enabled &&
         !!communityAddress &&
+        !!currentUserAddress && // 需要用户地址
         count > 0 &&
         isRedPacketGroup &&
         !!RED_PACKET_GROUP_VIEW_ADDRESS,
@@ -274,7 +280,49 @@ export function useCommunityMessages(
       }
     );
 
-    setMessages(formattedMessages);
+    setMessages((prev) => {
+      // 1. 获取本地处于 sending 状态的消息
+      const sendingMessages = prev.filter((m) => m.status === 'sending');
+
+      if (sendingMessages.length === 0) {
+        return formattedMessages;
+      }
+
+      // 2. 检查这些 sending 消息是否已经包含在新拉取的数据中
+      const remainingSending = sendingMessages.filter((pending) => {
+        // 在新列表中查找是否有匹配项
+        const found = formattedMessages.some((onChain) => {
+          // 必须是当前用户发送的
+          if (
+            onChain.senderAddress?.toLowerCase() !==
+            currentUserAddress?.toLowerCase()
+          ) {
+            return false;
+          }
+
+          // 时间戳检查：链上消息时间不应早于本地发送时间太多（放宽到 10分钟容差防止时钟不同步）
+          // 但主要依靠内容匹配
+          const pendingContent = pending.originalContent || pending.content;
+          const chainContent = onChain.originalContent || onChain.content;
+
+          if (!pendingContent || !chainContent) return false;
+
+          // 内容匹配逻辑
+          return (
+            chainContent === pendingContent || // 完全匹配
+            // 红包群特殊格式匹配: "ID | 本地内容"
+            (chainContent.includes('|') &&
+              chainContent.trim().endsWith(pendingContent.trim()))
+          );
+        });
+
+        // 如果在链上找到了，说明已成功，从 pending 列表中移除
+        return !found;
+      });
+
+      // 3. 合并：链上消息 + 尚未上链的 pending 消息
+      return [...formattedMessages, ...remainingSending];
+    });
   }, [
     redPacketRawData,
     currentUserAddress,

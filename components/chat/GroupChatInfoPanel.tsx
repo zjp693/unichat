@@ -7,12 +7,16 @@ import {
   useChainId,
   useChains,
   useReadContract,
+  useReadContracts,
   useWriteContract,
+  useWatchContractEvent,
   useAccount,
   usePublicClient
 } from 'wagmi';
-import { parseAbi } from 'viem';
+import { zeroHash } from 'viem';
+import { Loader2, Camera, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { uploadImageToPinata } from '@/lib/pinata-upload';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/ui/page-header';
@@ -22,8 +26,12 @@ import { usePeerAvatar } from '@/hooks/usePeerProfile';
 import { IPFSImg } from '@/components/ui/ipfs-img';
 import { ChainSelectorDropdown } from '@/components/chat/chain-selector-dropdown';
 import { useUpdateGroupSettings } from '@/hooks/useUpdateGroupSettings';
-import type { Address } from 'viem';
+import type { Address, Abi } from 'viem';
 import { getContractAddress } from '@/lib/web3/contracts';
+import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
+import CommunityABI from '@/contract/abi/community.json';
+import { erc20Abi } from 'viem';
 
 // 定义布局常量，可以从公共文件导入或在此定义
 const TOP_BAR_HEIGHT = 56;
@@ -127,90 +135,160 @@ export default function GroupChatInfoPanel({
 
   const chainIcon = getChainIcon(chainName, chainId);
 
-  // 红包群分配比例 ABI
-  const BpsABI = parseAbi([
-    'function BPS_OWNER() view returns (uint16)',
-    'function BPS_REF() view returns (uint16)',
-    'function BPS_POOL() view returns (uint16)'
-  ]);
-
   // 获取分配比例（只在红包群时查询）
   const isRedPacket = groupType === 'redpacket';
 
-  const { data: bpsOwner } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: BpsABI,
-    functionName: 'BPS_OWNER',
-    query: { enabled: isRedPacket }
+  // --- 批量读取群基础信息 (Multicall 优化) ---
+  const { data: batchData, refetch: refetchBatch } = useReadContracts({
+    contracts: isRedPacket
+      ? [
+          {
+            address: conversationId as `0x${string}`,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'BPS_OWNER'
+          },
+          {
+            address: conversationId as `0x${string}`,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'BPS_REF'
+          },
+          {
+            address: conversationId as `0x${string}`,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'BPS_POOL'
+          },
+          {
+            address: conversationId as `0x${string}`,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'mainOwner'
+          },
+          {
+            address: conversationId as `0x${string}`,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'groupToken'
+          },
+          {
+            address: conversationId as `0x${string}`,
+            abi: RedPacketGroupABI.abi as Abi,
+            functionName: 'entryFeeAmount'
+          }
+        ]
+      : [
+          {
+            address: conversationId as `0x${string}`,
+            abi: CommunityABI.abi as Abi,
+            functionName: 'owner'
+          },
+          {
+            address: conversationId as `0x${string}`,
+            abi: CommunityABI.abi as Abi,
+            functionName: 'topicToken'
+          }
+        ],
+    query: {
+      enabled: !!conversationId,
+      staleTime: 3000,
+      refetchOnWindowFocus: false
+    }
   });
 
-  const { data: bpsRef } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: BpsABI,
-    functionName: 'BPS_REF',
-    query: { enabled: isRedPacket }
-  });
-
-  const { data: bpsPool } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: BpsABI,
-    functionName: 'BPS_POOL',
-    query: { enabled: isRedPacket }
-  });
+  // 解析批量读取的结果
+  const bpsOwner = isRedPacket ? (batchData?.[0]?.result as bigint) : undefined;
+  const bpsRef = isRedPacket ? (batchData?.[1]?.result as bigint) : undefined;
+  const bpsPool = isRedPacket ? (batchData?.[2]?.result as bigint) : undefined;
+  const mainOwnerAddress = isRedPacket
+    ? (batchData?.[3]?.result as string)
+    : (batchData?.[0]?.result as string);
+  const redPacketTokenAddress = isRedPacket
+    ? (batchData?.[4]?.result as string)
+    : undefined;
+  const communityTokenAddress = !isRedPacket
+    ? (batchData?.[1]?.result as string)
+    : undefined;
+  const entryFeeAmount = isRedPacket
+    ? (batchData?.[5]?.result as bigint)
+    : undefined;
 
   // 转换为百分比（bps / 100 = %）
   const ownerPercent = bpsOwner ? Number(bpsOwner) / 100 : 9;
   const refPercent = bpsRef ? Number(bpsRef) / 100 : 31;
   const poolPercent = bpsPool ? Number(bpsPool) / 100 : 60;
 
-  // 群信息读取 ABI
-  const GroupInfoABI = parseAbi([
-    'function mainOwner() view returns (address)',
-    'function groupName() view returns (string)',
-    'function announcement() view returns (string)',
-    'function economicModel() view returns (string)',
-    'function groupRules() view returns (string)'
-  ]);
-
-  // 获取群主地址
-  const { data: mainOwnerAddress } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: GroupInfoABI,
-    functionName: 'mainOwner',
-    query: { enabled: isRedPacket }
+  // --- 统一获取红包群设置（包含头像） ---
+  const { data: groupSettings } = useReadContract({
+    address: getContractAddress(chainId, 'redPacketGroupView') || undefined,
+    abi: RedPacketGroupViewABI.abi as Abi,
+    functionName: 'getGroupSettings',
+    args:
+      isRedPacket && conversationId
+        ? [conversationId as `0x${string}`]
+        : undefined,
+    query: {
+      enabled: isRedPacket && !!conversationId,
+      staleTime: 3000,
+      refetchOnWindowFocus: false
+    }
   });
 
-  // 获取群名称
-  const { data: contractGroupName } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: GroupInfoABI,
-    functionName: 'groupName',
-    query: { enabled: isRedPacket }
-  });
+  const [currentAvatarCid, setCurrentAvatarCid] = useState<string>('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [newAvatarCid, setNewAvatarCid] = useState<string>('');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-  // 获取群公告
-  const { data: contractAnnouncement } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: GroupInfoABI,
-    functionName: 'announcement',
-    query: { enabled: isRedPacket }
-  });
+  useEffect(() => {
+    if (
+      groupSettings &&
+      Array.isArray(groupSettings) &&
+      groupSettings.length >= 5
+    ) {
+      const gAvatar = groupSettings[4] as string;
+      const isValidCid =
+        gAvatar &&
+        gAvatar.trim() !== '' &&
+        !gAvatar.startsWith('0x') &&
+        (gAvatar.startsWith('Qm') || gAvatar.startsWith('bafy'));
 
-  // 获取经济模型
-  const { data: contractEconomicModel } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: GroupInfoABI,
-    functionName: 'economicModel',
-    query: { enabled: isRedPacket }
-  });
+      setCurrentAvatarCid(isValidCid ? gAvatar : '');
 
-  // 获取群制度
-  const { data: contractGroupRules } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: GroupInfoABI,
-    functionName: 'groupRules',
-    query: { enabled: isRedPacket }
-  });
+      // 同时按需初始化编辑状态
+      if (groupSettings[0]) setEditGroupName(groupSettings[0] as string);
+      if (groupSettings[1]) setEditEconomicModel(groupSettings[1] as string);
+      if (groupSettings[2]) setEditGroupRules(groupSettings[2] as string);
+      if (groupSettings[3]) setEditAnnouncement(groupSettings[3] as string);
+    } else if (initialGroupName) {
+      setEditGroupName(initialGroupName);
+    }
+  }, [groupSettings, initialGroupName]);
+
+  // 处理头像选择并自动上传
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const preview = URL.createObjectURL(file);
+    setAvatarPreview(preview);
+
+    try {
+      setIsUploadingAvatar(true);
+      const cid = await uploadImageToPinata(file);
+      setNewAvatarCid(cid);
+      toast({
+        title: '图片已上传',
+        description: '请点击下方保存按钮同步到链上',
+        variant: 'success'
+      });
+    } catch (error: any) {
+      console.error('上传失败:', error);
+      toast({
+        title: '上传失败',
+        description: error.message || '图片上传失败，请重试',
+        variant: 'destructive'
+      });
+      setAvatarPreview(null);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   // 当前用户账户
   const { address: currentUserAddress } = useAccount();
@@ -218,29 +296,20 @@ export default function GroupChatInfoPanel({
   // 是否是群主
   const isMainOwner =
     currentUserAddress && mainOwnerAddress
-      ? currentUserAddress.toLowerCase() === mainOwnerAddress.toLowerCase()
+      ? currentUserAddress.toLowerCase() ===
+        (mainOwnerAddress as string).toLowerCase()
       : false;
 
   // 检查是否是群成员
-  // 红包群使用 RedPacketGroupView 的 getMember，Community 群使用 isActiveMember
   const RED_PACKET_GROUP_VIEW_ADDRESS = getContractAddress(
     chainId,
     'redPacketGroupView'
   );
 
-  const RedPacketMemberABI = parseAbi([
-    'function getMember(address group, address addr) view returns (bool exists, uint64 joinAt, uint32 subgroupId)'
-  ]);
-
-  const CommunityMemberABI = parseAbi([
-    'function isActiveMember(address account) view returns (bool)'
-  ]);
-
-  // 红包群成员查询（使用 View 合约）
   const { data: redPacketMemberData, refetch: refetchRedPacketMember } =
     useReadContract({
       address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
-      abi: RedPacketMemberABI,
+      abi: RedPacketGroupViewABI.abi as Abi,
       functionName: 'getMember',
       args:
         currentUserAddress && conversationId
@@ -255,17 +324,15 @@ export default function GroupChatInfoPanel({
       }
     });
 
-  // Community 群成员查询
   const { data: communityMemberData, refetch: refetchCommunityMember } =
     useReadContract({
       address: conversationId as `0x${string}`,
-      abi: CommunityMemberABI,
+      abi: CommunityABI.abi as Abi,
       functionName: 'isActiveMember',
       args: currentUserAddress ? [currentUserAddress] : undefined,
       query: { enabled: !isRedPacket && !!currentUserAddress }
     });
 
-  // 解析成员状态 - 根据群类型
   const isMember = isRedPacket
     ? redPacketMemberData
       ? (redPacketMemberData as [boolean, bigint, number])[0]
@@ -274,137 +341,87 @@ export default function GroupChatInfoPanel({
       ? (communityMemberData as boolean)
       : false;
 
-  // 刷新成员状态
   const refetchMember = isRedPacket
     ? refetchRedPacketMember
     : refetchCommunityMember;
-
-  // 加入群组状态
   const [isJoining, setIsJoining] = useState(false);
 
-  // 加入群组 ABI
-  const JoinABI = parseAbi([
-    'function join(uint32, bytes32)',
-    'function approve(address, uint256) returns (bool)'
-  ]);
-
-  // 加入群组处理函数
-  const handleJoinGroup = async () => {
-    if (!currentUserAddress || !groupTokenAddress) {
-      toast({
-        title: '错误',
-        description: '请先连接钱包',
-        variant: 'destructive'
-      });
-      return;
+  // --- 实时事件监听 (核心优化) ---
+  // 1. 监听成员加入
+  useWatchContractEvent({
+    address: conversationId as `0x${string}`,
+    abi: isRedPacket
+      ? (RedPacketGroupABI.abi as Abi)
+      : (CommunityABI.abi as Abi),
+    eventName: 'Joined',
+    onLogs() {
+      console.log('检测到新成员加入，刷新中...');
+      refetchMember(); // 刷新当前用户成员状态
     }
+  });
 
+  // 2. 监听群设置变更 (名字/头像)
+  useWatchContractEvent({
+    address: conversationId as `0x${string}`,
+    abi: RedPacketGroupABI.abi as Abi,
+    eventName: 'GroupNameUpdated',
+    onLogs() {
+      refetchBatch();
+    }
+  });
+
+  useWatchContractEvent({
+    address: conversationId as `0x${string}`,
+    abi: RedPacketGroupABI.abi as Abi,
+    eventName: 'GroupAvatarUpdated',
+    onLogs() {
+      refetchBatch();
+    }
+  });
+
+  const handleJoinGroup = async () => {
+    if (!currentUserAddress || !groupTokenAddress) return;
     setIsJoining(true);
     try {
-      console.log('🚪 [加入群组] 开始加入', {
-        groupAddress: conversationId,
-        tokenAddress: groupTokenAddress,
-        entryFee: entryFeeAmount?.toString(),
-        tokenSymbol: displayTokenSymbol
-      });
-
-      const ERC20ABI = parseAbi([
-        'function balanceOf(address) view returns (uint256)',
-        'function approve(address, uint256) returns (bool)'
-      ]);
-
-      // 1. 检查代币余额
       if (entryFeeAmount && BigInt(entryFeeAmount as bigint) > BigInt(0)) {
         const balance = (await publicClient?.readContract({
           address: groupTokenAddress as `0x${string}`,
-          abi: ERC20ABI,
+          abi: erc20Abi,
           functionName: 'balanceOf',
           args: [currentUserAddress]
         })) as bigint;
-
-        console.log('💰 [加入群组] 代币余额:', {
-          balance: balance?.toString(),
-          required: entryFeeAmount.toString(),
-          sufficient: balance >= BigInt(entryFeeAmount as bigint)
-        });
-
         if (!balance || balance < BigInt(entryFeeAmount as bigint)) {
-          toast({
-            title: '余额不足',
-            description: `需要 ${displayEntryFee} ${displayTokenSymbol}`,
-            variant: 'destructive'
-          });
+          toast({ title: '余额不足', variant: 'destructive' });
           return;
         }
-
-        // 2. 授权进群费用（使用无限授权，避免精度问题）
-        toast({ title: '授权中...', description: '请在钱包中确认授权' });
-
-        const approveTx = await writeContractAsync({
+        await writeContractAsync({
           address: groupTokenAddress as `0x${string}`,
-          abi: ERC20ABI,
+          abi: erc20Abi,
           functionName: 'approve',
           args: [
             conversationId as `0x${string}`,
             BigInt(
               '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
             )
-          ] // maxUint256
+          ]
         });
-
-        console.log('✅ [加入群组] 授权成功:', approveTx);
       }
-
-      // 3. 加入群组
-      toast({ title: '加入中...', description: '请在钱包中确认交易' });
-
-      const joinTx = await writeContractAsync({
+      await writeContractAsync({
         address: conversationId as `0x${string}`,
-        abi: JoinABI,
+        abi: RedPacketGroupABI.abi as Abi,
         functionName: 'join',
-        args: [
-          0,
-          '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`
-        ]
+        args: [0, zeroHash]
       });
-
-      console.log('✅ [加入群组] 加入成功:', joinTx);
-
-      toast({
-        title: '加入成功',
-        description: '你已成功加入群组',
-        variant: 'success'
-      });
-
-      // 刷新成员状态
       refetchMember();
+      refetchBatch(); // 显式触发批量数据更新
     } catch (error: any) {
-      console.error('❌ [加入群组] 失败:', error);
-
-      const errorMessage = error?.message || error?.toString() || '';
-      const errorLower = errorMessage.toLowerCase();
-
-      if (
-        errorLower.includes('user rejected') ||
-        errorLower.includes('user denied')
-      ) {
-        console.log('👤 用户取消了交易');
-      } else {
-        toast({
-          title: '加入失败',
-          description: errorMessage.slice(0, 100) || '请稍后重试',
-          variant: 'destructive'
-        });
-      }
+      console.error('加入失败:', error);
     } finally {
       setIsJoining(false);
     }
   };
 
-  // toast
   const { toast } = useToast();
-
-  // 本地编辑状态
   const [editGroupName, setEditGroupName] = useState('');
   const [editAnnouncement, setEditAnnouncement] = useState('');
   const [editEconomicModel, setEditEconomicModel] = useState('');
@@ -412,177 +429,82 @@ export default function GroupChatInfoPanel({
   const [editEntryFee, setEditEntryFee] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // 初始化本地状态（从链上数据）
-  useEffect(() => {
-    if (contractAnnouncement !== undefined) {
-      setEditAnnouncement((contractAnnouncement as string) || '');
-    }
-  }, [contractAnnouncement]);
-
-  useEffect(() => {
-    if (contractEconomicModel !== undefined) {
-      setEditEconomicModel((contractEconomicModel as string) || '');
-    }
-  }, [contractEconomicModel]);
-
-  useEffect(() => {
-    if (contractGroupRules !== undefined) {
-      setEditGroupRules((contractGroupRules as string) || '');
-    }
-  }, [contractGroupRules]);
-
-  // 初始化群名称（优先从合约，其次从 props）
-  useEffect(() => {
-    if (contractGroupName) {
-      setEditGroupName(contractGroupName as string);
-    } else if (initialGroupName) {
-      setEditGroupName(initialGroupName);
-    }
-  }, [contractGroupName, initialGroupName]);
-
-  // 写合约
   const { writeContractAsync } = useWriteContract();
 
-  // 保存修改 ABI
-  const SetterABI = parseAbi([
-    'function setGroupSettings(string newGroupName, string newEconomicModel, string newGroupRules, string newAnnouncement, uint256 newEntryFee)'
-  ]);
-
-  // 保存处理函数
   const handleSave = async () => {
-    if (!isMainOwner) {
-      toast({
-        title: '无权限',
-        description: '只有群主才能修改群信息',
-        variant: 'destructive'
-      });
+    if (!isMainOwner) return;
+    if (isUploadingAvatar) {
+      toast({ title: '请稍候', description: '头像正在上传中' });
       return;
     }
-
     setIsSaving(true);
     try {
-      // 检查是否有任何变化
-      const hasGroupNameChanged = editGroupName !== (initialGroupName || '');
-      const hasEconomicModelChanged =
-        editEconomicModel !== (contractEconomicModel || '');
-      const hasGroupRulesChanged =
-        editGroupRules !== (contractGroupRules || '');
-      const hasAnnouncementChanged =
-        editAnnouncement !== (contractAnnouncement || '');
+      // 验证进群费用（仅红包群）
+      if (isRedPacket) {
+        if (!editEntryFee || editEntryFee === '' || Number(editEntryFee) <= 0) {
+          toast({
+            title: '验证失败',
+            description: '进群费用不能为空或为 0',
+            variant: 'destructive'
+          });
+          setIsSaving(false);
+          return;
+        }
+      }
 
-      // 计算新的进群费用
       let newFeeWei = entryFeeAmount || BigInt(0);
-      let hasEntryFeeChanged = false;
       if (editEntryFee && tokenDecimals) {
         newFeeWei = BigInt(
           Math.floor(Number(editEntryFee) * Math.pow(10, Number(tokenDecimals)))
         );
-        hasEntryFeeChanged = newFeeWei !== entryFeeAmount;
       }
 
-      // 如果没有任何变化
-      if (
-        !hasGroupNameChanged &&
-        !hasEconomicModelChanged &&
-        !hasGroupRulesChanged &&
-        !hasAnnouncementChanged &&
-        !hasEntryFeeChanged
-      ) {
-        toast({ title: '无修改', description: '没有需要保存的内容' });
-        setIsSaving(false);
-        return;
-      }
-
-      // 使用 setGroupSettings 一次性保存所有设置
       await writeContractAsync({
         address: conversationId as `0x${string}`,
-        abi: SetterABI,
+        abi: RedPacketGroupABI.abi as Abi,
         functionName: 'setGroupSettings',
         args: [
-          editGroupName || (initialGroupName as string) || '', // newGroupName
-          editEconomicModel || '', // newEconomicModel
-          editGroupRules || '', // newGroupRules
-          editAnnouncement || '', // newAnnouncement
-          newFeeWei // newEntryFee
+          editGroupName || '',
+          editEconomicModel || '',
+          editGroupRules || '',
+          editAnnouncement || '',
+          newFeeWei,
+          newAvatarCid || currentAvatarCid // 换了用新的，没换用旧的
         ]
       });
-
-      toast({
-        title: '保存成功',
-        description: `已提交合约更新申请`
-      });
+      toast({ title: '已提交', description: '正在更新合约设置...' });
     } catch (error: any) {
       console.error('保存失败:', error);
-      toast({
-        title: '保存失败',
-        description: error?.message || '请稍后重试',
-        variant: 'destructive'
-      });
     } finally {
       setIsSaving(false);
     }
   };
-
-  // 群代币和进群费 ABI
-  const GroupTokenABI = parseAbi([
-    'function groupToken() view returns (address)',
-    'function entryFeeAmount() view returns (uint256)'
-  ]);
-
-  // Community 群代币 ABI
-  const CommunityTokenABI = parseAbi([
-    'function topicToken() view returns (address)'
-  ]);
-
-  // ERC20 代币 ABI
-  const ERC20ABI = parseAbi([
-    'function symbol() view returns (string)',
-    'function decimals() view returns (uint8)'
-  ]);
-
-  // 获取红包群代币地址
-  const { data: redPacketTokenAddress } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: GroupTokenABI,
-    functionName: 'groupToken',
-    query: { enabled: isRedPacket }
-  });
-
-  // 获取 Community 群代币地址
-  const { data: communityTokenAddress } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: CommunityTokenABI,
-    functionName: 'topicToken',
-    query: { enabled: !isRedPacket }
-  });
 
   // 统一代币地址
   const groupTokenAddress = isRedPacket
     ? redPacketTokenAddress
     : communityTokenAddress;
 
-  // 获取进群费用（只有红包群有）
-  const { data: entryFeeAmount } = useReadContract({
-    address: conversationId as `0x${string}`,
-    abi: GroupTokenABI,
-    functionName: 'entryFeeAmount',
-    query: { enabled: isRedPacket }
-  });
-
   // 获取代币符号
   const { data: tokenSymbol } = useReadContract({
     address: groupTokenAddress as `0x${string}`,
-    abi: ERC20ABI,
+    abi: erc20Abi,
     functionName: 'symbol',
-    query: { enabled: !!groupTokenAddress }
+    query: {
+      enabled: !!groupTokenAddress,
+      staleTime: 3600000 // 代币信息几乎不变，给 1 小时缓存
+    }
   });
 
   // 获取代币小数位
   const { data: tokenDecimals } = useReadContract({
     address: groupTokenAddress as `0x${string}`,
-    abi: ERC20ABI,
+    abi: erc20Abi,
     functionName: 'decimals',
-    query: { enabled: !!groupTokenAddress }
+    query: {
+      enabled: !!groupTokenAddress,
+      staleTime: 3600000
+    }
   });
 
   // 格式化进群费用
@@ -596,6 +518,13 @@ export default function GroupChatInfoPanel({
 
   const displayTokenSymbol = tokenSymbol || 'TOKEN';
   const displayEntryFee = formatEntryFee();
+
+  // 新增：初始化进群费用的编辑状态 (已移至初始化之后)
+  useEffect(() => {
+    if (displayEntryFee && displayEntryFee !== '0' && editEntryFee === '') {
+      setEditEntryFee(displayEntryFee);
+    }
+  }, [displayEntryFee]);
 
   // Trust Wallet 代币图标 URL
   const getTokenLogoUrl = (cId: number, address: string | undefined) => {
@@ -766,6 +695,51 @@ export default function GroupChatInfoPanel({
 
           {/* 群信息 */}
           <div className="bg-white px-4 space-y-3">
+            {/* 群头像配置行 */}
+            <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
+              <span className="text-gray-700">群头像</span>
+              <div className="relative group">
+                <input
+                  type="file"
+                  id="panel-avatar-upload"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                  disabled={!isMainOwner || isUploadingAvatar}
+                />
+                <label
+                  htmlFor="panel-avatar-upload"
+                  className={cn(
+                    'relative block w-12 h-12 rounded-lg overflow-hidden border transition-all',
+                    isMainOwner && !isUploadingAvatar
+                      ? 'cursor-pointer hover:opacity-80 border-purple-200'
+                      : 'cursor-default'
+                  )}
+                >
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt="预览"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <IPFSImg
+                      src={currentAvatarCid}
+                      alt="群头像"
+                      fallbackSrc="/me/me1.png"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+
+                  {isUploadingAvatar && (
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 text-purple-600 animate-spin" />
+                    </div>
+                  )}
+                </label>
+              </div>
+            </div>
+
             <div className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
               <span className="text-gray-700">群名称</span>
               {isMainOwner ? (
@@ -979,7 +953,7 @@ export default function GroupChatInfoPanel({
               </div>
               <input
                 type="text"
-                value={groupTokenAddress || ''}
+                value={(groupTokenAddress as string) || ''}
                 readOnly
                 className="w-full px-3 py-2 bg-gray-50 rounded-lg border-0 text-sm text-gray-500 focus:outline-none focus:ring-0 cursor-default"
               />
@@ -1015,9 +989,10 @@ export default function GroupChatInfoPanel({
                   {isMainOwner ? (
                     <input
                       type="number"
-                      value={editEntryFee || displayEntryFee}
+                      step="any"
+                      value={editEntryFee}
                       onChange={(e) => setEditEntryFee(e.target.value)}
-                      className="w-20 text-right text-sm text-gray-700 bg-transparent border-0 p-0 focus:outline-none focus:ring-0"
+                      className="w-24 text-right text-sm text-gray-700 bg-transparent border-0 p-0 focus:outline-none focus:ring-0"
                       placeholder="0"
                     />
                   ) : (

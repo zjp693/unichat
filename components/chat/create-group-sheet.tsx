@@ -9,8 +9,12 @@ import {
   Minus,
   Plus,
   Loader2,
-  CheckCircle
+  CheckCircle,
+  Upload,
+  X,
+  Image as ImageIcon
 } from 'lucide-react';
+import { uploadImageToPinata } from '@/lib/pinata-upload';
 import {
   Sheet,
   SheetContent,
@@ -82,6 +86,11 @@ export function CreateGroupSheet({
   const [tokenAddress, setTokenAddress] = React.useState('');
   const [entryFee, setEntryFee] = React.useState('1.95');
 
+  // 头像状态
+  const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
+  const [isUploading, setIsUploading] = React.useState(false);
+
   // 代币选择状态
   const [selectedToken, setSelectedToken] = React.useState<TokenInfo | null>(
     null
@@ -115,6 +124,9 @@ export function CreateGroupSheet({
       setEntryFee('1.95');
       setSelectedToken(null);
       setIsDropdownOpen(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      setIsUploading(false);
 
       // 重置创建状态
       reset();
@@ -123,6 +135,34 @@ export function CreateGroupSheet({
       hasNavigated.current = false;
     }
   }, [isOpen, reset]);
+
+  // 处理头像选择
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: '文件过大',
+        description: '图片大小不能超过 2MB',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setAvatarFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveAvatar = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAvatarFile(null);
+    setAvatarPreview(null);
+  };
 
   // 监听创建成功并跳转
   React.useEffect(() => {
@@ -162,6 +202,12 @@ export function CreateGroupSheet({
         router.push(
           `/chat/${status.groupAddress}?type=group&groupType=redpacket`
         );
+
+        toast({
+          title: '🎉 群聊创建成功！',
+          description: '欢迎来到你的红包群',
+          variant: 'success'
+        });
       }
     }
   }, [status, selectedToken, name, entryFee, dispatch, onClose, router, toast]);
@@ -183,16 +229,37 @@ export function CreateGroupSheet({
   const handleCreate = async () => {
     if (!isFormValid || !selectedToken) return;
 
+    let finalAvatarCid = '';
+
     try {
-      // 准备合约参数
+      // 1. 如果有头像，先上传到 IPFS
+      if (avatarFile) {
+        setIsUploading(true);
+        try {
+          finalAvatarCid = await uploadImageToPinata(avatarFile);
+        } catch (uploadError: any) {
+          toast({
+            title: '头像上传失败',
+            description: uploadError.message || '由于网络原因，头像无法上传',
+            variant: 'destructive'
+          });
+          setIsUploading(false);
+          return;
+        } finally {
+          setIsUploading(false);
+        }
+      }
+
+      // 2. 准备合约参数
       const params: CreateGroupParams = {
         groupToken: selectedToken.address,
         entryFee: parseUnits(entryFee, selectedToken.decimals),
         groupName: name,
-        groupRules: rules
+        groupRules: rules,
+        groupAvatar: finalAvatarCid // 传入上一步拿到的 CID
       };
 
-      // 调用合约创建群组
+      // 3. 调用合约创建群组
       await createGroup(params);
 
       // 可选：调用回调函数
@@ -220,7 +287,7 @@ export function CreateGroupSheet({
       <Sheet open={isOpen} onOpenChange={onClose}>
         <SheetContent
           side="bottom"
-          className="rounded-t-[20px] p-0 overflow-hidden h-[90vh] flex flex-col gap-0 border-t-0 bg-white"
+          className="rounded-t-[20px] p-0 overflow-hidden h-[82vh] flex flex-col gap-0 border-t-0 bg-white"
         >
           {/* 顶部拖拽条 */}
           <div className="flex justify-center pt-3 pb-2 bg-white sticky top-0 z-10">
@@ -234,6 +301,60 @@ export function CreateGroupSheet({
           {/* 可滚动表单内容 */}
           <div className="flex-1 overflow-y-auto px-5  scrollbar-hide">
             <div className="space-y-6">
+              {/* 群头像上传 */}
+              <div className="flex flex-col items-center justify-center pt-2">
+                <input
+                  type="file"
+                  id="group-avatar-upload"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="group-avatar-upload"
+                  className="relative cursor-pointer"
+                >
+                  <div
+                    className={cn(
+                      'w-24 h-24 rounded-2xl bg-gray-50 flex flex-col items-center justify-center overflow-hidden',
+                      !avatarPreview &&
+                        'border-2 border-dashed border-gray-200',
+                      avatarPreview && 'border-0 shadow-sm'
+                    )}
+                  >
+                    {avatarPreview ? (
+                      <img
+                        src={avatarPreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <>
+                        <ImageIcon className="w-8 h-8 text-gray-300 group-hover:text-purple-300" />
+                        <span className="text-[10px] text-gray-400 mt-1 font-medium group-hover:text-purple-400">
+                          上传群头像
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {avatarPreview && !isUploading && (
+                    <button
+                      onClick={handleRemoveAvatar}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+
+                  {isUploading && (
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-2xl">
+                      <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                    </div>
+                  )}
+                </label>
+              </div>
+
               {/* 群组名称 */}
               <div className="space-y-2">
                 <Label
@@ -385,11 +506,15 @@ export function CreateGroupSheet({
 
               <div className="pt-2 pb-2 border-t border-gray-200">
                 <Button
-                  className="w-full h-12 bg-[#8B5CF6] text-white rounded-xl  text-base font-medium shadow-purple-200 shadow-lg active:scale-95 transition-all"
+                  className="w-full h-12 bg-[#8B5CF6] text-white rounded-xl  text-base font-medium shadow-purple-200 shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none"
                   onClick={handleCreate}
-                  disabled={!isFormValid || isCreating}
+                  disabled={!isFormValid || isCreating || isUploading}
                 >
-                  {isCreating ? '创建中...' : '创建群聊'}
+                  {isUploading
+                    ? '上传图片中...'
+                    : isCreating
+                      ? '创建中...'
+                      : '创建群聊'}
                 </Button>
               </div>
             </div>

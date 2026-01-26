@@ -151,10 +151,25 @@ export async function getRedPacketGroupList(
     // 解析 getGroupSettings
     const settingsRes = results[baseIndex];
     let name = 'Unknown Group';
+    let groupAvatar = '';
     if (settingsRes.status === 'success') {
-      // getGroupSettings 返回 tuple: (groupName, economicModel, groupRules, announcement)
-      const [gName] = settingsRes.result as [string, string, string, string];
+      // getGroupSettings 返回 tuple: (groupName, economicModel, groupRules, announcement, groupAvatar)
+      const [gName, , , , gAvatar] = settingsRes.result as [
+        string,
+        string,
+        string,
+        string,
+        string
+      ];
       name = gName || 'Unnamed Group';
+
+      // 只接受有效的 IPFS CID（Qm 或 bafy 开头），排除地址和空值
+      const isValidCid =
+        gAvatar &&
+        gAvatar.trim() !== '' &&
+        !gAvatar.startsWith('0x') &&
+        (gAvatar.startsWith('Qm') || gAvatar.startsWith('bafy'));
+      groupAvatar = isValidCid ? gAvatar : '';
     } else {
       console.warn(
         `[RedPacketGroups] Failed to get settings for ${address}`,
@@ -207,7 +222,7 @@ export async function getRedPacketGroupList(
     groups.push({
       address,
       name,
-      avatar: '/me/me1.png', // 目前合约未存储头像，暂时使用默认值
+      avatar: groupAvatar || '/me/me1.png', // 优先使用合约返回的头像
       level: 1, // 默认给1，但在UI中会通过 flag 隐藏
       memberCount,
       fee,
@@ -227,6 +242,8 @@ export async function getRedPacketGroupList(
       functionName: 'getMainMessages' as const,
       args: [
         g.address,
+        (userAddress ||
+          '0x0000000000000000000000000000000000000000') as `0x${string}`, // viewer 参数
         BigInt(g.mainMessageCount - 1), // offset: 最后一条消息的索引
         BigInt(1) // limit: 只获取1条
       ]

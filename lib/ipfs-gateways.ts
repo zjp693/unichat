@@ -128,7 +128,10 @@ export function buildIPFSUrl(cid: string, gateway?: string): string {
   }
 
   // 移除 ipfs:// 前缀（如果有）
-  const cleanCid = cid.replace(/^ipfs:\/\//, '');
+  const cleanCid = cid.replace(/^ipfs:\/\//, '').trim();
+
+  // 如果 CID 为空，返回空字符串
+  if (!cleanCid) return '';
 
   // 使用指定网关或第一个可用网关
   const selectedGateway = gateway || getSortedGateways()[0];

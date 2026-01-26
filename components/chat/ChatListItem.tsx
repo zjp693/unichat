@@ -257,12 +257,14 @@ export function ChatListItem({
             {!chat.isGroup && isLoadingProfile ? (
               <Skeleton className="h-full w-full" />
             ) : chat.isGroup ? (
-              <Image
-                src={chat.avatar || '/me/me1.png'}
+              <IPFSImg
+                src={avatarCid} // 使用上面计算好的 avatarCid
+                fallbackSrc="/me/me1.png"
                 alt={displayName}
                 width={48}
                 height={48}
                 className="h-full w-full object-cover"
+                enableLogging={false}
               />
             ) : (
               <IPFSImg
