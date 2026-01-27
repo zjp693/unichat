@@ -131,7 +131,7 @@ export function useRedPacketActions({
             address: groupAddress,
             abi: RedPacketGroupABI.abi as Abi,
             functionName: 'createNormalPacketAll',
-            args: [tokenAddress, totalAmount, messageContent]
+            args: [tokenAddress, totalAmount, messageContent, 0n]
           });
 
           const createReceipt = await publicClient?.waitForTransactionReceipt({

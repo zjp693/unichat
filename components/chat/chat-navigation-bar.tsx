@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { ChevronLeft, MoreVertical, Copy, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { IPFSImg } from '@/components/ui/ipfs-img';
 import { ChainSelectorDropdown } from './chain-selector-dropdown';
 
 // ==================== 类型定义 ====================
@@ -158,7 +159,6 @@ const BottomSection: React.FC<BottomSectionProps> = ({
   onMenuClick,
   onAddressCopy
 }) => {
-  const [avatarError, setAvatarError] = useState(false);
   const { toast } = useToast();
 
   const handleAddressCopy = useCallback(async () => {
@@ -249,17 +249,13 @@ const BottomSection: React.FC<BottomSectionProps> = ({
               {/* 头像 - 只有官方群才显示 */}
               {(chatInfo.level ?? 0) > 0 && (
                 <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0">
-                  <Image
-                    src={
-                      avatarError
-                        ? DEFAULT_AVATAR
-                        : chatInfo.avatar || DEFAULT_AVATAR
-                    }
+                  <IPFSImg
+                    src={chatInfo.avatar}
+                    fallbackSrc={DEFAULT_AVATAR}
                     alt={chatInfo.name}
                     width={32}
                     height={32}
                     className="w-full h-full object-cover"
-                    onError={() => setAvatarError(true)}
                   />
                 </div>
               )}

@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { Address } from 'viem';
 import { usePeerLastMessage, formatMessageTime } from './usePeerLastMessage';
 import { useGroupLastMessage } from './useGroupLastMessage';
-import { useRedPacketGroupLastMessage } from './useRedPacketGroupLastMessage';
+import { useRedPacketGroupLastMessage } from './useRedPacketGroupData';
 import { updateTimestamp } from '@/lib/chatSlice';
 import { AppDispatch } from '@/lib/store';
 
@@ -68,7 +68,8 @@ export function useChatTimestamp({
     messageCount: redPacketMessageCount,
     isLoading: isRedPacketLoading
   } = useRedPacketGroupLastMessage(
-    isRedPacket && isJoined ? (chatId as Address) : undefined
+    isRedPacket && isJoined ? (chatId as Address) : undefined,
+    currentAddress
   );
 
   // 选择正确的时间戳和消息数
@@ -82,11 +83,21 @@ export function useChatTimestamp({
     messageCount = 0; // 私聊不返回消息总数（由其他 hook 处理）
   } else if (isRedPacket) {
     timestamp = redPacketTimestamp;
-    messageCount = redPacketMessageCount;
+    messageCount = redPacketMessageCount ?? 0;
     isLoading = isRedPacketLoading;
+    // 🔍 调试日志
+    // console.log('🔵 [useChatTimestamp] 红包群数据:', {
+    //   chatId,
+    //   isRedPacket,
+    //   isJoined,
+    //   groupType,
+    //   redPacketTimestamp,
+    //   redPacketMessageCount,
+    //   finalMessageCount: messageCount
+    // });
   } else {
     timestamp = communityTimestamp;
-    messageCount = communityMessageCount;
+    messageCount = communityMessageCount ?? 0;
     isLoading = isCommunityLoading;
   }
 

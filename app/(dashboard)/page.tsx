@@ -16,6 +16,8 @@ import { useRedPacketGroups } from '@/hooks/useRedPacketGroups';
 import { useProfileCheck } from '@/hooks/useProfileCheck';
 import { useSortedChats } from '@/hooks/useSortedChats';
 import { useBatchPeerProfiles } from '@/hooks/useBatchPeerProfiles';
+import { useUnclaimedPackets as useRedPacketGroupUnclaimedPackets } from '@/hooks/useRedPacketGroupData';
+import { useUnclaimedPackets as usePrivateCommunityUnclaimedPackets } from '@/hooks/useRedPacketData';
 import {
   convertCommunityToChat,
   convertRedPacketGroupToChat
@@ -152,6 +154,31 @@ export default function ChatPage() {
   }, [privateChats]);
   const { profileMap } = useBatchPeerProfiles(privateChatAddresses);
 
+  // 获取用户所有未领取红包（按群分组）
+  // 红包群
+  const { groupCounts: unclaimedRedPacketGroupCounts } =
+    useRedPacketGroupUnclaimedPackets(currentAddress);
+
+  // 私聊和官方群
+  const { chatPacketCounts: privateCommunityPacketCounts } =
+    usePrivateCommunityUnclaimedPackets(currentAddress);
+
+  // 🔍 调试日志：红包群和未领取红包数量
+  // 🔍 调试日志：红包群和未领取红包数量
+  // useEffect(() => {
+  //   const redPacketGroupChats = allChats.filter((c) => c.isRedPacketGroup);
+  //   console.log('🔵 [ChatPage] 红包群列表:', {
+  //     redPacketGroups: redPacketGroupChats.map((c) => ({
+  //       id: c.id,
+  //       name: c.name,
+  //       address: c.address,
+  //       addressLower: (c.address ?? c.id).toLowerCase()
+  //     })),
+  //     unclaimedRedPacketGroupCounts,
+  //     allChatsCount: allChats.length
+  //   });
+  // }, [allChats, unclaimedRedPacketGroupCounts]);
+
   return (
     <div className="flex flex-col h-screen">
       {/* 顶部导航栏 */}
@@ -190,6 +217,20 @@ export default function ChatPage() {
                   chat.isGroup
                     ? undefined
                     : profileMap.get(chat.id.toLowerCase())
+                }
+                unclaimedRedPacketCount={
+                  chat.isRedPacketGroup
+                    ? unclaimedRedPacketGroupCounts[
+                        (chat.address ?? chat.id).toLowerCase()
+                      ]
+                    : undefined
+                }
+                privateCommunityPacketCount={
+                  !chat.isRedPacketGroup
+                    ? privateCommunityPacketCounts[
+                        (chat.address ?? chat.id).toLowerCase()
+                      ]
+                    : undefined
                 }
               />
             ))}

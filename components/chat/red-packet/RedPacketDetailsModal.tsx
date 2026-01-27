@@ -15,7 +15,8 @@ import {
   useReadContract,
   useAccount,
   useWaitForTransactionReceipt,
-  useChainId
+  useChainId,
+  useWriteContract
 } from 'wagmi';
 import {
   RedPacketAbi,
@@ -132,19 +133,24 @@ export function RedPacketDetailsModal({
     if (!packet) return null;
 
     if (isRedPacketGroup) {
-      // 红包群返回数组：[kind, token, createdAt, targetSubgroupId, sharesTotal, totalAmount, remainingAmount, remainingShares]
+      // 新合约返回 10 个字段：[kind, token, createdAt, expireAt, creator, targetSubgroupId, sharesTotal, totalAmount, remainingAmount, remainingShares]
       const [
         kind,
         token,
         createdAt,
+        expireAt,
+        creator,
         targetSubgroupId,
         sharesTotal,
         totalAmount,
         remainingAmount,
         remainingShares
-      ] = packet as any;
+      ] = packet as any[];
       return {
         token,
+        createdAt,
+        expireAt,
+        creator,
         totalShares: sharesTotal,
         claimedShares: Number(sharesTotal) - Number(remainingShares),
         totalAmount,
@@ -362,19 +368,35 @@ export function RedPacketDetailsModal({
     });
   };
 
-  // 处理退款
+  // 处理退款/回收
+  const { writeContractAsync: reclaimPacket } = useWriteContract();
+
   const handleRefund = async () => {
-    if (!packetId || isRefunding || isConfirming || !redPacketAddress) return;
+    if (!packetId || isRefunding || isConfirming) return;
 
     try {
       setIsRefunding(true);
 
-      const hash = await refundPacket({
-        address: redPacketAddress,
-        abi: RedPacketAbi,
-        functionName: 'refundExpiredPacket',
-        args: [BigInt(packetId)]
-      });
+      let hash: `0x${string}`;
+
+      if (isRedPacketGroup && groupAddress) {
+        // 红包群使用 reclaimExpiredPacket
+        hash = await reclaimPacket({
+          address: groupAddress as `0x${string}`,
+          abi: RedPacketGroupABI.abi as Abi,
+          functionName: 'reclaimExpiredPacket',
+          args: [BigInt(packetId)]
+        });
+      } else {
+        // 官方群使用 refundExpiredPacket
+        if (!redPacketAddress) return;
+        hash = await refundPacket({
+          address: redPacketAddress,
+          abi: RedPacketAbi,
+          functionName: 'refundExpiredPacket',
+          args: [BigInt(packetId)]
+        });
+      }
 
       setTxHash(hash);
 
@@ -384,7 +406,7 @@ export function RedPacketDetailsModal({
         variant: 'default'
       });
     } catch (error: any) {
-      console.warn('退款失败:', error);
+      console.warn('退款/回收失败:', error);
 
       const errorMsg = error.message?.toLowerCase() || '';
       if (
@@ -609,8 +631,68 @@ export function RedPacketDetailsModal({
               return '红包已领完';
             }
 
-            // 检查红包是否已过期
             const now = Math.floor(Date.now() / 1000);
+
+            // 红包群过期逻辑
+            if (isRedPacketGroup) {
+              const expireTime = Number(packetData?.expireAt || 0);
+              const isExpired = expireTime > 0 && now > expireTime;
+
+              if (isExpired) {
+                const canReclaim = Number(packetData.remainingAmount) > 0;
+                const creatorAddr = packetData.creator as string;
+                const creatorShort = creatorAddr
+                  ? `${creatorAddr.slice(0, 6)}...${creatorAddr.slice(-4)}`
+                  : '创建者';
+
+                return (
+                  <>
+                    红包已过期
+                    {canReclaim && (
+                      <>
+                        {' '}
+                        <button
+                          onClick={handleRefund}
+                          disabled={isRefunding || isConfirming}
+                          className={`text-[#576b95] ${isRefunding || isConfirming ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:underline'}`}
+                        >
+                          {isRefunding || isConfirming
+                            ? isConfirming
+                              ? '确认中'
+                              : '提交中'
+                            : '回收红包'}
+                        </button>
+                        <div className="text-[10px] mt-1">
+                          代币将退回给 {creatorShort}
+                        </div>
+                      </>
+                    )}
+                  </>
+                );
+              }
+
+              // 计算剩余时间
+              if (expireTime > 0) {
+                const remainingSeconds = expireTime - now;
+                if (remainingSeconds > 0) {
+                  const remainingDays = Math.floor(
+                    remainingSeconds / (24 * 60 * 60)
+                  );
+                  const remainingHours = Math.floor(
+                    (remainingSeconds % (24 * 60 * 60)) / (60 * 60)
+                  );
+                  if (remainingDays > 0) {
+                    return `未领取的红包，将于${remainingDays}天后发起退款`;
+                  } else if (remainingHours > 0) {
+                    return `未领取的红包，将于${remainingHours}小时后发起退款`;
+                  }
+                  return '红包即将过期';
+                }
+              }
+              return '未领取的红包，将于5天后发起退款';
+            }
+
+            // 官方群红包逻辑（原有逻辑）
             const creationTime = Number(
               packetData?.creationTime || packetData?.createdAt || 0
             );

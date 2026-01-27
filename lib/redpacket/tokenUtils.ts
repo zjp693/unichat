@@ -99,8 +99,11 @@ export async function approveTokenIfNeeded(
   })) as bigint;
 
   if (allowance >= amount) {
+    console.log('✅ [approveTokenIfNeeded] 授权额度足够，无需再次授权');
     return true;
   }
+
+  console.log('⚠️ [approveTokenIfNeeded] 授权额度不足，需要重新授权');
 
   // 请求无限授权（MaxUint256）
   // 行业惯例：Uniswap、Aave 等主流 DeFi 都使用无限授权

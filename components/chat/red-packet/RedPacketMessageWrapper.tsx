@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useAccount, useReadContract, useChainId } from 'wagmi';
-import { parseAbi } from 'viem';
+import { Abi } from 'viem';
 import dayjs from 'dayjs';
 import { RedPacketMessage } from './RedPacketMessage';
 import {
@@ -13,6 +13,8 @@ import {
 } from '@/lib/RedPacketAbi';
 import type { RedPacketConfig } from './types';
 import { getContractAddress } from '@/lib/web3/contracts';
+import RedPacketGroupViewABI from '@/contract/abi/RedPacketGroupView.json';
+import RedPacketGroupABI from '@/contract/abi/RedPacketGroupImplementation.json';
 
 interface RedPacketMessageWrapperProps {
   config: RedPacketConfig;
@@ -77,14 +79,9 @@ export function RedPacketMessageWrapper({
     'redPacketGroupView'
   );
 
-  const RedPacketGroupViewABI = parseAbi([
-    'function getPacket(address group, uint256 packetId) view returns (uint8 kind, address token, uint64 createdAt, uint32 targetSubgroupId, uint32 sharesTotal, uint256 totalAmount, uint256 remainingAmount, uint32 remainingShares)',
-    'function claimed(uint256, address) view returns (bool)'
-  ]);
-
   const { data: redPacketGroupPacket } = useReadContract({
     address: RED_PACKET_GROUP_VIEW_ADDRESS || undefined,
-    abi: RedPacketGroupViewABI,
+    abi: RedPacketGroupViewABI.abi as Abi,
     functionName: 'getPacket',
     args:
       isRedPacketGroup && config.packetId && queryAddress
@@ -101,7 +98,7 @@ export function RedPacketMessageWrapper({
 
   const { data: redPacketGroupClaimed } = useReadContract({
     address: queryAddress || undefined,
-    abi: RedPacketGroupViewABI,
+    abi: RedPacketGroupABI.abi as Abi,
     functionName: 'claimed',
     args:
       isRedPacketGroup && config.packetId && currentAddress
@@ -137,10 +134,13 @@ export function RedPacketMessageWrapper({
           return 'active'; // 数据加载中或出错，默认为 active
         }
 
+        // 新合约返回 10 个字段：kind, token, createdAt, expireAt, creator, targetSubgroupId, sharesTotal, totalAmount, remainingAmount, remainingShares
         const [
           kind,
           token,
           createdAt,
+          expireAt,
+          creator,
           targetSubgroupId,
           sharesTotal,
           totalAmount,
@@ -152,15 +152,10 @@ export function RedPacketMessageWrapper({
         if (Number(remainingShares) === 0) return 'empty';
 
         // 检查是否过期
-        // TODO: 红包群的过期时间需要从合约常量获取，目前暂定 5 天
-        const REDPACKET_GROUP_EXPIRY_DURATION = 5 * 24 * 60 * 60; // 5 天（秒）
-        const now = dayjs();
-        const creationTime = Number(createdAt);
+        const expireTimestamp = Number(expireAt);
         if (
-          creationTime > 0 &&
-          now.isAfter(
-            dayjs.unix(creationTime + REDPACKET_GROUP_EXPIRY_DURATION)
-          )
+          expireTimestamp > 0 &&
+          dayjs().isAfter(dayjs.unix(expireTimestamp))
         ) {
           return 'expired';
         }

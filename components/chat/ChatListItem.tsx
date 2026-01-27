@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useDispatch } from 'react-redux';
@@ -24,13 +24,17 @@ interface ChatListItemProps {
   currentAddress?: Address;
   onJoinSuccess?: () => void;
   peerProfile?: PeerProfile; // 批量预获取的 Profile（可选）
+  unclaimedRedPacketCount?: number; // 红包群未领取红包数量
+  privateCommunityPacketCount?: number; // 私聊/官方群未领取红包数量
 }
 
 export function ChatListItem({
   chat,
   currentAddress,
   onJoinSuccess,
-  peerProfile
+  peerProfile,
+  unclaimedRedPacketCount,
+  privateCommunityPacketCount
 }: ChatListItemProps) {
   const router = useRouter();
   const dispatch = useDispatch();
@@ -111,6 +115,30 @@ export function ChatListItem({
     : todayCount > 0
       ? todayCount
       : undefined;
+
+  // 🔍 调试日志：群聊显示逻辑
+  // useEffect(() => {
+  //   if (chat.isGroup) {
+  //     console.log('🔵 [ChatListItem] 群聊数据:', {
+  //       name: chat.name,
+  //       id: chat.id,
+  //       address: chat.address,
+  //       isGroup: chat.isGroup,
+  //       isRedPacketGroup: chat.isRedPacketGroup,
+  //       isJoined: chat.isJoined,
+  //       unclaimedRedPacketCount,
+  //       groupMessageCount,
+  //       displayUnreadCount,
+  //       // 检查 chat 对象的所有 key
+  //       chatKeys: Object.keys(chat)
+  //     });
+  //   }
+  // }, [
+  //   chat,
+  //   unclaimedRedPacketCount,
+  //   groupMessageCount,
+  //   displayUnreadCount
+  // ]);
 
   // 统一的群聊跳转函数
   const navigateToGroupChat = () => {
@@ -246,14 +274,55 @@ export function ChatListItem({
             }}
             className="h-14 w-14 rounded-sm overflow-hidden"
           >
-            {displayUnreadCount && (
+            {/* 头像右上角角标：红包优先，其次显示消息数 */}
+            {chat.isRedPacketGroup &&
+            unclaimedRedPacketCount &&
+            unclaimedRedPacketCount > 0 ? (
+              // 红包群有未领取红包：显示红包图标 + 数字角标
+              <div className="absolute top-0 right-[-0.6rem] z-10">
+                <div className="relative">
+                  <Image
+                    src="/chats/redPacket/redPacketicon.png"
+                    alt="未领取红包"
+                    width={20}
+                    height={20}
+                    className="drop-shadow-sm"
+                  />
+                  <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 shadow-sm">
+                    {unclaimedRedPacketCount > 9
+                      ? '9+'
+                      : unclaimedRedPacketCount}
+                  </span>
+                </div>
+              </div>
+            ) : privateCommunityPacketCount &&
+              privateCommunityPacketCount > 0 ? (
+              // 私聊/官方群有未领取红包：显示红包图标 + 数字角标
+              <div className="absolute top-0 right-[-0.6rem] z-10">
+                <div className="relative">
+                  <Image
+                    src="/chats/redPacket/redPacketicon.png"
+                    alt="未领取红包"
+                    width={20}
+                    height={20}
+                    className="drop-shadow-sm"
+                  />
+                  <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5 shadow-sm">
+                    {privateCommunityPacketCount > 9
+                      ? '9+'
+                      : privateCommunityPacketCount}
+                  </span>
+                </div>
+              </div>
+            ) : displayUnreadCount ? (
+              // 无未领取红包：显示消息数角标
               <Badge
                 variant="destructive"
                 className="absolute top-0 right-[-0.6rem] ml-2 h-5 min-w-[20px] text-xs flex items-center justify-center rounded-full"
               >
                 {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
               </Badge>
-            )}
+            ) : null}
             {!chat.isGroup && isLoadingProfile ? (
               <Skeleton className="h-full w-full" />
             ) : chat.isGroup ? (
