@@ -57,9 +57,12 @@ export function RedPacketMessageWrapper({
   //   configGroupType: config.groupType,
   //   fallbackGroupType,
   //   finalGroupType: groupType,
-  //   groupAddress,
+  //   configGroupAddress: config.groupAddress,
+  //   fallbackGroupAddress,
+  //   finalGroupAddress: groupAddress,
   //   isRedPacketGroup,
-  //   queryAddress
+  //   queryAddress,
+  //   redPacketAddress
   // });
 
   // 官方群红包查询（使用原有的 hooks）
@@ -96,18 +99,45 @@ export function RedPacketMessageWrapper({
     }
   });
 
-  const { data: redPacketGroupClaimed } = useReadContract({
+  // 🔍 调试：检查条件和 BigInt 转换
+  const shouldQueryClaimed =
+    isRedPacketGroup && !!config.packetId && !!currentAddress;
+
+  // 构建查询参数
+  const claimedArgs: [bigint, `0x${string}`] | undefined =
+    shouldQueryClaimed && config.packetId
+      ? [BigInt(config.packetId), currentAddress as `0x${string}`]
+      : undefined;
+
+  // 查询用户是否已领取（使用 claimed mapping）
+  // 注意：如果红包不存在或已被 reclaim，查询会 revert，我们将其视为"未领取"
+  const {
+    data: redPacketGroupClaimedRaw,
+    error: claimedError,
+    isLoading: isClaimedLoading,
+    isError: isClaimedError
+  } = useReadContract({
     address: queryAddress || undefined,
     abi: RedPacketGroupABI.abi as Abi,
     functionName: 'claimed',
-    args:
-      isRedPacketGroup && config.packetId && currentAddress
-        ? [BigInt(config.packetId), currentAddress]
-        : undefined,
+    args: claimedArgs,
     query: {
-      enabled: isRedPacketGroup && !!config.packetId && !!currentAddress
+      enabled: shouldQueryClaimed
     }
   });
+
+  // 如果查询出错（revert），视为未领取
+  const redPacketGroupClaimed = isClaimedError
+    ? false
+    : (redPacketGroupClaimedRaw ?? false);
+
+  // 如果查询出错，记录错误（用于调试）
+  if (isClaimedError && claimedError) {
+    console.error('[RedPacketMessageWrapper] claimed 查询失败:', {
+      packetId: config.packetId,
+      error: claimedError.message
+    });
+  }
 
   // 统一的红包数据和领取状态
   const packet = isRedPacketGroup ? redPacketGroupPacket : officialPacket;

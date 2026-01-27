@@ -518,7 +518,7 @@ export function RedPacketDetailsModal({
                 symbol={displaySymbol}
                 integerClassName="text-[48px] font-bold leading-none"
                 decimalClassName="text-[32px] font-bold leading-none"
-                symbolClassName="text-[32px] font-medium mt-2 opacity-90"
+                symbolClassName="text-[14px] font-medium mt-2 opacity-90"
               />
             </div>
           )}

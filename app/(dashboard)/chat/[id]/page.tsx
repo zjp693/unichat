@@ -460,7 +460,11 @@ function ChatContent() {
               key={conversationId} // Force remount on chat change
               messages={messages}
               currentAddress={currentAddress}
-              recipientAddress={recipientAddress}
+              recipientAddress={
+                chatType === 'group'
+                  ? (groupAddress as Address)
+                  : recipientAddress
+              }
               chatType={chatType}
               groupType={groupType}
               handleOpenRedPacket={handleOpenRedPacket}

@@ -575,7 +575,8 @@ export function useRedPacketActions({
               let isTarget = false;
               try {
                 const content = JSON.parse(msg.content);
-                if (content.packetId === packetId) isTarget = true;
+                if (String(content.packetId) === String(packetId))
+                  isTarget = true;
               } catch {
                 if (
                   msg.content.startsWith('RP|') &&
