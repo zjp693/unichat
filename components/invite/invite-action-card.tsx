@@ -16,7 +16,7 @@
 import React from 'react';
 import { Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { generateReferralCode } from '@/lib/referral';
 
 /**
@@ -30,6 +30,7 @@ interface InviteActionCardProps {
 export function InviteActionCard({ groupAddress }: InviteActionCardProps) {
   const { toast } = useToast();
   const { address: userAddress } = useAccount();
+  const chainId = useChainId();
 
   /**
    * 生成分享链接
@@ -41,7 +42,10 @@ export function InviteActionCard({ groupAddress }: InviteActionCardProps) {
     const referralCode = generateReferralCode(userAddress);
 
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    const params = new URLSearchParams({ code: referralCode });
+    const params = new URLSearchParams({
+      code: referralCode,
+      chainId: String(chainId)
+    });
 
     // 如果有群地址，添加到参数中
     if (groupAddress) {
