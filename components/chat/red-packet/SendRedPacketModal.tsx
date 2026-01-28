@@ -55,11 +55,11 @@ export function SendRedPacketModal({
 
   // 红包类型默认值：
   // - 私聊：只能普通红包
-  // - 红包群：只能普通红包
-  // - 官方群：默认拼手气红包
+  // - 红包群：只能拼手气红包
+  // - 官方群：默认拼手气红包 + 可切换普通红包
   const getDefaultPacketType = (): RedPacketType => {
     if (chatType === 'private') return 'NORMAL';
-    if (groupType === 'redpacket') return 'NORMAL';
+    if (groupType === 'redpacket') return 'LUCKY';
     return 'LUCKY';
   };
 

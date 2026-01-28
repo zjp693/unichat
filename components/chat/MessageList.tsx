@@ -356,12 +356,22 @@ export const MessageList: React.FC<MessageListProps> = ({
           try {
             const claimData = JSON.parse(message.content);
 
-            // 过滤逻辑：只显示别人领取了我的红包
-            // 1. 领取我的 (ownerAddress === currentAddress)
+            // 时间过滤：只显示 24 小时内的领取消息
+            const messageTime = dayjs(message.timestamp);
+            const now = dayjs();
+            if (now.diff(messageTime, 'hour') > 24) {
+              return null; // 超过 1 天不显示
+            }
+
+            // 过滤逻辑：显示与当前用户相关的领取消息
+            // 1. 我领取了别人的 (claimerAddress === currentAddress)
+            // 2. 别人领取了我的 (ownerAddress === currentAddress)
             const isRelatedToMe =
               currentAddress &&
-              claimData.ownerAddress?.toLowerCase() ===
-                currentAddress.toLowerCase();
+              (claimData.claimerAddress?.toLowerCase() ===
+                currentAddress.toLowerCase() ||
+                claimData.ownerAddress?.toLowerCase() ===
+                  currentAddress.toLowerCase());
 
             if (!isRelatedToMe) {
               return null;
